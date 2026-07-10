@@ -347,7 +347,7 @@ namespace PremierAPI.Controllers
             if (status == null) return NotFound(new { erro = "Pedido nao encontrado." });
             if (status != "pendente" && status != "expirado") return BadRequest(new { erro = "Apenas pedidos pendentes ou expirados podem ser marcados como pagos." });
 
-            await db.ExecuteAsync("UPDATE orders SET status = 'pago' WHERE id = @Id", new { Id = id });
+            await db.ExecuteAsync("UPDATE orders SET status = 'pago', asaas_payment_id = CASE WHEN asaas_payment_id NOT LIKE 'MANUAL_%' THEN 'MANUAL_' || COALESCE(asaas_payment_id, '') ELSE asaas_payment_id END WHERE id = @Id", new { Id = id });
             return Ok(new { msg = "Pedido marcado como pago manualmente." });
         }
         [HttpPost("orders/manual")]
