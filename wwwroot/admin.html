@@ -31,7 +31,7 @@
 <div id="view-ad" class="view">
     <div style="margin-bottom:20px;display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div><h1 style="font-size:20px;font-weight:700;margin-bottom:3px">Active Directory</h1><p class="muted" id="ad-status">Verificando status...</p></div>
-        <div id="ad-actions" class="hidden">
+        <div id="ad-actions" class="hidden" style="position:relative; z-index:9000; pointer-events:auto;">
             <button class="btn" onclick="openAdUserModal()">+ Novo Usu&aacute;rio AD</button>
             <button class="btn btn-outline" onclick="loadAd()">&#128260; Recarregar</button>
         </div>
@@ -141,6 +141,7 @@
             <div class="modal-body">
                 <div class="form-group"><label>Usu&aacute;rio (Login sem @phost.local)</label><input type="text" id="m-ad-username"></div>
                 <div class="form-group"><label>Nome Completo</label><input type="text" id="m-ad-fullname"></div>
+                <div class="form-group"><label>WhatsApp</label><input type="text" id="m-ad-whatsapp" autocomplete="off" oninput="mascaraTelefone(this)" maxlength="15" placeholder="(11) 99999-9999"></div>
                 <div class="form-group"><label>Senha Inicial</label><input type="password" id="m-ad-password"></div>
             </div>
             <div class="modal-footer">
@@ -365,7 +366,13 @@
         document.getElementById('modal-local-user').classList.add('active'); 
     }
 
-    function openAdUserModal() { document.getElementById('modal-ad-user').classList.add('active'); }
+    function openAdUserModal() {
+        document.getElementById('m-ad-username').value = '';
+        document.getElementById('m-ad-fullname').value = '';
+        document.getElementById('m-ad-whatsapp').value = '';
+        document.getElementById('m-ad-password').value = '';
+        document.getElementById('modal-ad-user').classList.add('active'); 
+    }
 
     function openAdPasswordModal(username) {
         document.getElementById('m-ad-password-title').textContent = 'Redefinir senha: ' + username;
@@ -962,7 +969,12 @@
     }
 
     async function submitAdUser() {
-        const body = { Username: document.getElementById('m-ad-username').value, FullName: document.getElementById('m-ad-fullname').value, Password: document.getElementById('m-ad-password').value };
+        const body = { 
+            Username: document.getElementById('m-ad-username').value.trim(), 
+            FullName: document.getElementById('m-ad-fullname').value.trim(), 
+            Whatsapp: document.getElementById('m-ad-whatsapp').value.trim(),
+            Password: document.getElementById('m-ad-password').value 
+        };
         const r = await fetch('/api/admin/ad/users', { method: 'POST', headers: hdrs(), body: JSON.stringify(body) });
         const msg = await readResponseMessage(r, 'Usuario AD criado.');
         if(r.ok) { showAdminMessage('success', msg); closeModals(); loadAd(); } else showAdminMessage('error', msg);

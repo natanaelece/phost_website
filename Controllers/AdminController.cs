@@ -503,7 +503,7 @@ namespace PremierAPI.Controllers
             if (!await ValidateAdmin()) return Unauthorized();
             try
             {
-                await ad.CreateUserAsync(req.Username, req.FullName, req.Password);
+                await ad.CreateUserAsync(req.Username, req.FullName, req.Password, null, req.Whatsapp);
                 _logger.LogInformation("[ADMIN][AD] Usuario criado: {Username}.", req.Username);
                 return Ok(new { msg = "Usuario criado no AD." });
             }
@@ -677,7 +677,7 @@ namespace PremierAPI.Controllers
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
     public class UpdateAdLinkRequest { public string? AdUsername { get; set; } }
     public class UpdateOrderDeliveryRequest { public bool Delivered { get; set; } }
-    public class CreateAdUserRequest { public string Username { get; set; } = ""; public string FullName { get; set; } = ""; public string Password { get; set; } = ""; }
+    public class CreateAdUserRequest { public string Username { get; set; } = ""; public string FullName { get; set; } = ""; public string Password { get; set; } = ""; public string? Whatsapp { get; set; } }
     public class SetAdPasswordRequest { public string Password { get; set; } = ""; public bool ForceChangeOnNextLogon { get; set; } }
     public class SetExpirationRequest { public DateTime? ExpiresAt { get; set; } }
     public class ManageGroupRequest { public string GroupName { get; set; } = ""; public bool Add { get; set; } }
