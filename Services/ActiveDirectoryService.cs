@@ -382,7 +382,7 @@ namespace PremierAPI.Services
             {
                 var encodedPass = System.Text.Encoding.Unicode.GetBytes($"\"{password}\"");
                 var passMod = new LdapModification(LdapModification.Replace, new LdapAttribute("unicodePwd", encodedPass));
-                var uacMod = new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", "512")); // NORMAL_ACCOUNT
+                var uacMod = new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", "66048")); // NORMAL_ACCOUNT | DONT_EXPIRE_PASSWORD
                 var pwdLastSetMod = new LdapModification(LdapModification.Replace, new LdapAttribute("pwdLastSet", "-1"));
                 try
                 {
