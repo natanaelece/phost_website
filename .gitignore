@@ -1,0 +1,38 @@
+## --- .NET 8 / C# ---
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## --- ARQUIVOS DE CONFIGURAÇÃO E SENHAS (SEGURANÇA) ---
+*.key
+*.pem
+*.pfx
+*.secret
+appsettings.Development.json
+appsettings.Local.json
+.env
+.env.*
+
+## ---- BACKUPS E ARQUIVOS LOCAIS ----
+dump_pg/
+backup_db.sh
+*.bak
+*.sql
+fix.cs
+EOF
+
+## --- SVE / SISTEMA OPERACIONAL ---
+.DS_Store
+Thumbs.db

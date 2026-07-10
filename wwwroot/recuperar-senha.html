@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premier Host | Redefinir Senha</title>
+    <link rel="icon" href="img/Ícone48x48.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #081121; }
+        .glow-blue { box-shadow: 0 0 25px rgba(37, 99, 235, 0.3); }
+		.input-error { border-color: #ef4444 !important; }
+    </style>
+</head>
+<body class="text-slate-300 font-sans min-h-screen flex items-center justify-center p-4 relative">
+
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl p-8 shadow-2xl relative glow-blue text-center">
+        <img src="img/iconesemfundo.png" alt="Premierhost" class="h-20 mx-auto mb-6 object-contain">
+
+        <h2 class="text-2xl font-bold text-white mb-2 uppercase tracking-wider">Redefinir Senha</h2>
+        <p id="pageSubtitle" class="text-sm text-slate-400 mb-6">Validando link de recuperação...</p>
+
+        <div id="errorMsg" class="hidden bg-red-500/20 border border-red-500 text-red-400 text-xs p-3 rounded-lg text-center font-bold mb-4"></div>
+        <div id="successMsg" class="hidden bg-green-500/20 border border-green-500 text-green-400 text-xs p-3 rounded-lg text-center font-bold mb-4"></div>
+
+        <div id="loadingBox" class="text-sm text-slate-400 py-6">
+            Aguarde...
+        </div>
+
+        <form id="resetForm" onsubmit="return handleReset(event)" class="space-y-4 hidden" novalidate>
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-2 text-left">Nova Senha (6 a 12 caracteres)</label>
+                <input type="password" id="newPass" required minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErroReset('newPass', 'newPassError')">
+                <p id="newPassError" class="text-xs text-red-500 mt-1 hidden font-bold text-left">Por favor, informe sua nova senha.</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-2 text-left">Confirmar Senha</label>
+                <input type="password" id="confirmPass" required minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErroReset('confirmPass', 'confirmPassError')">
+                <p id="confirmPassError" class="text-xs text-red-500 mt-1 hidden font-bold text-left">Por favor, confirme sua nova senha.</p>
+            </div>
+
+            <button type="submit" id="btnReset" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-2">Redefinir Senha</button>
+        </form>
+
+        <a id="btnLogin" href="/?action=login" class="hidden inline-block mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all">Voltar para o Login</a>
+        <a href="/" class="inline-block mt-6 text-xs font-bold text-slate-400 hover:text-white transition-colors">Voltar ao Início</a>
+    </div>
+
+    <script>
+        function getTokenFromUrl() {
+            const queryParams = new URLSearchParams(window.location.search);
+            const queryToken = queryParams.get('token');
+
+            if (queryToken) {
+                return queryToken;
+            }
+
+            if (window.location.hash) {
+                const hash = window.location.hash.replace(/^#/, '');
+                const hashParams = new URLSearchParams(hash);
+                const hashToken = hashParams.get('token');
+
+                if (hashToken) {
+                    return hashToken;
+                }
+
+                if (hash.startsWith('token=')) {
+                    return hash.replace('token=', '').trim();
+                }
+            }
+
+            return '';
+        }
+
+        function limparUrlSensivel() {
+            window.history.replaceState({}, document.title, '/recuperar-senha');
+        }
+
+        function mostrarErro(msg) {
+            document.getElementById('loadingBox').classList.add('hidden');
+            document.getElementById('resetForm').classList.add('hidden');
+
+            const errorMsg = document.getElementById('errorMsg');
+            errorMsg.innerText = msg;
+            errorMsg.classList.remove('hidden');
+
+            document.getElementById('pageSubtitle').innerText = 'Não foi possível validar seu link.';
+            document.getElementById('btnLogin').classList.remove('hidden');
+        }
+
+        function mostrarFormulario() {
+            document.getElementById('loadingBox').classList.add('hidden');
+            document.getElementById('errorMsg').classList.add('hidden');
+            document.getElementById('successMsg').classList.add('hidden');
+            document.getElementById('btnLogin').classList.add('hidden');
+            document.getElementById('resetForm').classList.remove('hidden');
+            document.getElementById('pageSubtitle').innerText = 'Digite sua nova senha.';
+        }
+
+		function limparErroReset(inputId, msgId) {
+			document.getElementById(inputId).classList.remove('input-error');
+			document.getElementById(msgId).classList.add('hidden');
+			document.getElementById('errorMsg').classList.add('hidden');
+		}
+
+		function mostrarErroCampo(inputId, msgId, msg) {
+			const input = document.getElementById(inputId);
+			const msgElement = document.getElementById(msgId);
+
+			input.classList.add('input-error');
+			msgElement.innerText = msg;
+			msgElement.classList.remove('hidden');
+		}
+
+        async function validarTokenInicial() {
+            const tokenUrl = getTokenFromUrl();
+
+            if (tokenUrl) {
+                sessionStorage.setItem('premier_reset_token', tokenUrl);
+            }
+
+            limparUrlSensivel();
+
+            const token = sessionStorage.getItem('premier_reset_token');
+
+            if (!token) {
+                mostrarErro('Token de recuperação não encontrado. Solicite um novo link.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/auth/validate-reset-token?token=' + encodeURIComponent(token), {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok || !data.valid) {
+                    sessionStorage.removeItem('premier_reset_token');
+                    mostrarErro(data.erro || 'Token inválido ou expirado. Solicite um novo link de recuperação.');
+                    return;
+                }
+
+                mostrarFormulario();
+            } catch (err) {
+                mostrarErro('Erro ao validar o link. Tente novamente em alguns instantes.');
+            }
+        }
+
+        async function handleReset(event) {
+            event.preventDefault();
+
+            const token = sessionStorage.getItem('premier_reset_token');
+            const newPass = document.getElementById('newPass').value;
+            const confirmPass = document.getElementById('confirmPass').value;
+            const errorMsg = document.getElementById('errorMsg');
+            const successMsg = document.getElementById('successMsg');
+            const btn = document.getElementById('btnReset');
+            const btnLogin = document.getElementById('btnLogin');
+
+            errorMsg.classList.add('hidden');
+            successMsg.classList.add('hidden');
+            limparErroReset('newPass', 'newPassError');
+            limparErroReset('confirmPass', 'confirmPassError');
+
+            if (!token) {
+                mostrarErro('Token de recuperação não encontrado. Solicite um novo link.');
+                return false;
+            }
+
+            if (!newPass.trim()) {
+                mostrarErroCampo('newPass', 'newPassError', 'Por favor, informe sua nova senha.');
+                return false;
+            }
+
+            if (!confirmPass.trim()) {
+                mostrarErroCampo('confirmPass', 'confirmPassError', 'Por favor, confirme sua nova senha.');
+                return false;
+            }
+
+            if (newPass.length < 6 || newPass.length > 12) {
+                mostrarErroCampo('newPass', 'newPassError', 'A senha deve ter entre 6 e 12 caracteres.');
+                return false;
+            }
+
+            if (newPass !== confirmPass) {
+                mostrarErroCampo('confirmPass', 'confirmPassError', 'As senhas não coincidem.');
+                return false;
+            }
+
+            btn.disabled = true;
+            btn.innerText = 'Redefinindo...';
+
+            try {
+                const res = await fetch('/api/auth/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: token,
+                        newPassword: newPass
+                    })
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (res.ok) {
+                    sessionStorage.removeItem('premier_reset_token');
+
+                    const loginUrl = data.email
+                        ? `/?action=login&email=${encodeURIComponent(data.email)}`
+                        : '/?action=login';
+
+                    successMsg.innerText = data.mensagem || 'Senha alterada com sucesso! Faça login com sua nova senha.';
+                    successMsg.classList.remove('hidden');
+
+                    document.getElementById('resetForm').classList.add('hidden');
+                    document.getElementById('pageSubtitle').innerText = 'Senha redefinida com sucesso.';
+
+                    btnLogin.href = loginUrl;
+                    btnLogin.classList.remove('hidden');
+
+                    setTimeout(() => {
+                        window.location.href = loginUrl;
+                    }, 2500);
+                } else {
+                    errorMsg.innerText = data.erro || 'Erro ao redefinir senha.';
+                    errorMsg.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorMsg.innerText = 'Erro de conexão. Tente novamente.';
+                errorMsg.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Redefinir Senha';
+            }
+
+            return false;
+        }
+
+        document.addEventListener('DOMContentLoaded', validarTokenInicial);
+    </script>
+</body>
+</html>

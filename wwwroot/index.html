@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premier Host | Infraestrutura de Alta Performance</title>
+    <link rel="icon" href="img/Ícone48x48.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        body { background-color: #081121; } 
+        .glow-blue { box-shadow: 0 0 25px rgba(37, 99, 235, 0.3); }
+        .text-glow { text-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+		.whatsapp-float {
+		position: fixed;
+		right: 20px;
+		bottom: 20px;
+		z-index: 30;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 58px;
+		height: 58px;
+		background-color: #25D366;
+		border-radius: 50%;
+		box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+		transition: transform 0.3s ease;
+		}
+
+		.whatsapp-float img {
+			width: 32px;
+			height: 32px;
+			object-fit: contain;
+		}
+
+		.whatsapp-float:hover {
+			transform: scale(1.1);
+		}
+
+		/* O efeito de onda idêntico ao do concorrente */
+		.whatsapp-float::after {
+			content: "";
+			position: absolute;
+			inset: -7px;
+			border: 1px solid rgba(37, 211, 102, 0.42);
+			border-radius: 50%;
+			pointer-events: none;
+			animation: whatsappRing 4.8s ease-in-out infinite;
+		}
+
+		@keyframes whatsappRing {
+			0% {
+				transform: scale(0.7);
+				opacity: 1;
+			}
+			50%, 100% {
+				transform: scale(1.3);
+				opacity: 0;
+			}
+		}
+    </style>
+</head>
+<body class="min-h-screen text-slate-300 relative flex flex-col">
+
+	<a class="whatsapp-float" href="https://wa.me/5534999187189?text=Suporte+Premier+Host" target="_blank" rel="noopener">
+		<img src="https://phost.pro/img/whats.png" alt="WhatsApp">
+	</a>
+
+    <!-- Topbar -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 py-4 flex justify-between items-center sticky top-0 z-40">
+        <img src="img/oficialsemfundo.png" alt="Premierhost" class="h-10">
+        <nav class="hidden md:flex gap-6 items-center">
+            <a href="#tecnologias" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Tecnologias</a>
+            <a href="como-usar" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Como Usar</a>
+            <a href="faq" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">FAQ</a>
+            <!-- Botão Único -->
+            <button onclick="abrirModalAuth('login')" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg font-bold transition-all shadow-[0_0_10px_rgba(37,99,235,0.4)]">Painel do Cliente</button>
+        </nav>
+        <button onclick="document.getElementById('mobileMenuIndex').classList.toggle('hidden')" class="md:hidden text-slate-400 hover:text-white transition-colors">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+    </header>
+
+    <div id="mobileMenuIndex" class="hidden md:hidden bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-6 py-5 fixed top-[73px] left-0 w-full z-50 shadow-2xl">
+        <div class="flex flex-col gap-5">
+            <a href="#tecnologias" onclick="document.getElementById('mobileMenuIndex').classList.add('hidden')" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Tecnologias</a>
+            <a href="como-usar" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Como Usar</a>
+            <a href="faq" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">FAQ</a>
+            <hr class="border-slate-800 my-1">
+            <button onclick="abrirModalAuth('login'); document.getElementById('mobileMenuIndex').classList.add('hidden')" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold transition-all text-center block shadow-[0_0_15px_rgba(37,99,235,0.3)]">
+                Painel do Cliente
+            </button>
+        </div>
+    </div>
+
+    <section class="max-w-6xl mx-auto px-6 py-20 text-center">
+        <h1 class="text-5xl md:text-7xl font-extrabold text-white tracking-tight mb-6">A infraestrutura que o seu <span class="text-blue-500 text-glow">jogo exige.</span></h1>
+        <p class="text-lg text-slate-400 max-w-2xl mx-auto mb-10">Hospedagem otimizada com proxies dedicados, hardware de alta performance e roteamento transparente. Sem lag, sem quedas.</p>
+        <button onclick="abrirModalAuth('register')" class="bg-blue-600 hover:bg-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all glow-blue">Criar Conta Agora</button>
+    </section>
+
+    <section id="tecnologias" class="border-t border-slate-800 bg-slate-900/50 py-16">
+        <div class="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+            <div class="p-6 bg-slate-800 border border-slate-700 rounded-2xl">
+                <h3 class="text-xl font-bold text-white mb-3">🌐 Cloudflare Edge</h3>
+                <p class="text-sm text-slate-400">Proteção DDoS de nível empresarial e roteamento acelerado pelas bordas da Cloudflare.</p>
+            </div>
+            <div class="p-6 bg-slate-800 border border-slate-700 rounded-2xl">
+                <h3 class="text-xl font-bold text-white mb-3">📡 MikroTik Routing</h3>
+                <p class="text-sm text-slate-400">Gerenciamento inteligente de pacotes e regras de firewall avançadas com MikroTik RouterOS.</p>
+            </div>
+            <div class="p-6 bg-slate-800 border border-slate-700 rounded-2xl">
+                <h3 class="text-xl font-bold text-white mb-3">🖥️ RealVNC</h3>
+                <p class="text-sm text-slate-400">Acesso remoto criptografado e de baixíssima latência direto para a sua instância.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Modal de Autenticação -->
+    <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl p-8 shadow-2xl relative glow-blue max-h-[90vh] overflow-y-auto">
+            <button onclick="fecharModalAuth()" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
+            <img src="img/iconesemfundo.png" alt="Premier Host" class="h-20 mx-auto mb-4 object-contain">
+
+            <div id="tabsContainer" class="flex border-b border-slate-700 mb-6 mt-2">
+                <button id="tabLogin" onclick="switchTab('login')" class="flex-1 py-3 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition-all">Entrar</button>
+                <button id="tabRegister" onclick="switchTab('register')" class="flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-400 transition-all">Criar Conta</button>
+            </div>
+
+            <!-- Formulário de Login (novalidate bloqueia alertas nativos) -->
+            <form id="loginForm" class="space-y-4" novalidate>
+                <div id="loginErrorMsg" class="hidden bg-red-500/20 border border-red-500 text-red-400 text-xs p-3 rounded-lg text-center font-bold"></div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">E-mail</label>
+                    <input type="email" id="logEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('logEmail', 'logEmailError')">
+                    <p id="logEmailError" class="text-xs text-red-500 mt-1 hidden font-bold">Por favor, informe seu e-mail.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Senha</label>
+                    <input type="password" id="logPass" required minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('logPass', 'logPassError')">
+                    <p id="logPassError" class="text-xs text-red-500 mt-1 hidden font-bold">Por favor, informe sua senha.</p>
+                    
+                    <!-- INJEÇÀO: Esqueci minha senha -->
+                    <div class="text-right mt-2">
+                        <a href="#" onclick="switchTab('recover')" class="text-xs text-blue-400 hover:text-blue-300 transition-colors font-bold">Esqueci minha senha</a>
+                    </div>
+                </div>
+
+                <!-- INJEÇÀO: Captcha da Cloudflare -->
+                <div class="cf-turnstile mt-2 flex justify-center" data-sitekey="0x4AAAAAADwNdB-C7M293Oqw" data-theme="dark"></div>
+
+                <button type="submit" id="btnLoginSubmit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-4">Entrar no Painel</button>
+            </form>
+
+            <!-- Formulário de Registro (novalidate bloqueia alertas nativos) -->
+            <form id="registerForm" class="space-y-4 hidden" novalidate>
+                <div id="regErrorMsg" class="hidden bg-red-500/20 border border-red-500 text-red-400 text-xs p-3 rounded-lg text-center font-bold"></div>
+                <div id="toastSuccess" class="hidden bg-green-500/20 border border-green-500 text-green-400 text-xs p-3 rounded-lg text-center font-bold">Conta criada! Verifique seu e-mail para confirmar a conta antes de logar.</div>
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Nome e Sobrenome</label>
+                    <input type="text" id="regName" required oninput="limparErro('regName', 'nameErrorMsg')" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none">
+                    <p id="nameErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Informe seu Nome e Sobrenome (com espaço).</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">WhatsApp</label>
+                    <input type="text" id="regWhatsapp" required placeholder="(11) 99999-9999" maxlength="15" oninput="mascaraTelefone(this); limparErro('regWhatsapp', 'waErrorMsg')" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none">
+                    <p id="waErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Informe um número de WhatsApp válido.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">E-mail</label>
+                    <input type="email" id="regEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('regEmail', 'emailErrorMsg')">
+                    <p id="emailErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Informe um e-mail válido.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Senha (6 a 12 caracteres)</label>
+                    <input type="password" id="regPass" required minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('regPass', 'passErrorMsg')">
+                    <p id="passErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">A senha deve ter entre 6 e 12 caracteres.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Código de Indicação <span class="text-slate-600">(Opcional)</span></label>
+                    <input type="text" id="regRef" maxlength="12" placeholder="Ganhe 5% OFF na 1ª compra" oninput="limparErro('regRef', 'refErrorMsg')" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none uppercase font-bold text-sm tracking-wide">
+                    <p id="refErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Código inválido.</p>
+                </div>
+
+                <!-- INJEÇÀO: LGPD Privacy Checkbox -->
+                <div class="flex items-start gap-3 mt-2">
+                    <input type="checkbox" id="regPrivacy" required class="mt-1 w-4 h-4 rounded border-slate-700 bg-slate-950 accent-blue-600 focus:ring-blue-500 cursor-pointer" onchange="limparErro('regPrivacy', 'privacyErrorMsg')">
+                    <label for="regPrivacy" class="text-xs text-slate-400 leading-tight cursor-pointer">
+                        Li e aceito a <a href="privacidade" target="_blank" class="text-blue-400 hover:underline font-bold">Política de Privacidade</a>: meus dados (nome, e-mail e WhatsApp) serão usados apenas para gestão da licença e suporte, conforme a LGPD.
+                    </label>
+                </div>
+                <p id="privacyErrorMsg" class="text-xs text-red-500 hidden font-bold">Você precisa aceitar a Política de Privacidade para continuar.</p>
+
+                <!-- INJEÇÀO: Captcha da Cloudflare -->
+                <div class="cf-turnstile mt-2 flex justify-center" data-sitekey="0x4AAAAAADwNdB-C7M293Oqw" data-theme="dark"></div>
+
+                <button type="submit" id="btnRegSubmit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-2">Registrar</button>
+            </form>
+
+			<form id="recoverForm" class="space-y-4 hidden" novalidate onsubmit="return handleRecover(event)">
+				<div class="text-center mb-6">
+					<h3 class="text-2xl font-bold text-white uppercase tracking-wider">Recuperar Conta</h3>
+					<p class="text-xs text-slate-400 mt-2">Digite seu e-mail para receber um link de recuperação.</p>
+				</div>
+				<div id="recoverErrorMsg" class="hidden bg-red-500/20 border border-red-500 text-red-400 text-xs p-3 rounded-lg text-center font-bold"></div>
+				<div id="toastRecoverSuccess" class="hidden bg-green-500/20 border border-green-500 text-green-400 text-xs p-3 rounded-lg text-center font-bold">Link enviado! Verifique seu e-mail.</div>
+				
+				<div>
+					<label class="block text-xs font-bold text-slate-400 uppercase mb-2">E-mail</label>
+					<input type="email" id="recEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('recEmail', 'recEmailError')">
+					<p id="recEmailError" class="text-xs text-red-500 mt-1 hidden font-bold">Por favor, informe seu e-mail.</p>
+				</div>
+
+				<!-- INJEÇÀO: Captcha da Cloudflare -->
+				<div class="cf-turnstile mt-2 flex justify-center" data-sitekey="0x4AAAAAADwNdB-C7M293Oqw" data-theme="dark"></div>
+
+				<button type="submit" id="btnRecoverSubmit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-4">Enviar Link</button>
+				
+				<div class="text-center mt-4 border-t border-slate-800 pt-4">
+					<a href="#" onclick="switchTab('login')" class="text-xs font-bold text-slate-400 hover:text-white transition-colors">Voltar para o Login</a>
+				</div>
+			</form>
+
+        </div>
+    </div>
+	
+	<!-- Rodapé -->
+	<footer class="border-t border-slate-800 bg-slate-900/80 mt-auto py-6 px-6 relative z-20">
+		<div class="max-w-6xl mx-auto flex flex-col justify-center items-center gap-4">
+			<p class="text-xs text-slate-600 font-semibold text-center">
+				© 2026 Premier Host. Todos os direitos reservados.
+			</p>
+		</div>
+	</footer>
+
+    <script>
+        function abrirModalAuth(tab = 'login') {
+            const token = localStorage.getItem('premier_token');
+            const user = localStorage.getItem('premier_user');
+            
+            if (token && user) {
+                window.location.href = '/painel';
+            } else {
+                // Limpa resíduos de sessões corrompidas/expiradas que causam o loop
+                localStorage.removeItem('premier_token');
+                localStorage.removeItem('premier_user');
+                
+                switchTab(tab); 
+                document.getElementById('authModal').classList.remove('hidden'); 
+            }
+        }
+
+        function fecharModalAuth() { document.getElementById('authModal').classList.add('hidden'); }
+        function mascaraTelefone(input) { let v = input.value.replace(/\D/g, ''); if(v.length>11) v=v.slice(0,11); if(v.length>2) v=`(${v.slice(0,2)}) ${v.slice(2)}`; if(v.length>10) v=`${v.slice(0,10)}-${v.slice(10)}`; input.value=v; }
+        function limparErro(inputId, msgId) { document.getElementById(inputId).classList.remove('border-red-500'); document.getElementById(msgId).classList.add('hidden'); document.getElementById('regErrorMsg').classList.add('hidden'); document.getElementById('loginErrorMsg').classList.add('hidden'); document.getElementById('recoverErrorMsg').classList.add('hidden'); }
+        
+        function switchTab(tab) {
+            const lForm = document.getElementById('loginForm'), rForm = document.getElementById('registerForm'), recForm = document.getElementById('recoverForm');
+            const tLog = document.getElementById('tabLogin'), tReg = document.getElementById('tabRegister');
+            const tabsContainer = document.getElementById('tabsContainer');
+
+            lForm.classList.add('hidden');
+            rForm.classList.add('hidden');
+            recForm.classList.add('hidden');
+
+            if (tab === 'login') {
+                lForm.classList.remove('hidden');
+                tabsContainer.classList.remove('hidden');
+                tLog.className = "flex-1 py-3 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition-all";
+                tReg.className = "flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-400 transition-all";
+            } else if (tab === 'register') {
+                rForm.classList.remove('hidden');
+                tabsContainer.classList.remove('hidden');
+                tReg.className = "flex-1 py-3 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition-all";
+                tLog.className = "flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-400 transition-all";
+            } else if (tab === 'recover') {
+                recForm.classList.remove('hidden');
+                tabsContainer.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            let hasError = false;
+            const emailInput = document.getElementById('logEmail');
+            const passInput = document.getElementById('logPass');
+
+            if (!emailInput.value.trim() || !emailInput.value.includes('@')) {
+                emailInput.classList.add('border-red-500');
+                document.getElementById('logEmailError').classList.remove('hidden');
+                hasError = true;
+            }
+            if (!passInput.value.trim()) {
+                passInput.classList.add('border-red-500');
+                document.getElementById('logPassError').classList.remove('hidden');
+                hasError = true;
+            }
+            
+            if (hasError) return;
+
+            const btn = document.getElementById('btnLoginSubmit'), err = document.getElementById('loginErrorMsg');
+            btn.innerHTML = 'Aguarde...'; btn.disabled = true; err.classList.add('hidden');
+
+            try {
+                // Captura a resposta do Cloudflare Turnstile
+                const cfResponse = document.querySelector('#loginForm [name="cf-turnstile-response"]')?.value;
+                
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        Email: emailInput.value, 
+                        Password: passInput.value,
+                        "cf-turnstile-response": cfResponse // O C# deve validar isso
+                    })
+                });
+                const data = await res.json();
+                
+                // Trata a flag de e-mail não confirmado conforme exigido na arquitetura
+                if(!res.ok) {
+                    if(data.erro && data.erro.includes("não confirmado")) {
+                        throw new Error("Por favor, verifique sua caixa de entrada e confirme seu e-mail antes de fazer login.");
+                    }
+                    throw new Error(data.erro || "Erro de servidor");
+                }
+                
+                localStorage.setItem('premier_token', data.token);
+                localStorage.setItem('premier_user', JSON.stringify(data.user));
+                if (data.isAdmin) {
+                    localStorage.setItem('premier_isAdmin', 'true');
+                    localStorage.setItem('premier_adminToken', data.adminToken);
+                } else {
+                    localStorage.removeItem('premier_isAdmin');
+                    localStorage.removeItem('premier_adminToken');
+                }
+                window.location.href = '/painel';
+            } catch(e) {
+                err.innerText = e.message; err.classList.remove('hidden');
+            } finally { btn.innerHTML = 'Entrar no Painel'; btn.disabled = false; }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            let hasError = false;
+            const nameInput = document.getElementById('regName');
+            const waInput = document.getElementById('regWhatsapp');
+            const emailInput = document.getElementById('regEmail');
+            const passInput = document.getElementById('regPass');
+            const privacyCheck = document.getElementById('regPrivacy');
+
+            if (nameInput.value.trim().split(' ').length < 2) {
+                nameInput.classList.add('border-red-500');
+                document.getElementById('nameErrorMsg').classList.remove('hidden');
+                hasError = true;
+            }
+            if (waInput.value.replace(/\D/g, '').length < 10) {
+                waInput.classList.add('border-red-500');
+                document.getElementById('waErrorMsg').classList.remove('hidden');
+                hasError = true;
+            }
+            if (!emailInput.value.trim() || !emailInput.value.includes('@')) {
+                emailInput.classList.add('border-red-500');
+                document.getElementById('emailErrorMsg').classList.remove('hidden');
+                hasError = true;
+            }
+            if (passInput.value.length < 6 || passInput.value.length > 12) {
+                passInput.classList.add('border-red-500');
+                document.getElementById('passErrorMsg').classList.remove('hidden');
+                hasError = true;
+            }
+            // INJEÇÀO: Validação estrita da LGPD
+            if (!privacyCheck.checked) {
+                document.getElementById('privacyErrorMsg').classList.remove('hidden');
+                hasError = true;
+            }
+
+            if (hasError) return;
+
+            const btn = document.getElementById('btnRegSubmit'), err = document.getElementById('regErrorMsg');
+            btn.innerHTML = 'Aguarde...'; btn.disabled = true; err.classList.add('hidden');
+
+            try {
+                const cfResponse = document.querySelector('#registerForm [name="cf-turnstile-response"]')?.value;
+
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        Name: nameInput.value.trim(), 
+                        Email: emailInput.value.trim(), 
+                        Whatsapp: waInput.value.trim(),
+                        Password: passInput.value,
+                        ReferralCode: document.getElementById('regRef').value.trim(),
+                        "cf-turnstile-response": cfResponse
+                    })
+                });
+                const data = await res.json();
+                
+                if(!res.ok) {
+                    if (data.erro && data.erro.includes("indicação")) {
+                        document.getElementById('regRef').classList.add('border-red-500');
+                        document.getElementById('refErrorMsg').innerText = data.erro;
+                        document.getElementById('refErrorMsg').classList.remove('hidden');
+                    } else {
+                        err.innerText = data.erro || "Erro ao registrar";
+                        err.classList.remove('hidden');
+                    }
+                    throw new Error(data.erro || "Erro ao registrar");
+                }
+                
+                document.getElementById('toastSuccess').classList.remove('hidden');
+                document.getElementById('logEmail').value = emailInput.value.trim();
+                setTimeout(() => switchTab('login'), 3500); // Maior tempo para o usuário ler o aviso de confirmar e-mail
+            } catch(e) {
+                // Erros já manipulados no if acima
+            } finally { btn.innerHTML = 'Registrar'; btn.disabled = false; }
+        });
+		
+		async function handleRecover(event) {
+			event.preventDefault();
+			const email = document.getElementById('recEmail').value.trim();
+			const errorMsg = document.getElementById('recoverErrorMsg');
+			const successMsg = document.getElementById('toastRecoverSuccess');
+			const btn = document.getElementById('btnRecoverSubmit');
+			
+			// Validação
+			if (!email) {
+				document.getElementById('recEmail').classList.add('border-red-500');
+				document.getElementById('recEmailError').classList.remove('hidden');
+				return false;
+			}
+			
+			// Pega o token do Turnstile
+			//const turnstileResponse = document.querySelector('#recoverForm .cf-turnstile iframe');
+			let turnstileToken = '';
+			if (window.turnstile) {
+				turnstileToken = window.turnstile.getResponse();
+			}
+			
+			errorMsg.classList.add('hidden');
+			successMsg.classList.add('hidden');
+			btn.disabled = true;
+			btn.innerText = 'Enviando...';
+			
+			try {
+				const res = await fetch('/api/auth/forgot-password', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ 
+						email: email,
+						'cf-turnstile-response': turnstileToken 
+					})
+				});
+				const data = await res.json();
+				
+				if (res.ok) {
+					successMsg.classList.remove('hidden');
+					document.getElementById('recEmail').value = '';
+					if (window.turnstile) { document.querySelectorAll(".cf-turnstile").forEach(el => turnstile.reset(el)); }
+				} else {
+					errorMsg.innerText = data.erro || 'Erro ao enviar link. Tente novamente.';
+					errorMsg.classList.remove('hidden');
+					if (window.turnstile) { document.querySelectorAll(".cf-turnstile").forEach(el => turnstile.reset(el)); }
+				}
+			} catch (err) {
+				errorMsg.innerText = 'Erro de conexão. Tente novamente.';
+				errorMsg.classList.remove('hidden');
+			} finally {
+				btn.disabled = false;
+				btn.innerText = 'Enviar Link';
+			}
+			return false;
+		}
+		
+		document.addEventListener("DOMContentLoaded", function() {
+			const urlParams = new URLSearchParams(window.location.search);
+			
+			if (urlParams.get('action') === 'login') {
+				const emailParam = urlParams.get('email');
+				
+				// Abre o modal primeiro para garantir que o input exista na tela
+				if (typeof abrirModalAuth === "function") {
+					abrirModalAuth('login');
+				}
+				
+				// Preenche o campo usando o ID correto 'logEmail'
+				if (emailParam) {
+					const emailInput = document.getElementById('logEmail');
+					if (emailInput) {
+						emailInput.value = emailParam;
+					}
+				}
+				
+				// Limpa a URL por último para não atrapalhar a leitura dos dados
+				window.history.replaceState({}, document.title, "/");
+			}
+		});
+    </script>
+</body>
+</html>
+

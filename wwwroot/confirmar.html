@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premier Host | Confirmar E-mail</title>
+    <link rel="icon" href="img/Ícone48x48.ico">
+    <!-- CORREÇÃO: Usando a CDN correta do Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #081121; }
+        .glow-blue { box-shadow: 0 0 25px rgba(37, 99, 235, 0.3); }
+    </style>
+</head>
+<body class="text-slate-300 font-sans min-h-screen flex items-center justify-center p-4 relative">
+    
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl p-8 shadow-2xl relative glow-blue text-center">
+        <!-- Logotipo Padronizado -->
+        <img src="img/iconesemfundo.png" alt="Premierhost" class="h-20 mx-auto mb-6 object-contain">
+
+        <h2 id="statusTitle" class="text-2xl font-bold text-white mb-2 uppercase tracking-wider">Verificando seu token...</h2>
+        <p id="statusMsg" class="text-sm text-slate-400 mb-6">Aguarde enquanto validamos seu cadastro no sistema.</p>
+        
+        <div id="loader" class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        
+        <a id="btnLogin" href="/?action=login" class="hidden w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-4 inline-block">Voltar para o Login</a>
+    </div>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const title = document.getElementById('statusTitle');
+            const msg = document.getElementById('statusMsg');
+            const loader = document.getElementById('loader');
+            const btn = document.getElementById('btnLogin');
+            
+			if (token) {
+				window.history.replaceState({}, document.title, window.location.pathname);
+			}
+		
+            if (!token) {
+                title.innerText = "Erro de validação";
+                title.classList.replace('text-white', 'text-red-500');
+                msg.innerText = "O token de confirmação não foi encontrado na URL.";
+                loader.classList.add('hidden');
+                btn.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                // Chama a API para validar o token no banco de dados
+                const res = await fetch(`/api/auth/confirm-email?token=${token}`);
+                const data = await res.json();
+                
+                loader.classList.add('hidden');
+                
+                if (res.ok) {
+                    title.innerText = "E-mail Confirmado!";
+                    title.classList.replace('text-white', 'text-green-500');
+                    msg.innerText = data.mensagem || "Sua conta foi ativada com sucesso. Você já pode fazer login no painel.";
+					
+					if (data.email) {
+						btn.href = `/?action=login&email=${encodeURIComponent(data.email)}`;
+					} else {
+						btn.href = "/?action=login";
+					}
+	
+                    btn.classList.remove('hidden');
+                } else {
+                    title.innerText = "Falha na Ativação";
+                    title.classList.replace('text-white', 'text-red-500');
+                    msg.innerText = data.erro || "Este token é inválido ou já expirou.";
+                    btn.classList.remove('hidden');
+                }
+            } catch (err) {
+                loader.classList.add('hidden');
+                title.innerText = "Erro de Conexão";
+                title.classList.replace('text-white', 'text-red-500');
+                msg.innerText = "Não foi possível se comunicar com o servidor da API. Tente novamente mais tarde.";
+                btn.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
