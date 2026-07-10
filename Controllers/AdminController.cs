@@ -327,11 +327,28 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
+            var status = await db.QueryFirstOrDefaultAsync<string>("SELECT status FROM orders WHERE id = @Id", new { Id = id });
+            if (status == null) return NotFound(new { erro = "Pedido nao encontrado." });
+            if (req.Delivered && status != "pago") return BadRequest(new { erro = "Nao e possivel entregar um pedido que nao esta pago." });
+
             int rows = await db.ExecuteAsync(
                 "UPDATE orders SET delivered = @Delivered, delivered_at = CASE WHEN @Delivered THEN COALESCE(delivered_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = @Id",
                 new { req.Delivered, Id = id });
             if (rows == 0) return NotFound(new { erro = "Pedido nao encontrado." });
             return Ok(new { msg = req.Delivered ? "Pedido marcado como entregue." : "Pedido marcado como pendente." });
+        }
+
+        [HttpPut("orders/{id}/mark-paid")]
+        public async Task<IActionResult> MarkOrderPaid(Guid id)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            using var db = new NpgsqlConnection(_connString);
+            var status = await db.QueryFirstOrDefaultAsync<string>("SELECT status FROM orders WHERE id = @Id", new { Id = id });
+            if (status == null) return NotFound(new { erro = "Pedido nao encontrado." });
+            if (status != "pendente" && status != "expirado") return BadRequest(new { erro = "Apenas pedidos pendentes ou expirados podem ser marcados como pagos." });
+
+            await db.ExecuteAsync("UPDATE orders SET status = 'pago' WHERE id = @Id", new { Id = id });
+            return Ok(new { msg = "Pedido marcado como pago manualmente." });
         }
         [HttpPost("orders/manual")]
         public async Task<IActionResult> CreateManualOrder([FromBody] ManualOrderRequest req)
