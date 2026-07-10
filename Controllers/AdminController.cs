@@ -73,7 +73,7 @@ namespace PremierAPI.Controllers
             if (_ipRateLimits.TryGetValue(ip, out var limit))
             {
                 if (DateTime.UtcNow < limit.LockoutEnd)
-                    return StatusCode(403, new { erro = $"Muitas tentativas. Bloqueado atÃ© {limit.LockoutEnd.ToLocalTime():HH:mm:ss}." });
+                    return StatusCode(403, new { erro = $"Muitas tentativas. Bloqueado até {limit.LockoutEnd.ToLocalTime():HH:mm:ss}." });
             }
 
             if (string.IsNullOrWhiteSpace(req.TurnstileResponse))
@@ -94,7 +94,7 @@ namespace PremierAPI.Controllers
                 if (newLimit.Attempts >= 5)
                 {
                     newLimit.LockoutEnd = DateTime.UtcNow.AddMinutes(30);
-                    _logger.LogWarning($"âš ï¸ ALERTA DE SEGURANÃ‡A: MÃºltiplas tentativas de acesso ao Admin! O IP {ip} foi bloqueado por 30 minutos.");
+                    _logger.LogWarning($"⚠️ ALERTA DE SEGURANÇA: Múltiplas tentativas de acesso ao Admin! O IP {ip} foi bloqueado por 30 minutos.");
                 }
                 _ipRateLimits[ip] = newLimit;
                 return Unauthorized(new { erro = "Token invalido." });
@@ -284,7 +284,7 @@ namespace PremierAPI.Controllers
             return Ok(new
             {
                 msg = string.IsNullOrWhiteSpace(adUsername)
-                    ? "VÃ­nculo AD removido."
+                    ? "Vínculo AD removido."
                     : logonPrepared
                         ? "Usuario AD vinculado."
                         : "Usuario AD vinculado. Aviso: a conta LDAP nao tem permissao para atualizar os computadores obrigatorios no AD."

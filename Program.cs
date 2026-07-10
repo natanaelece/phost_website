@@ -12,10 +12,10 @@ using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// CONFIGURAÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã†â€™O: Carrega as configuraÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes do sistema
+// CONFIGURAÇÃO: Carrega as configurações do sistema
 builder.Configuration.AddEnvironmentVariables();
 
-// SEGURANÃƒÆ’Ã¢â‚¬Â¡A: Limita tamanho mÃƒÆ’Ã‚Â¡ximo do body (protege RAM do T8 Pro)
+// SEGURANÇA: Limita tamanho máximo do body (protege RAM do T8 Pro)
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 128 * 1024; // 128 KB
@@ -26,7 +26,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<PremierAPI.Services.ActiveDirectoryService>();
 builder.Services.AddHostedService<PremierAPI.Services.AdOrderExpirationWorker>();
 
-// SEGURANÃƒÆ’Ã¢â‚¬Â¡A: CORS ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â sÃƒÆ’Ã‚Â³ aceita requisiÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes vindas do domÃƒÆ’Ã‚Â­nio oficial
+// SEGURANÇA: CORS — só aceita requisições vindas do domínio oficial
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendOnly", policy =>
@@ -38,8 +38,8 @@ builder.Services.AddCors(options =>
 // 1. RATE LIMITING & CONCURRENCY: Defesa interna para o hardware do T8 Pro
 builder.Services.AddRateLimiter(options =>
 {
-    // Regra por IP para endpoints de autenticaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o (anti forÃƒÆ’Ã‚Â§a bruta)
-    // MÃƒÆ’Ã‚Â¡ximo 5 tentativas por minuto por IP
+    // Regra por IP para endpoints de autenticação (anti força bruta)
+    // Máximo 5 tentativas por minuto por IP
     options.AddFixedWindowLimiter("AuthLimiter", opt =>
     {
         opt.Window = TimeSpan.FromMinutes(1);
@@ -48,7 +48,7 @@ builder.Services.AddRateLimiter(options =>
         opt.AutoReplenishment = true;
     });
 
-    // Regra padrÃƒÆ’Ã‚Â£o para outras APIs
+    // Regra padrão para outras APIs
     options.AddFixedWindowLimiter("ApiPadrao", opt =>
     {
         opt.Window = TimeSpan.FromSeconds(10);
@@ -56,7 +56,7 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueLimit = 0;
     });
 
-    // ProteÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o global: MÃƒÆ’Ã‚Â¡ximo 50 conexÃƒÆ’Ã‚Âµes simultÃƒÆ’Ã‚Â¢neas processando ao mesmo tempo
+    // Proteção global: Máximo 50 conexões simultâneas processando ao mesmo tempo
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetConcurrencyLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -91,7 +91,7 @@ if (!string.IsNullOrEmpty(tgToken) && !string.IsNullOrEmpty(tgChatId))
     builder.Logging.AddProvider(new TelegramLoggerProvider(tgToken, tgChatId, tgMinimumLevel));
 }
 
-// RUN DB INITIALIZER (CRIA TABELAS SE NÃƒÆ’O EXISTIREM)
+// RUN DB INITIALIZER (CRIA TABELAS SE NÃO EXISTIREM)
 PremierAPI.Services.DatabaseInitializer.Initialize(builder.Configuration);
 
 var app = builder.Build();
@@ -134,7 +134,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
-// 2. HEADERS DE SEGURANÃƒÆ’Ã¢â‚¬Â¡A: Previne XSS, Clickjacking, Sniffing e data injection
+// 2. HEADERS DE SEGURANÇA: Previne XSS, Clickjacking, Sniffing e data injection
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
@@ -205,7 +205,7 @@ app.MapGet("/recuperar-senha", async context =>
     await context.Response.SendFileAsync(filePath);
 });
 
-// Aplica rate limiting de autenticaÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nos endpoints sensÃƒÆ’Ã‚Â­veis
+// Aplica rate limiting de autenticação nos endpoints sensíveis
 app.MapControllers().RequireRateLimiting("ApiPadrao");
 app.Lifetime.ApplicationStarted.Register(() =>
 {

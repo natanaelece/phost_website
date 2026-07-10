@@ -64,7 +64,7 @@
         .modal-body input { width:100%; background:var(--bg2); border:1px solid var(--border); padding:10px; border-radius:6px; color:var(--txt); }
         .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
         .offline-banner { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:50px 20px; text-align:center; background:rgba(255,0,0,0.1); border:1px solid rgba(255,0,0,0.2); border-radius:12px; margin-top:20px; }
-        .admin-toast { position:fixed; right:24px; top:82px; z-index:10000; width:min(380px, calc(100vw - 32px)); padding:14px 16px; border-radius:10px; border:1px solid var(--border); background:var(--bg); box-shadow:0 18px 40px rgba(0,0,0,.42); opacity:0; transform:translateY(-10px); transition:opacity .18s ease, transform .18s ease; }
+        .admin-toast { position:fixed; right:24px; top:82px; z-index:10000; width:min(380px, calc(100vw - 32px)); padding:14px 16px; border-radius:10px; border:1px solid var(--border); background:var(--bg); box-shadow:0 18px 40px rgba(0,0,0,.42); opacity:0; transform:translateY(-10px); transition:opacity .18s ease, transform .18s ease; pointer-events:none; }
         .admin-toast.show { opacity:1; transform:translateY(0); }
         .admin-toast.success { border-color:var(--ok); color:var(--ok); }
         .admin-toast.error { border-color:var(--err); color:var(--err); }
@@ -455,7 +455,7 @@
         document.getElementById('m-ad-dup-whatsapp').value = '';
         document.getElementById('m-ad-dup-password').value = '';
         document.getElementById('m-ad-dup-confirm').value = '';
-        document.getElementById('m-ad-dup-title').innerHTML = `Duplicar usuÔö£├¡rio: <b>${esc(username)}</b>`;
+        document.getElementById('m-ad-dup-title').innerHTML = `Duplicar usuário: <b>${esc(username)}</b>`;
         document.getElementById('modal-ad-duplicate').classList.add('active');
     }
 
@@ -472,7 +472,7 @@
             return;
         }
         if (pass !== conf) {
-            showAdminMessage('error', 'As senhas nÔö£├║o coincidem.');
+            showAdminMessage('error', 'As senhas não coincidem.');
             return;
         }
 
@@ -487,7 +487,7 @@
             })
         });
 
-        const msg = await readResponseMessage(r, 'UsuÔö£├¡rio duplicado com sucesso.');
+        const msg = await readResponseMessage(r, 'Usuário duplicado com sucesso.');
         if (r.ok) {
             showAdminMessage('success', msg);
             closeModals();
@@ -818,7 +818,7 @@
             const renderUser = (u) => {
                 const computers = Array.isArray(u.computers) ? u.computers : [];
                 const computersCsv = computers.join(',');
-                // Se allowAllComputers=true, sem restriÔö£┬║Ôö£├║o (campo vazio no AD) = acesso a todos
+                // Se allowAllComputers=true, sem restrição (campo vazio no AD) = acesso a todos
                 const computerText = u.allowAllComputers
                     ? '<span style="color:#60a5fa">&#127760; Todos os computadores</span>'
                     : (computers.length > 0 ? computers.map(esc).join(', ') : 'Nenhum PC');
@@ -895,7 +895,7 @@
             .sort((a,b) => {
                 const sa = _adSelectedComputers.has(normalizeComputerName(a.name)) ? 0 : 1;
                 const sb = _adSelectedComputers.has(normalizeComputerName(b.name)) ? 0 : 1;
-                // Selecionados primeiro, depois ordena por descriÔö£┬║Ôö£├║o
+                // Selecionados primeiro, depois ordena por descrição
                 return sa - sb || String(a.description||a.name||'').localeCompare(String(b.description||b.name||''), 'pt-BR', {sensitivity:'base'});
             });
 
@@ -981,7 +981,7 @@
 
         const action = data.operation === 'remove' ? 'remover' : 'adicionar';
         const suggestion = data.suggestedGroup
-            ? ` O grupo autom├ítico esperado era ${data.suggestedGroup}.`
+            ? ` O grupo automático esperado era ${data.suggestedGroup}.`
             : '';
         document.getElementById('ad-group-select-note').textContent =
             `Selecione o grupo que deve ser usado para ${action} o acesso do computador ${data.computer}.${suggestion}`;
@@ -1222,5 +1222,3 @@ function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/<
 
 init();
 </script></body></html>
-
-
