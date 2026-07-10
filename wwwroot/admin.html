@@ -151,6 +151,33 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="modal-ad-edit">
+        <div class="modal-box">
+            <div class="modal-title" id="m-ad-edit-title">Editar Usu&aacute;rio AD</div>
+            <div class="modal-body">
+                <input type="hidden" id="m-ad-edit-username">
+                <div class="form-group"><label>Nome Completo</label><input type="text" id="m-ad-edit-fullname"></div>
+                <div class="form-group"><label>WhatsApp</label><input type="text" id="m-ad-edit-whatsapp" autocomplete="off" oninput="mascaraTelefone(this)" maxlength="15" placeholder="(11) 99999-9999"></div>
+                <div class="form-group"><label>Nova Senha (Opcional)</label><input type="password" id="m-ad-edit-password" placeholder="Deixe em branco para manter a atual"></div>
+                
+                <div style="margin-top:15px; padding-top:15px; border-top:1px solid var(--border)">
+                    <label class="inline-check" style="display:flex; margin-bottom:10px;">
+                        <input type="checkbox" id="m-ad-edit-active"> 
+                        <span style="margin-left:8px;">Conta Ativa</span>
+                    </label>
+                    <label class="inline-check" style="display:flex;">
+                        <input type="checkbox" id="m-ad-edit-never-expires"> 
+                        <span style="margin-left:8px;">Senha nunca expira</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="submitAdEdit()">Salvar Altera&ccedil;&otilde;es</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="modal-ad-password">
         <div class="modal-box">
             <div class="modal-title" id="m-ad-password-title">Redefinir senha AD</div>
@@ -372,6 +399,28 @@
         document.getElementById('m-ad-whatsapp').value = '';
         document.getElementById('m-ad-password').value = '';
         document.getElementById('modal-ad-user').classList.add('active'); 
+    }
+
+    async function openAdEditModal(username) {
+        document.getElementById('m-ad-edit-title').textContent = 'Editar: ' + username;
+        document.getElementById('m-ad-edit-username').value = username;
+        document.getElementById('m-ad-edit-fullname').value = 'Carregando...';
+        document.getElementById('m-ad-edit-whatsapp').value = '';
+        document.getElementById('m-ad-edit-password').value = '';
+        document.getElementById('m-ad-edit-active').checked = false;
+        document.getElementById('m-ad-edit-never-expires').checked = false;
+        document.getElementById('modal-ad-edit').classList.add('active');
+
+        const u = await apiFetch('/api/admin/ad/users/' + encodeURIComponent(username));
+        if (u) {
+            document.getElementById('m-ad-edit-fullname').value = u.fullName || '';
+            document.getElementById('m-ad-edit-whatsapp').value = u.telephoneNumber || '';
+            document.getElementById('m-ad-edit-active').checked = u.isActive;
+            document.getElementById('m-ad-edit-never-expires').checked = u.passwordNeverExpires;
+        } else {
+            closeModals();
+            showAdminMessage('error', 'Falha ao buscar dados do usuário.');
+        }
     }
 
     function openAdPasswordModal(username) {
@@ -790,6 +839,7 @@
                     </td>
                     <td>
                         <div class="action-row">
+                            <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#3b82f6;border-color:#3b82f6" onclick="openAdEditModal('${u.username}')">&#9998; Editar</button>
                             <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#60a5fa;border-color:#60a5fa" onclick="openAdPasswordModal('${u.username}')">&#128274; Senha</button>
                             <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#a78bfa;border-color:#a78bfa" onclick="openDuplicateModal('${u.username}', '${esc(u.fullName)}')">&#128203; Duplicar</button>
                             ${u.ouPath === 'USUARIOS'
@@ -977,6 +1027,20 @@
         };
         const r = await fetch('/api/admin/ad/users', { method: 'POST', headers: hdrs(), body: JSON.stringify(body) });
         const msg = await readResponseMessage(r, 'Usuario AD criado.');
+        if(r.ok) { showAdminMessage('success', msg); closeModals(); loadAd(); } else showAdminMessage('error', msg);
+    }
+
+    async function submitAdEdit() {
+        const username = document.getElementById('m-ad-edit-username').value;
+        const body = { 
+            FullName: document.getElementById('m-ad-edit-fullname').value.trim(), 
+            Whatsapp: document.getElementById('m-ad-edit-whatsapp').value.trim(),
+            Password: document.getElementById('m-ad-edit-password').value,
+            IsActive: document.getElementById('m-ad-edit-active').checked,
+            PasswordNeverExpires: document.getElementById('m-ad-edit-never-expires').checked
+        };
+        const r = await fetch('/api/admin/ad/users/' + encodeURIComponent(username), { method: 'PUT', headers: hdrs(), body: JSON.stringify(body) });
+        const msg = await readResponseMessage(r, 'Usuario atualizado.');
         if(r.ok) { showAdminMessage('success', msg); closeModals(); loadAd(); } else showAdminMessage('error', msg);
     }
     

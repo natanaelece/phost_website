@@ -1,4 +1,4 @@
-﻿# Regras de IA e Contexto do Repositorio (AI Rules)
+# Regras de IA e Contexto do Repositorio (AI Rules)
 
 **AVISO AOS AGENTES DE IA (AI ASSISTANTS):** A leitura deste arquivo e OBRIGATORIA antes de iniciar qualquer modificacao no projeto, sob instrucao direta do dono do repositorio.
 
@@ -24,7 +24,7 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 - ProfileController.cs: Edicao de dados triviais do perfil do cliente.
 
 ### /Services (Logica de Negocios e Background)
-- ActiveDirectoryService.cs: O UNICO responsavel por conversar com o Windows Server (LDAP). Contem metodos para localizar, criar, deletar usuarios, definir senhas, e mover eles entre OUs. Lembre-se: Suas buscas (GetUserDn) usam ScopeSub, logo varrem toda a estrutura partindo do BaseDn. Exige LDAPS (criptografia).
+- ActiveDirectoryService.cs: O UNICO responsavel por conversar com o Windows Server (LDAP). Contem metodos para localizar, criar, deletar usuarios, definir senhas, editar (LdapModification) e mover eles entre OUs. Lembre-se: Suas buscas (GetUserDn) usam ScopeSub, logo varrem toda a estrutura partindo do BaseDn. Exige LDAPS (criptografia). Atente-se as limitacoes do LDAP no Linux: "O usuario nao pode alterar a senha" exige acesso ACL que e impossivel; e para renomear o Nome Completo (CN) e mandatorio utilizar ModifyDNRequest, e nao Modify regular.
 - AdOrderExpirationWorker.cs: Job assincrono (Worker) que roda de 1 em 1 hora. Varre o banco de dados e expulsa/bloqueia do AD usuarios cujos planos expiraram e nao foram renovados.
 - DatabaseInitializer.cs: Garante que o PostgreSQL tenha as tabelas formatadas corretamente. Se adicionar uma coluna nova, faca por aqui.
 - TelegramLogger.cs: Servico global de monitoramento. Intercepta logs de erro (Nivel Error) e os encaminha diretamente para o Telegram do administrador.

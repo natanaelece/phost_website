@@ -556,6 +556,31 @@ namespace PremierAPI.Controllers
                 return BadRequest(new { erro = ex.Message });
             }
         }
+        [HttpGet("ad/users/{username}")]
+        public async Task<IActionResult> GetAdUser(string username, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            var user = await ad.GetUserDetailsAsync(username);
+            if (user == null) return NotFound(new { erro = "Usuario nao encontrado no AD." });
+            return Ok(user);
+        }
+
+        [HttpPut("ad/users/{username}")]
+        public async Task<IActionResult> UpdateAdUser(string username, [FromBody] UpdateAdUserDetailsRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.UpdateUserDetailsAsync(username, req.FullName, req.Whatsapp, req.Password, req.IsActive, req.PasswordNeverExpires);
+                _logger.LogInformation("[ADMIN][AD] Usuario atualizado: {Username}.", username);
+                return Ok(new { msg = "Usuario AD atualizado com sucesso." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao atualizar usuario {Username}.", username);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
 
         [HttpPut("ad/users/{username}/expiration")]
         public async Task<IActionResult> SetAdUserExpiration(string username, [FromBody] SetExpirationRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
@@ -675,6 +700,7 @@ namespace PremierAPI.Controllers
 
 
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
+    public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }
     public class UpdateAdLinkRequest { public string? AdUsername { get; set; } }
     public class UpdateOrderDeliveryRequest { public bool Delivered { get; set; } }
     public class CreateAdUserRequest { public string Username { get; set; } = ""; public string FullName { get; set; } = ""; public string Password { get; set; } = ""; public string? Whatsapp { get; set; } }
