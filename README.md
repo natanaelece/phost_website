@@ -1,6 +1,6 @@
 # PremierAPI
 
-> Atualizacao do painel admin: o `admin.html` agora tambem atua como cockpit operacional CRM/SaaS, com Dashboard, Financeiro, CRM, Pedidos, Usuarios e Active Directory. O admin permanece em HTML estatico, CSS nativo e Vanilla JavaScript; nao usa Tailwind sem permissao explicita.
+> Atualizacao do painel admin: o painel administrativo agora fica em `wwwroot/admin/`, com telas HTML estaticas separadas para Dashboard, Financeiro, CRM, Pedidos, Usuarios e Active Directory. O `admin.html` permanece como entrada compativel/redirecionamento. O admin permanece em HTML estatico, CSS nativo e Vanilla JavaScript; nao usa Tailwind sem permissao explicita.
 
 Plataforma de gerenciamento e automação para venda e gestão de slots/acessos (WYD) integrada com Active Directory e faturamento automático via Asaas (PIX).
 
@@ -9,7 +9,7 @@ Plataforma de gerenciamento e automação para venda e gestão de slots/acessos 
 
 ## 🚀 Visão Geral
 
-O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestrando o painel administrativo (`admin.html`) e o painel do cliente (`painel.html`). Ele automatiza a criação de contas no Windows Server (Active Directory), gerencia licenças e acessos a computadores e realiza cobranças de assinaturas de forma automatizada por meio da API da Asaas.
+O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestrando o painel administrativo (`wwwroot/admin/`) e o painel do cliente (`painel.html`). Ele automatiza a criação de contas no Windows Server (Active Directory), gerencia licenças e acessos a computadores e realiza cobranças de assinaturas de forma automatizada por meio da API da Asaas.
 
 ## 🛠 Tecnologias Utilizadas
 
@@ -33,7 +33,16 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 │   └── DatabaseInitializer.cs       # Seed e criação de tabelas automáticas no PostgreSQL
 │
 ├── wwwroot/                  # Aplicação Frontend
-│   ├── admin.html            # Painel Administrativo do sistema
+│   ├── admin.html            # Entrada compatível que redireciona para /admin/dashboard.html
+│   ├── admin/                # Painel Administrativo separado por tela
+│   │   ├── dashboard.html
+│   │   ├── financeiro.html
+│   │   ├── crm.html
+│   │   ├── pedidos.html
+│   │   ├── usuarios.html
+│   │   ├── active-directory.html
+│   │   ├── assets/           # CSS e JavaScript compartilhados do admin
+│   │   └── partials/         # Modais compartilhados
 │   ├── painel.html           # Dashboard do cliente (minha conta, meus pedidos)
 │   └── recuperar-senha.html  # Fluxo de redefinição de senha
 │
@@ -91,7 +100,7 @@ A aplicação fará a criação e atualização automática da estrutura de tabe
 
 ## Painel Administrativo
 
-O `admin.html` e uma SPA em HTML, CSS nativo e Vanilla JavaScript. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.
+O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo e Vanilla JavaScript. Cada area principal tem seu proprio `.html`, enquanto `admin/assets/admin.css`, `admin/assets/admin.js` e `admin/partials/modals.html` concentram estilos, logica compartilhada e modais. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.
 
 Principais areas do painel:
 

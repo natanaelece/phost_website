@@ -8,7 +8,7 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 ## 2. Principios de Desenvolvimento
 - O Frontend e Vanilla Javascript + HTML estatico servido na pasta wwwroot/. Nao invente frameworks complexos (React, Vue) nem introduza NPM.
 - O painel do cliente (index.html e painel.html) usa TailwindCSS via CDN.
-- O painel administrativo (admin.html) usa CSS Nativo/Puro focado em UI utilitaria (nao insira Tailwind nele sem permissao explicita).
+- O painel administrativo fica em `wwwroot/admin/` com telas HTML estaticas separadas, CSS Nativo/Puro compartilhado e Vanilla JavaScript compartilhado. Nao insira Tailwind nele sem permissao explicita. O `wwwroot/admin.html` existe apenas como entrada compativel/redirecionamento.
 - A API e Stateless. Funcoes de sessao sao baseadas em JWT.
 - O banco de dados relacional e orquestrado por Dapper (queries SQL puras), sem Entity Framework. Mantenha essa arquitetura de micro-ORM de alta performance. O arquivo DatabaseInitializer.cs e o responsavel por manter a estrutura do schema.
 - As queries do Dapper devem usar explicitamente aliases (AS NomePropriedade) para fazer o mapeamento correto do snake_case do banco para o PascalCase do C#.
@@ -32,4 +32,5 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 ### /wwwroot (Frontend)
 - index.html: Landing page, formulario de cadastro (validacao forte anti-fake), login e redefinicao.
 - painel.html: SPA do usuario final, onde ele ve os pedidos dele e as credenciais geradas.
-- admin.html: SPA do Administrador, construido com UI customizada (modais nativos, fetch direto) e paineis de controle do AD. Tambem concentra o cockpit administrativo, tela Financeiro e CRM Operacional. Mantenha CSS nativo/puro e reaproveite o endpoint `/api/admin/dashboard` para metricas de receita, pedidos, clientes, vencimentos e fila operacional.
+- admin.html: Entrada compativel que redireciona para `/admin/dashboard.html`.
+- admin/: Painel Administrativo dividido em telas HTML estaticas (`dashboard.html`, `financeiro.html`, `crm.html`, `pedidos.html`, `usuarios.html`, `active-directory.html`), com UI customizada, modais nativos, fetch direto e CSS/JS compartilhados em `admin/assets/`. Mantenha CSS nativo/puro e reaproveite o endpoint `/api/admin/dashboard` para metricas de receita, pedidos, clientes, vencimentos e fila operacional.
