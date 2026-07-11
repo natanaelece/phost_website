@@ -1,5 +1,7 @@
 # PremierAPI
 
+> Atualizacao do painel admin: o `admin.html` agora tambem atua como cockpit operacional CRM/SaaS, com Dashboard, Financeiro, CRM, Pedidos, Usuarios e Active Directory. O admin permanece em HTML estatico, CSS nativo e Vanilla JavaScript; nao usa Tailwind sem permissao explicita.
+
 Plataforma de gerenciamento e automação para venda e gestão de slots/acessos (WYD) integrada com Active Directory e faturamento automático via Asaas (PIX).
 
 > [!IMPORTANT]
@@ -86,6 +88,35 @@ A aplicação fará a criação e atualização automática da estrutura de tabe
 - **PostgreSQL:** Rodando localmente no mesmo container LXC, de forma dedicada. 
 - **Usuário da Aplicação:** `premierhost_app` (Usuário proprietário/owner de todas as tabelas na base `premierhost`).
 - *Nota de Operação:* Como o `premierhost_app` é o dono das tabelas, a aplicação tem permissão nativa para executar comandos estruturais (DDL), permitindo que rotinas como o `DatabaseInitializer.cs` criem índices (`CREATE INDEX IF NOT EXISTS`) e atualizem o esquema automaticamente na inicialização sem bloqueios de segurança. O superusuário `postgres` fica restrito a manutenções globais de infraestrutura via DBeaver.
+
+## Painel Administrativo
+
+O `admin.html` e uma SPA em HTML, CSS nativo e Vanilla JavaScript. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.
+
+Principais areas do painel:
+
+- **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.
+- **Financeiro:** analise de receita paga, total historico, pedidos manuais, conversao, receita por plano, tipo de pedido e status dos pedidos.
+- **CRM:** visao de clientes ativos, licencas vencendo, entregas pendentes, novos usuarios, proximos vencimentos, acoes recomendadas e ranking de clientes.
+- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD.
+
+### Dashboard por periodo
+
+O endpoint administrativo `GET /api/admin/dashboard` aceita filtros de periodo:
+
+```text
+/api/admin/dashboard?period=month
+/api/admin/dashboard?period=today
+/api/admin/dashboard?period=yesterday
+/api/admin/dashboard?period=7d
+/api/admin/dashboard?period=30d
+/api/admin/dashboard?period=last_month
+/api/admin/dashboard?period=quarter
+/api/admin/dashboard?period=year
+/api/admin/dashboard?period=custom&start=2026-07-01&end=2026-07-10
+```
+
+Esse endpoint retorna os blocos usados pelas telas Dashboard, Financeiro e CRM: estatisticas financeiras, serie de receita, status dos pedidos, planos, origem dos pedidos, top clientes, vencimentos proximos, fila operacional e pedidos recentes.
 
 ---
 *Desenvolvido e mantido para a infraestrutura da PremierHost.*

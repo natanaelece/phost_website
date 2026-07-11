@@ -17,7 +17,7 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 ## 3. Mapa de Arquivos e Responsabilidades (Directory Map)
 
 ### /Controllers (API Endpoints)
-- AdminController.cs: Centro de comando administrativo. Gerencia usuarios (local e AD), cancelamentos de pedidos, listagem de estatisticas e acoes coercitivas.
+- AdminController.cs: Centro de comando administrativo. Gerencia usuarios (local e AD), cancelamentos de pedidos, listagem de estatisticas, cockpit financeiro/CRM e acoes coercitivas. O endpoint `GET /api/admin/dashboard` aceita periodos fixos e personalizados (`period`, `start`, `end`) e alimenta Dashboard, Financeiro e CRM do admin.
 - AuthController.cs: Fluxo de autenticacao. Realiza o cadastro do usuario, criacao paralela da conta no Active Directory (tratando duplicacoes), Login via JWT e recuperacao de senha.
 - CheckoutController.cs: Interface com o Asaas. Processa a escolha do cliente e gera faturas PIX dinamicas.
 - WebhookController.cs: Ponto vital. Recebe os gatilhos (webhooks) do Asaas. Quando um PIX e pago, este arquivo e responsavel por aprovar o pedido e disparar a logica que concede acesso ao usuario no Active Directory.
@@ -32,4 +32,4 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 ### /wwwroot (Frontend)
 - index.html: Landing page, formulario de cadastro (validacao forte anti-fake), login e redefinicao.
 - painel.html: SPA do usuario final, onde ele ve os pedidos dele e as credenciais geradas.
-- admin.html: SPA do Administrador, construido com UI customizada (modais nativos, fetch direto) e paineis de controle do AD.
+- admin.html: SPA do Administrador, construido com UI customizada (modais nativos, fetch direto) e paineis de controle do AD. Tambem concentra o cockpit administrativo, tela Financeiro e CRM Operacional. Mantenha CSS nativo/puro e reaproveite o endpoint `/api/admin/dashboard` para metricas de receita, pedidos, clientes, vencimentos e fila operacional.
