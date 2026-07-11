@@ -15,6 +15,8 @@ namespace PremierAPI.Services
             using var conn = new NpgsqlConnection(connString);
             conn.Open();
 
+            CheckDatabaseEncoding(conn);
+
             string[] sqlCommands = new string[]
             {
                 @"CREATE TABLE IF NOT EXISTS users (
@@ -85,7 +87,18 @@ namespace PremierAPI.Services
                 "UPDATE orders SET delivered = false WHERE delivered IS NULL;",
                 "UPDATE orders SET paid_manually = false WHERE paid_manually IS NULL;",
                 "UPDATE orders SET ad_expiration_processed = false WHERE ad_expiration_processed IS NULL;",
-                "UPDATE orders SET ad_missing_link_alerted = false WHERE ad_missing_link_alerted IS NULL;"
+                "UPDATE orders SET ad_missing_link_alerted = false WHERE ad_missing_link_alerted IS NULL;",
+
+                @"CREATE TABLE IF NOT EXISTS whatsapp_message_templates (
+                    key VARCHAR(80) PRIMARY KEY,
+                    title VARCHAR(120) NOT NULL,
+                    audience VARCHAR(60) NOT NULL,
+                    trigger_description TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    default_body TEXT NOT NULL,
+                    variables_csv TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );"
             };
 
             foreach (var query in sqlCommands)
@@ -102,8 +115,46 @@ namespace PremierAPI.Services
                 }
             }
 
+            try
+            {
+                WhatsAppTemplateService.SeedAsync(conn).GetAwaiter().GetResult();
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[DB INIT AVISO] Falha ao preparar templates WhatsApp: {ex.Message}");
+            }
+
             // Realiza o backup da base de dados sempre que inicializa
             BackupDatabase(connString);
+        }
+
+        private static void CheckDatabaseEncoding(NpgsqlConnection conn)
+        {
+            try
+            {
+                var info = conn.QueryFirstOrDefault<DatabaseEncodingInfo>(@"
+                    SELECT
+                        current_database() AS ""DatabaseName"",
+                        pg_encoding_to_char(encoding) AS ""ServerEncoding"",
+                        datcollate AS ""Collation"",
+                        datctype AS ""CharacterType""
+                    FROM pg_database
+                    WHERE datname = current_database();");
+
+                if (info == null) return;
+
+                System.Console.WriteLine($"[DB ENCODING] Banco '{info.DatabaseName}' encoding={info.ServerEncoding}, collation={info.Collation}, ctype={info.CharacterType}");
+
+                if (!string.Equals(info.ServerEncoding, "UTF8", System.StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(info.ServerEncoding, "UTF-8", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    System.Console.WriteLine("[DB ENCODING AVISO CRITICO] O banco nao esta em UTF8. PostgreSQL nao permite converter encoding com ALTER DATABASE; para suporte confiavel a emoji e acentos, faca dump, crie um banco novo com ENCODING 'UTF8' e restaure nele. Consulte README.md > Encoding UTF-8 do PostgreSQL.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                System.Console.WriteLine($"[DB ENCODING AVISO] Nao foi possivel validar o encoding do banco: {ex.Message}");
+            }
         }
 
         private static void BackupDatabase(string connString)
@@ -153,5 +204,13 @@ namespace PremierAPI.Services
                 System.Console.WriteLine($"[DB BACKUP ERRO] Exceção ao tentar fazer backup: {ex.Message}");
             }
         }
+        private sealed class DatabaseEncodingInfo
+        {
+            public string DatabaseName { get; set; } = "";
+            public string ServerEncoding { get; set; } = "";
+            public string Collation { get; set; } = "";
+            public string CharacterType { get; set; } = "";
+        }
     }
 }
+

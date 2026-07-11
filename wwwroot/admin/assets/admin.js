@@ -779,8 +779,8 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         if(r.ok) showAdminMessage('success', msg); else showAdminMessage('error', msg);
     }
 
-const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html'};
-const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,usrPage:1,usrSearch:'',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month'};
+const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html'};
+const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,usrPage:1,usrSearch:'',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null};
 const API='/api/admin';
 
 function init(){
@@ -824,7 +824,7 @@ async function apiFetch(url){
   return data;
 }
 
-const HDR={dashboard:['Dashboard','Cockpit financeiro e operacional'],financeiro:['Financeiro','Receita, planos e origem dos pedidos'],crm:['CRM','Clientes, renovacoes e fila comercial'],pedidos:['Pedidos','Gerenciar todos os pedidos'],usuarios:['Usuarios','Gerenciar usuarios cadastrados'], ad:['Active Directory', 'Gerenciar AD Local']};
+const HDR={dashboard:['Dashboard','Cockpit financeiro e operacional'],financeiro:['Financeiro','Receita, planos e origem dos pedidos'],crm:['CRM','Clientes, renovacoes e fila comercial'],pedidos:['Pedidos','Gerenciar todos os pedidos'],usuarios:['Usuarios','Gerenciar usuarios cadastrados'],ad:['Active Directory','Gerenciar AD Local'],notificacoes:['Notificacoes','Mensagens automaticas do WhatsApp']};
 function setupCurrentView(){
   S.view=document.body?.dataset.view||S.view||'dashboard';
   document.querySelectorAll('.ni').forEach(e=>e.classList.remove('active'));
@@ -835,7 +835,7 @@ function setupCurrentView(){
   document.getElementById('hsub').textContent=s;
 }
 function loadCurrentView(){
-  if(S.view==='dashboard')loadDash();else if(S.view==='financeiro')loadFinanceiro();else if(S.view==='crm')loadCrm();else if(S.view==='pedidos')loadOrders();else if(S.view==='usuarios')loadUsers();else if(S.view==='ad')loadAd();
+  if(S.view==='dashboard')loadDash();else if(S.view==='financeiro')loadFinanceiro();else if(S.view==='crm')loadCrm();else if(S.view==='pedidos')loadOrders();else if(S.view==='usuarios')loadUsers();else if(S.view==='ad')loadAd();else if(S.view==='notificacoes'){wireWhatsAppEditor();loadNotificacoes();}
 }
 function go(v){
   const target=ADMIN_ROUTES[v];
@@ -1020,6 +1020,27 @@ function renderPag(type,total,cur,limit){
   btns.innerHTML=h;
 }
 
+const WA_SAMPLE={cliente_nome:'Joao Silva',cliente_whatsapp:'5534999187189',cliente_email:'cliente@exemplo.com',plano:'mensal',dias:'30',valor:'149,90',computadores:'1',slots:'4',pedido_id:'pay_123456789',ambiente:'PRODUCAO',data_pagamento:'11/07/2026 14:30'};
+const WA_EMOJIS=['✅','💰','⚠️','🚀','🔔','📦','💳','🛠️','📌','⏳','🎉','🙏','📲','🧾','🔐','⭐','🔥','👉','👇','☑️','❌','💬','📅','⏰'];
+function getWaBody(){return document.getElementById('wa-body');}
+async function loadNotificacoes(){const list=document.getElementById('wa-template-list');if(list)list.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';const data=await apiFetch(API+'/whatsapp/templates');if(!data)return;S.waTemplates=data.templates||[];renderWhatsAppTemplateList();selectWhatsAppTemplate(S.waSelected||S.waTemplates[0]?.key);document.getElementById('lupdate').textContent='Atualizado: '+new Date().toLocaleTimeString('pt-BR');}
+function renderWhatsAppTemplateList(){const list=document.getElementById('wa-template-list');if(!list)return;if(!S.waTemplates.length){list.innerHTML='<div class="empty">Nenhuma mensagem cadastrada.</div>';return;}list.innerHTML=S.waTemplates.map(t=>`<button class="template-option ${S.waSelected===t.key?'active':''}" onclick="selectWhatsAppTemplate('${esc(t.key)}')"><span class="template-option-title">${esc(t.title)}</span><span class="template-option-sub">${esc(t.audience)} | ${esc(t.usage||t.triggerDescription)}</span></button>`).join('');}
+function selectWhatsAppTemplate(key){const t=(S.waTemplates||[]).find(x=>x.key===key);if(!t)return;S.waSelected=t.key;renderWhatsAppTemplateList();setText('wa-title',t.title);setText('wa-audience',t.audience);setText('wa-trigger',t.triggerDescription);setText('wa-updated',fmtDateTime(t.updatedAt));setText('wa-usage',t.usage||'');const keyEl=document.getElementById('wa-key');if(keyEl)keyEl.textContent=t.key;const body=getWaBody();if(body)body.value=t.body||'';const vars=document.getElementById('wa-vars');if(vars)vars.innerHTML=(t.variables||[]).map(v=>`<button class="var-chip" onclick="insertWhatsAppVariable('${esc(v)}')">{{${esc(v)}}}</button>`).join('');renderWhatsAppPreview(t.body||'');}
+function waEscapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function renderWhatsAppMarkup(text){let out=waEscapeHtml(text);out=out.replace(/```([\s\S]+?)```/g,'<code>$1</code>');out=out.replace(/\*([^*\n][^*]*?)\*/g,'<strong>$1</strong>');out=out.replace(/_([^_\n][^_]*?)_/g,'<em>$1</em>');out=out.replace(/~([^~\n][^~]*?)~/g,'<s>$1</s>');return out;}
+function renderWhatsAppPreview(body){let out=body||'';Object.keys(WA_SAMPLE).forEach(k=>{out=out.replaceAll('{{'+k+'}}',WA_SAMPLE[k]);});const preview=document.getElementById('wa-preview');if(preview)preview.innerHTML=renderWhatsAppMarkup(out);const count=document.getElementById('wa-count');if(count)count.textContent=(body||'').length+' caracteres';}
+function insertAtCursor(text,wrapEnd){const body=getWaBody();if(!body)return;const start=body.selectionStart||0;const end=body.selectionEnd||0;const selected=body.value.slice(start,end);const finalText=wrapEnd!==undefined?text+(selected||'texto')+wrapEnd:text;body.value=body.value.slice(0,start)+finalText+body.value.slice(end);body.focus();const selectedLength=selected?selected.length:5;const cursor=wrapEnd!==undefined?start+text.length+selectedLength:start+finalText.length;body.selectionStart=body.selectionEnd=cursor;renderWhatsAppPreview(body.value);}
+function insertWhatsAppVariable(name){insertAtCursor('{{'+name+'}}');}
+function formatWhatsApp(kind){const map={bold:['*','*'],italic:['_','_'],strike:['~','~'],mono:['```','```']};const pair=map[kind];if(pair)insertAtCursor(pair[0],pair[1]);}
+function toggleEmojiPanel(){const panel=document.getElementById('emoji-panel');if(!panel)return;if(!panel.innerHTML)panel.innerHTML=WA_EMOJIS.map(e=>`<button type="button" class="emoji-choice" data-emoji="${e}">${e}</button>`).join('');panel.classList.toggle('open');}
+function insertEmoji(emoji){insertAtCursor(emoji);document.getElementById('emoji-panel')?.classList.remove('open');}
+function wireWhatsAppEditor(){if(S.waEditorWired)return;S.waEditorWired=true;document.querySelectorAll('[data-wa-format]').forEach(btn=>{btn.addEventListener('click',()=>formatWhatsApp(btn.dataset.waFormat));});const emojiToggle=document.getElementById('wa-emoji-toggle');if(emojiToggle)emojiToggle.addEventListener('click',toggleEmojiPanel);const panel=document.getElementById('emoji-panel');if(panel)panel.addEventListener('click',e=>{const btn=e.target.closest('[data-emoji]');if(btn)insertEmoji(btn.dataset.emoji);});}
+window.formatWhatsApp=formatWhatsApp;window.toggleEmojiPanel=toggleEmojiPanel;window.insertEmoji=insertEmoji;
+async function saveWhatsAppTemplate(){if(!S.waSelected)return;const body=getWaBody()?.value||'';const r=await fetch(API+'/whatsapp/templates/'+encodeURIComponent(S.waSelected),{method:'PUT',headers:hdrs(),body:JSON.stringify({Body:body})});const data=await r.json().catch(()=>null);if(!r.ok){showAdminMessage('error',data?.erro||'Falha ao salvar mensagem.');return;}const idx=S.waTemplates.findIndex(x=>x.key===S.waSelected);if(idx>=0)S.waTemplates[idx]=data.template;showAdminMessage('success',data.msg||'Mensagem atualizada.');selectWhatsAppTemplate(S.waSelected);}
+async function resetWhatsAppTemplate(){if(!S.waSelected)return;if(!await askAdminConfirm('Restaurar esta mensagem para o texto padrao?'))return;const r=await fetch(API+'/whatsapp/templates/'+encodeURIComponent(S.waSelected)+'/reset',{method:'POST',headers:hdrs()});const data=await r.json().catch(()=>null);if(!r.ok){showAdminMessage('error',data?.erro||'Falha ao restaurar mensagem.');return;}const idx=S.waTemplates.findIndex(x=>x.key===S.waSelected);if(idx>=0)S.waTemplates[idx]=data.template;showAdminMessage('success',data.msg||'Mensagem restaurada.');selectWhatsAppTemplate(S.waSelected);}
+function openNewWhatsAppTemplate(){document.getElementById('wa-new-title').value='';document.getElementById('wa-new-audience').value='Personalizada';document.getElementById('wa-new-trigger').value='Mensagem personalizada criada no painel. Para envio automatico, vincule esta chave no backend.';document.getElementById('wa-new-body').value='';document.getElementById('modal-wa-template').classList.add('active');}
+async function createWhatsAppTemplate(){const payload={Title:document.getElementById('wa-new-title').value.trim(),Audience:document.getElementById('wa-new-audience').value.trim(),TriggerDescription:document.getElementById('wa-new-trigger').value.trim(),Body:document.getElementById('wa-new-body').value};const r=await fetch(API+'/whatsapp/templates',{method:'POST',headers:hdrs(),body:JSON.stringify(payload)});const data=await r.json().catch(()=>null);if(!r.ok){showAdminMessage('error',data?.erro||'Falha ao criar mensagem.');return;}S.waTemplates.push(data.template);S.waSelected=data.template.key;closeModals();showAdminMessage('success',data.msg||'Mensagem criada.');renderWhatsAppTemplateList();selectWhatsAppTemplate(S.waSelected);}
+function fmtDateTime(d){if(!d)return'--';const dt=new Date(d);if(isNaN(dt))return'--';return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}
 function fmtCur(v){if(v===null||v===undefined)return'&#8212;';return'R$ '+parseFloat(v).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
 function fmtDate(d){if(!d)return'&#8212;';const dt=new Date(d);if(isNaN(dt))return'&#8212;';return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});}
 function sbadge(status,isActive){

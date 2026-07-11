@@ -13,6 +13,7 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 - O banco de dados relacional e orquestrado por Dapper (queries SQL puras), sem Entity Framework. Mantenha essa arquitetura de micro-ORM de alta performance. O arquivo DatabaseInitializer.cs e o responsavel por manter a estrutura do schema.
 - As queries do Dapper devem usar explicitamente aliases (AS NomePropriedade) para fazer o mapeamento correto do snake_case do banco para o PascalCase do C#.
 - O usuário da aplicação (premierhost_app) é o dono das tabelas. Alterações estruturais (DDL) feitas pelo DatabaseInitializer.cs rodam de forma nativa e automática na inicialização.
+- O banco PostgreSQL deve ser criado em UTF8 para suportar emojis e Unicode. O encoding de um banco existente nao deve ser alterado via automacao: PostgreSQL exige dump, criacao de novo banco UTF8 e restore planejado. O DatabaseInitializer.cs pode diagnosticar/avisar, mas nunca deve recriar ou dropar o banco automaticamente.
 
 ## 3. Mapa de Arquivos e Responsabilidades (Directory Map)
 

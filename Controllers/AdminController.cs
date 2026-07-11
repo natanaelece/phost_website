@@ -412,6 +412,52 @@ namespace PremierAPI.Controllers
         }
 
         // ==========================================
+        // WHATSAPP NOTIFICATIONS
+        // ==========================================
+        [HttpGet("whatsapp/templates")]
+        public async Task<IActionResult> GetWhatsAppTemplates([FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            return Ok(new { templates = await templates.GetTemplatesAsync() });
+        }
+
+        [HttpPost("whatsapp/templates")]
+        public async Task<IActionResult> CreateWhatsAppTemplate([FromBody] CreateWhatsAppTemplateRequest req, [FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            if (string.IsNullOrWhiteSpace(req.Title)) return BadRequest(new { erro = "Informe um nome para a mensagem." });
+            if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest(new { erro = "A mensagem nao pode ficar vazia." });
+            if (req.Body.Length > 4000) return BadRequest(new { erro = "A mensagem deve ter no maximo 4000 caracteres." });
+
+            var created = await templates.CreateTemplateAsync(req.Title, req.Audience, req.TriggerDescription, req.Body);
+            if (created == null) return BadRequest(new { erro = "Nao foi possivel criar a mensagem." });
+
+            return Ok(new { msg = "Mensagem criada.", template = created });
+        }
+
+        [HttpPut("whatsapp/templates/{key}")]
+        public async Task<IActionResult> UpdateWhatsAppTemplate(string key, [FromBody] UpdateWhatsAppTemplateRequest req, [FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest(new { erro = "A mensagem nao pode ficar vazia." });
+            if (req.Body.Length > 4000) return BadRequest(new { erro = "A mensagem deve ter no maximo 4000 caracteres." });
+
+            var updated = await templates.UpdateTemplateAsync(key, req.Body.TrimEnd());
+            if (updated == null) return NotFound(new { erro = "Template nao encontrado." });
+
+            return Ok(new { msg = "Mensagem atualizada.", template = updated });
+        }
+
+        [HttpPost("whatsapp/templates/{key}/reset")]
+        public async Task<IActionResult> ResetWhatsAppTemplate(string key, [FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            var updated = await templates.ResetTemplateAsync(key);
+            if (updated == null) return NotFound(new { erro = "Template nao encontrado." });
+
+            return Ok(new { msg = "Mensagem restaurada para o padrao.", template = updated });
+        }
+        // ==========================================
         // LOCAL USERS CRUD
         // ==========================================
         [HttpPost("users")]
@@ -1006,6 +1052,8 @@ namespace PremierAPI.Controllers
     }
 
 
+    public class CreateWhatsAppTemplateRequest { public string Title { get; set; } = ""; public string Audience { get; set; } = "Personalizada"; public string TriggerDescription { get; set; } = ""; public string Body { get; set; } = ""; }
+    public class UpdateWhatsAppTemplateRequest { public string Body { get; set; } = ""; }
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
     public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }
     public class UpdateAdLinkRequest { public string? AdUsername { get; set; } }
@@ -1034,6 +1082,8 @@ namespace PremierAPI.Controllers
         public string Description { get; set; } = "";
     }
 }
+
+
 
 
 

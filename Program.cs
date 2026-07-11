@@ -24,6 +24,7 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<PremierAPI.Services.ActiveDirectoryService>();
+builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
 builder.Services.AddHostedService<PremierAPI.Services.AdOrderExpirationWorker>();
 
 // SEGURANÇA: CORS — só aceita requisições vindas do domínio oficial
@@ -213,6 +214,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
 });
 
 app.Run("http://0.0.0.0:5000");
+
 
 
 

@@ -98,6 +98,52 @@ A aplicação fará a criação e atualização automática da estrutura de tabe
 - **Usuário da Aplicação:** `premierhost_app` (Usuário proprietário/owner de todas as tabelas na base `premierhost`).
 - *Nota de Operação:* Como o `premierhost_app` é o dono das tabelas, a aplicação tem permissão nativa para executar comandos estruturais (DDL), permitindo que rotinas como o `DatabaseInitializer.cs` criem índices (`CREATE INDEX IF NOT EXISTS`) e atualizem o esquema automaticamente na inicialização sem bloqueios de segurança. O superusuário `postgres` fica restrito a manutenções globais de infraestrutura via DBeaver.
 
+
+## Encoding UTF-8 do PostgreSQL
+
+O banco precisa estar em `UTF8` para salvar emoji e caracteres Unicode de forma confiavel nas mensagens de WhatsApp e em qualquer texto livre. Confira o banco atual com:
+
+```bash
+psql -d premierhost -c "SELECT datname, pg_encoding_to_char(encoding) AS encoding, datcollate, datctype FROM pg_database WHERE datname = 'premierhost';"
+```
+
+Se aparecer `SQL_ASCII`, nao use `ALTER DATABASE`: PostgreSQL nao converte o encoding de um banco existente. O caminho seguro e criar um banco novo em UTF-8 e restaurar um dump nele durante uma janela de manutencao.
+
+Checklist antes de migrar:
+
+- Fazer backup logico e guardar uma copia fora do diretorio da aplicacao.
+- Parar a API para evitar escrita durante o dump/restauracao.
+- Confirmar owner, permissoes, extensoes usadas e connection string.
+- Testar restauracao em um banco temporario antes de trocar producao.
+- Conferir textos com acentos, emojis, templates de WhatsApp, login, pedidos e painel admin apos subir.
+
+Fluxo recomendado, ajustando nomes/senhas conforme o ambiente:
+
+```bash
+# 1. Parar a aplicacao antes do dump final
+systemctl stop premierapi
+
+# 2. Backup do banco atual
+pg_dump -Fc -d premierhost -f /var/backups/premierhost_before_utf8.dump
+
+# 3. Criar banco novo em UTF-8 usando template0
+createdb -T template0 -E UTF8 --lc-collate=C.UTF-8 --lc-ctype=C.UTF-8 -O premierhost_app premierhost_utf8
+
+# 4. Restaurar no banco novo
+pg_restore -d premierhost_utf8 --no-owner --role=premierhost_app /var/backups/premierhost_before_utf8.dump
+
+# 5. Conferir encoding e dados principais
+psql -d premierhost_utf8 -c "SHOW server_encoding;"
+psql -d premierhost_utf8 -c "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM orders;"
+
+# 6. Trocar a connection string para premierhost_utf8 e subir a API
+systemctl start premierapi
+```
+
+Riscos principais: downtime durante a troca, falha de restore por objetos/permissoes, dados antigos com bytes invalidos vindos do `SQL_ASCII`, e connection string apontando para o banco antigo. Por isso, a troca deve ser testada em banco temporario antes de virar producao.
+
+O `DatabaseInitializer.cs` valida o encoding na inicializacao e emite um aviso critico quando o banco nao esta em UTF-8, mas ele nao tenta migrar automaticamente por ser uma operacao estrutural e potencialmente destrutiva.
+
 ## Painel Administrativo
 
 O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo e Vanilla JavaScript. Cada area principal tem seu proprio `.html`, enquanto `admin/assets/admin.css`, `admin/assets/admin.js` e `admin/partials/modals.html` concentram estilos, logica compartilhada e modais. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.

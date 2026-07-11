@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using System; // Necessário para capturar a Exception
 using MailKit.Net.Smtp;
 using MimeKit;
+using PremierAPI.Services;
 
 namespace PremierAPI.Controllers
 {
@@ -27,14 +28,16 @@ namespace PremierAPI.Controllers
         private readonly string _evoInstance;
         private readonly string _evoApikey;
         private readonly bool _dryRun;
+        private readonly WhatsAppTemplateService _whatsAppTemplates;
 
         // Variáveis para os tokens de segurança da Asaas
         private readonly string _apiToken;
         private readonly string _sandboxApiToken;
 
-        public WebhookController(IConfiguration config, ILogger<WebhookController> logger)
+        public WebhookController(IConfiguration config, ILogger<WebhookController> logger, WhatsAppTemplateService whatsAppTemplates)
         {
             _config = config;
+            _whatsAppTemplates = whatsAppTemplates;
             _connectionString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _dryRun = config.GetValue<bool>("Evolution:DryRun");
@@ -127,8 +130,20 @@ namespace PremierAPI.Controllers
                     }
 
                     // Disparos WhatsApp
-                    string msgAdmin = $"💰 *Pagamento Confirmado!*\nAmbiente: {envName}\nPedido: {paymentId}\nO cliente efetuou o pagamento. Configure o AnyDesk.";
-                    string msgClient = $"✅ *Pagamento Aprovado!*\nRecebemos seu pagamento. Um de nossos técnicos já está conectando no seu AnyDesk para realizar a configuração. Obrigado por escolher a Premierhost!";
+                    var paymentVariables = WhatsAppTemplateService.BuildPaymentVariables(
+                        envName,
+                        paymentId,
+                        clientName,
+                        clientPhone,
+                        clientEmail,
+                        period,
+                        days,
+                        totalPrice,
+                        computers,
+                        wydsPerComputer);
+
+                    string msgClient = await _whatsAppTemplates.RenderAsync(WhatsAppTemplateService.PaymentApprovedClient, paymentVariables);
+                    string msgAdmin = await _whatsAppTemplates.RenderAsync(WhatsAppTemplateService.PaymentApprovedAdmin, paymentVariables);
 
                     await DispararWhatsAppComRetry(clientPhone, msgClient);
                     await DispararWhatsAppComRetry(_adminPhone, msgAdmin);
@@ -245,3 +260,4 @@ namespace PremierAPI.Controllers
         }
     }
 }
+
