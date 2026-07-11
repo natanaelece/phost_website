@@ -60,6 +60,8 @@ namespace PremierAPI.Services
                     status VARCHAR(20),
                     delivered BOOLEAN DEFAULT false,
                     delivered_at TIMESTAMP,
+                    paid_manually BOOLEAN DEFAULT false,
+                    manual_paid_at TIMESTAMP,
                     ad_expiration_processed BOOLEAN DEFAULT false,
                     ad_expiration_processed_at TIMESTAMP,
                     ad_missing_link_alerted BOOLEAN DEFAULT false,
@@ -72,6 +74,8 @@ namespace PremierAPI.Services
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_username VARCHAR(100);",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_manually BOOLEAN DEFAULT false;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS manual_paid_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_missing_link_alerted BOOLEAN DEFAULT false;",
@@ -79,6 +83,7 @@ namespace PremierAPI.Services
                 
                 "UPDATE users SET is_active = true WHERE is_active IS NULL;",
                 "UPDATE orders SET delivered = false WHERE delivered IS NULL;",
+                "UPDATE orders SET paid_manually = false WHERE paid_manually IS NULL;",
                 "UPDATE orders SET ad_expiration_processed = false WHERE ad_expiration_processed IS NULL;",
                 "UPDATE orders SET ad_missing_link_alerted = false WHERE ad_missing_link_alerted IS NULL;"
             };

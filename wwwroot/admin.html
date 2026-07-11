@@ -584,7 +584,7 @@
     }
 
     async function markOrderPaid(id) {
-        if(await askAdminConfirm('Tem certeza que deseja marcar este pedido como pago manualmente?')) {
+        if(await askAdminConfirm('Marcar este pedido como pago manualmente? Se houver PIX pendente na Asaas, ele sera cancelado para evitar pagamento duplicado.')) {
             const r = await fetch('/api/admin/orders/' + id + '/mark-paid', { method: 'PUT', headers: hdrs() });
             const msg = await readResponseMessage(r, 'Pedido marcado como pago.');
             if(r.ok) { showAdminMessage('success', msg); loadOrders(); } else showAdminMessage('error', msg);

@@ -343,12 +343,59 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            var status = await db.QueryFirstOrDefaultAsync<string>("SELECT status FROM orders WHERE id = @Id", new { Id = id });
-            if (status == null) return NotFound(new { erro = "Pedido nao encontrado." });
+            var order = await db.QueryFirstOrDefaultAsync(
+                "SELECT status, asaas_payment_id FROM orders WHERE id = @Id",
+                new { Id = id });
+            if (order == null) return NotFound(new { erro = "Pedido nao encontrado." });
+
+            string status = (string)order.status;
+            string? paymentId = order.asaas_payment_id as string;
             if (status != "pendente" && status != "expirado") return BadRequest(new { erro = "Apenas pedidos pendentes ou expirados podem ser marcados como pagos." });
 
-            await db.ExecuteAsync("UPDATE orders SET status = 'pago', asaas_payment_id = CASE WHEN asaas_payment_id NOT LIKE 'MANUAL_%' THEN 'MANUAL_' || COALESCE(asaas_payment_id, '') ELSE asaas_payment_id END WHERE id = @Id", new { Id = id });
-            return Ok(new { msg = "Pedido marcado como pago manualmente." });
+            bool asaasCanceled = false;
+            if (status == "pendente" && !string.IsNullOrWhiteSpace(paymentId) && !paymentId.StartsWith("MANUAL_"))
+            {
+                try
+                {
+                    bool useSandbox = _config.GetValue<bool>("Asaas:UseSandbox");
+                    string baseUrl = useSandbox ? _config["Asaas:SandBoxBaseUrl"]! : _config["Asaas:BaseUrl"]!;
+                    string apiKey = useSandbox ? (_config["Asaas:SandBoxApiKey"] ?? "") : (_config["Asaas:ApiKey"] ?? "");
+
+                    var handler = new System.Net.Http.HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
+                    using var http = new System.Net.Http.HttpClient(handler);
+                    http.DefaultRequestHeaders.Add("access_token", apiKey);
+                    http.DefaultRequestHeaders.Add("User-Agent", "Premierhost-BFF/1.0");
+
+                    var response = await http.DeleteAsync($"{baseUrl}/payments/{paymentId}");
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync();
+                        return BadRequest(new { erro = $"Nao foi possivel cancelar a cobranca pendente na Asaas antes de marcar como pago manualmente: {body}" });
+                    }
+                    asaasCanceled = true;
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest(new { erro = $"Erro ao cancelar cobranca pendente na Asaas: {ex.Message}" });
+                }
+            }
+
+            await db.ExecuteAsync(
+                @"UPDATE orders
+                  SET status = 'pago',
+                      paid_manually = true,
+                      manual_paid_at = CURRENT_TIMESTAMP,
+                      canceled_at = NULL,
+                      refunded = false,
+                      delivered = false,
+                      delivered_at = NULL
+                  WHERE id = @Id",
+                new { Id = id });
+
+            string msg = asaasCanceled
+                ? "Pedido marcado como pago manualmente. A cobranca pendente na Asaas foi cancelada para evitar pagamento duplicado."
+                : "Pedido marcado como pago manualmente.";
+            return Ok(new { msg });
         }
         [HttpPost("orders/manual")]
         public async Task<IActionResult> CreateManualOrder([FromBody] ManualOrderRequest req)
@@ -357,8 +404,8 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
             
             string paymentId = "MANUAL_" + Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
-            string sqlOrder = @"INSERT INTO orders (user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price, asaas_payment_id, status) 
-                                VALUES (@UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total, @PayId, 'pago')";
+            string sqlOrder = @"INSERT INTO orders (user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price, asaas_payment_id, status, paid_manually, manual_paid_at) 
+                                VALUES (@UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total, @PayId, 'pago', true, CURRENT_TIMESTAMP)";
             
             await db.ExecuteAsync(sqlOrder, new { 
                 UserId = req.UserId, 
