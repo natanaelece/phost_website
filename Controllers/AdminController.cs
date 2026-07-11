@@ -153,8 +153,8 @@ namespace PremierAPI.Controllers
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>($"SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id = u.id {where}");
-            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, o.asaas_payment_id, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY o.created_at DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
-            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
+            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, o.asaas_payment_id, o.paid_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY o.created_at DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
+            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
         }
 
         [HttpGet("users")]
@@ -441,12 +441,16 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
             
             var order = await db.QueryFirstOrDefaultAsync(
-                "SELECT asaas_payment_id, status, user_id FROM orders WHERE id = @Id", new { Id = id });
+                "SELECT asaas_payment_id, status, user_id, paid_manually FROM orders WHERE id = @Id", new { Id = id });
             
             if (order == null) return NotFound(new { erro = "Pedido nao encontrado." });
             
-            string paymentId = (string)order.asaas_payment_id;
+            string? paymentId = order.asaas_payment_id as string;
             string status = (string)order.status;
+            bool paidManually = order.paid_manually as bool? ?? false;
+
+            if (refund && paidManually)
+                return BadRequest(new { erro = "Este pedido foi pago manualmente e nao possui reembolso pela Asaas." });
 
             if (!string.IsNullOrWhiteSpace(paymentId) && !paymentId.StartsWith("MANUAL_"))
             {
