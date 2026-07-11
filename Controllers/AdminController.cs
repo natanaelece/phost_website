@@ -120,25 +120,264 @@ namespace PremierAPI.Controllers
         }
 
         [HttpGet("dashboard")]
-        public async Task<IActionResult> GetDashboard()
+        public async Task<IActionResult> GetDashboard([FromQuery] string period = "month", [FromQuery] DateTime? start = null, [FromQuery] DateTime? end = null)
         {
             if (!await ValidateAdmin()) { _logger.LogWarning("[ADMIN] Acesso negado ao dashboard."); return Unauthorized(new { erro = "Acesso negado." }); }
+
+            var now = DateTime.Now;
+            var today = now.Date;
+            DateTime periodStart;
+            DateTime periodEnd;
+            string periodLabel;
+
+            switch ((period ?? "month").Trim().ToLowerInvariant())
+            {
+                case "today":
+                    periodStart = today;
+                    periodEnd = today.AddDays(1);
+                    periodLabel = "Hoje";
+                    break;
+                case "yesterday":
+                    periodStart = today.AddDays(-1);
+                    periodEnd = today;
+                    periodLabel = "Ontem";
+                    break;
+                case "7d":
+                    periodStart = today.AddDays(-6);
+                    periodEnd = today.AddDays(1);
+                    periodLabel = "Ultimos 7 dias";
+                    break;
+                case "30d":
+                    periodStart = today.AddDays(-29);
+                    periodEnd = today.AddDays(1);
+                    periodLabel = "Ultimos 30 dias";
+                    break;
+                case "last_month":
+                    periodStart = new DateTime(today.Year, today.Month, 1).AddMonths(-1);
+                    periodEnd = new DateTime(today.Year, today.Month, 1);
+                    periodLabel = "Mes anterior";
+                    break;
+                case "quarter":
+                    var quarterMonth = ((today.Month - 1) / 3) * 3 + 1;
+                    periodStart = new DateTime(today.Year, quarterMonth, 1);
+                    periodEnd = periodStart.AddMonths(3);
+                    periodLabel = "Trimestre atual";
+                    break;
+                case "year":
+                    periodStart = new DateTime(today.Year, 1, 1);
+                    periodEnd = new DateTime(today.Year + 1, 1, 1);
+                    periodLabel = "Ano atual";
+                    break;
+                case "custom":
+                    if (!start.HasValue || !end.HasValue) return BadRequest(new { erro = "Informe data inicial e final." });
+                    periodStart = start.Value.Date;
+                    periodEnd = end.Value.Date.AddDays(1);
+                    if (periodEnd <= periodStart) return BadRequest(new { erro = "Periodo personalizado invalido." });
+                    periodLabel = "Personalizado";
+                    break;
+                default:
+                    periodStart = new DateTime(today.Year, today.Month, 1);
+                    periodEnd = periodStart.AddMonths(1);
+                    periodLabel = "Mes atual";
+                    period = "month";
+                    break;
+            }
+
+            var span = periodEnd - periodStart;
+            var priorEnd = periodStart;
+            var priorStart = periodStart.Subtract(span);
+            var bucket = span.TotalDays > 92 ? "month" : "day";
+            var labelFormat = bucket == "month" ? "Mon/YY" : "DD/MM";
+            var p = new { Start = periodStart, End = periodEnd, PriorStart = priorStart, PriorEnd = priorEnd, Now = now };
+
             using var db = new NpgsqlConnection(_connString);
             var s = await db.QueryFirstOrDefaultAsync(@"
                 SELECT
-                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())), 0) AS revenue_this_month,
-                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW() - INTERVAL '1 month')), 0) AS revenue_last_month,
-                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago'), 0) AS total_revenue,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago') AS paid_orders,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > NOW()) AS active_licenses,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) <= NOW()) AS expired_licenses,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pendente') AS pending_orders,
-                    (SELECT COUNT(*) FROM users) AS total_users,
-                    (SELECT COUNT(*) FROM users WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())) AS new_users_this_month
-            ");
-            var monthlyRaw = await db.QueryAsync(@"SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon/YY') AS month, COALESCE(SUM(total_price), 0) AS revenue FROM orders WHERE status = 'pago' AND created_at >= DATE_TRUNC('month', NOW() - INTERVAL '5 months') GROUP BY DATE_TRUNC('month', created_at) ORDER BY DATE_TRUNC('month', created_at)");
-            var recentRaw = await db.QueryAsync(@"SELECT u.name AS user_name, u.email, u.whatsapp, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.created_at DESC LIMIT 10");
-            return Ok(new { stats = new { revenueThisMonth = (decimal)(s?.revenue_this_month ?? 0), revenueLastMonth = (decimal)(s?.revenue_last_month ?? 0), totalRevenue = (decimal)(s?.total_revenue ?? 0), paidOrders = (long)(s?.paid_orders ?? 0), activeLicenses = (long)(s?.active_licenses ?? 0), expiredLicenses = (long)(s?.expired_licenses ?? 0), pendingOrders = (long)(s?.pending_orders ?? 0), totalUsers = (long)(s?.total_users ?? 0), newUsersThisMonth = (long)(s?.new_users_this_month ?? 0) }, monthlyRevenue = monthlyRaw.Select(m => new { month = (string)m.month, revenue = (decimal)m.revenue }), recentOrders = recentRaw.Select(o => new { userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active }) });
+                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND created_at >= @Start AND created_at < @End), 0) AS Revenue,
+                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND created_at >= @PriorStart AND created_at < @PriorEnd), 0) AS PriorRevenue,
+                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago'), 0) AS TotalRevenue,
+                    COALESCE((SELECT SUM((total_price / GREATEST(days, 1)) * 30) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now), 0) AS EstimatedMrr,
+                    (SELECT COUNT(*) FROM orders WHERE created_at >= @Start AND created_at < @End) AS OrdersInPeriod,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND created_at >= @Start AND created_at < @End) AS PaidOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND created_at >= @PriorStart AND created_at < @PriorEnd) AS PriorPaidOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pendente' AND created_at >= @Start AND created_at < @End) AS PendingOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'cancelado' AND created_at >= @Start AND created_at < @End) AS CanceledOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'expirado' AND created_at >= @Start AND created_at < @End) AS ExpiredPixOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND paid_manually = true AND created_at >= @Start AND created_at < @End) AS ManualPaidOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND delivered = true AND created_at >= @Start AND created_at < @End) AS DeliveredOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND delivered = false) AS PendingDeliveryOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now) AS ActiveLicenses,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) <= @Now) AS ExpiredLicenses,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now AND (created_at + (days || ' days')::INTERVAL) <= (@Now + INTERVAL '7 days')) AS ExpiringSoon,
+                    (SELECT COUNT(DISTINCT user_id) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now) AS ActiveCustomers,
+                    (SELECT COUNT(*) FROM users) AS TotalUsers,
+                    (SELECT COUNT(*) FROM users WHERE created_at >= @Start AND created_at < @End) AS NewUsers
+            ", p);
+
+            var revenueRaw = await db.QueryAsync($@"
+                SELECT
+                    TO_CHAR(DATE_TRUNC('{bucket}', created_at), '{labelFormat}') AS Label,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue,
+                    COUNT(*) AS Orders
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY DATE_TRUNC('{bucket}', created_at)
+                ORDER BY DATE_TRUNC('{bucket}', created_at)
+            ", p);
+
+            var statusRaw = await db.QueryAsync(@"
+                SELECT
+                    status AS Status,
+                    COUNT(*) AS Count,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY status
+                ORDER BY Count DESC
+            ", p);
+
+            var planRaw = await db.QueryAsync(@"
+                SELECT
+                    COALESCE(period, 'Indefinido') AS Period,
+                    COUNT(*) AS Count,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue,
+                    COALESCE(SUM(computers), 0) AS Computers,
+                    COALESCE(SUM(computers * wyds_per_computer), 0) AS Slots
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY COALESCE(period, 'Indefinido')
+                ORDER BY Revenue DESC, Count DESC
+            ", p);
+
+            var typeRaw = await db.QueryAsync(@"
+                SELECT
+                    CASE WHEN paid_manually = true OR asaas_payment_id LIKE 'MANUAL_%' THEN 'Manual' ELSE 'Asaas PIX' END AS Type,
+                    COUNT(*) AS Count,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY CASE WHEN paid_manually = true OR asaas_payment_id LIKE 'MANUAL_%' THEN 'Manual' ELSE 'Asaas PIX' END
+                ORDER BY Revenue DESC, Count DESC
+            ", p);
+
+            var topRaw = await db.QueryAsync(@"
+                SELECT
+                    u.name AS UserName,
+                    u.email AS Email,
+                    u.whatsapp AS Whatsapp,
+                    COUNT(o.id) AS Orders,
+                    COALESCE(SUM(o.total_price), 0) AS Revenue,
+                    MAX(o.created_at) AS LastOrderAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND o.created_at >= @Start AND o.created_at < @End
+                GROUP BY u.id, u.name, u.email, u.whatsapp
+                ORDER BY Revenue DESC
+                LIMIT 8
+            ", p);
+
+            var upcomingRaw = await db.QueryAsync(@"
+                SELECT
+                    u.name AS UserName,
+                    u.email AS Email,
+                    u.whatsapp AS Whatsapp,
+                    o.period AS Period,
+                    o.computers AS Computers,
+                    o.wyds_per_computer AS WydsPerComputer,
+                    o.total_price AS TotalPrice,
+                    (o.created_at + (o.days || ' days')::INTERVAL) AS ExpiresAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now
+                ORDER BY ExpiresAt ASC
+                LIMIT 8
+            ", p);
+
+            var actionRaw = await db.QueryAsync(@"
+                SELECT 'Pagamento pendente' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, o.created_at AS EventAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pendente'
+                UNION ALL
+                SELECT 'Entrega pendente' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, o.created_at AS EventAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND o.delivered = false
+                UNION ALL
+                SELECT 'Licenca vencendo' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, (o.created_at + (o.days || ' days')::INTERVAL) AS EventAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now AND (o.created_at + (o.days || ' days')::INTERVAL) <= (@Now + INTERVAL '7 days')
+                ORDER BY EventAt ASC
+                LIMIT 10
+            ", p);
+
+            var recentRaw = await db.QueryAsync(@"
+                SELECT
+                    u.name AS UserName,
+                    u.email AS Email,
+                    u.whatsapp AS Whatsapp,
+                    o.period AS Period,
+                    o.days AS Days,
+                    o.computers AS Computers,
+                    o.wyds_per_computer AS WydsPerComputer,
+                    o.total_price AS TotalPrice,
+                    o.status AS Status,
+                    o.created_at AS CreatedAt,
+                    (o.created_at + (o.days || ' days')::INTERVAL) AS ExpiresAt,
+                    CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now THEN true ELSE false END AS IsActive
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                ORDER BY o.created_at DESC
+                LIMIT 10
+            ", p);
+
+            decimal revenue = (decimal)(s?.revenue ?? 0);
+            long ordersInPeriod = (long)(s?.ordersinperiod ?? 0);
+            long paidOrders = (long)(s?.paidorders ?? 0);
+            decimal averageTicket = paidOrders > 0 ? revenue / paidOrders : 0;
+            decimal conversionRate = ordersInPeriod > 0 ? (decimal)paidOrders / ordersInPeriod * 100 : 0;
+
+            return Ok(new
+            {
+                period = new { key = period, label = periodLabel, start = periodStart, end = periodEnd.AddDays(-1), previousStart = priorStart, previousEnd = priorEnd.AddDays(-1) },
+                stats = new
+                {
+                    revenueThisMonth = revenue,
+                    revenueLastMonth = (decimal)(s?.priorrevenue ?? 0),
+                    revenue,
+                    priorRevenue = (decimal)(s?.priorrevenue ?? 0),
+                    totalRevenue = (decimal)(s?.totalrevenue ?? 0),
+                    estimatedMrr = (decimal)(s?.estimatedmrr ?? 0),
+                    averageTicket,
+                    conversionRate,
+                    ordersInPeriod,
+                    paidOrders,
+                    priorPaidOrders = (long)(s?.priorpaidorders ?? 0),
+                    pendingOrders = (long)(s?.pendingorders ?? 0),
+                    canceledOrders = (long)(s?.canceledorders ?? 0),
+                    expiredPixOrders = (long)(s?.expiredpixorders ?? 0),
+                    manualPaidOrders = (long)(s?.manualpaidorders ?? 0),
+                    deliveredOrders = (long)(s?.deliveredorders ?? 0),
+                    pendingDeliveryOrders = (long)(s?.pendingdeliveryorders ?? 0),
+                    activeLicenses = (long)(s?.activelicenses ?? 0),
+                    expiredLicenses = (long)(s?.expiredlicenses ?? 0),
+                    expiringSoon = (long)(s?.expiringsoon ?? 0),
+                    activeCustomers = (long)(s?.activecustomers ?? 0),
+                    totalUsers = (long)(s?.totalusers ?? 0),
+                    newUsersThisMonth = (long)(s?.newusers ?? 0),
+                    newUsers = (long)(s?.newusers ?? 0)
+                },
+                monthlyRevenue = revenueRaw.Select(m => new { month = (string)m.label, revenue = (decimal)m.revenue, orders = (long)m.orders }),
+                revenueSeries = revenueRaw.Select(m => new { label = (string)m.label, revenue = (decimal)m.revenue, orders = (long)m.orders }),
+                statusBreakdown = statusRaw.Select(x => new { status = (string)x.status, count = (long)x.count, revenue = (decimal)x.revenue }),
+                planBreakdown = planRaw.Select(x => new { period = (string)x.period, count = (long)x.count, revenue = (decimal)x.revenue, computers = (long)x.computers, slots = (long)x.slots }),
+                orderTypeBreakdown = typeRaw.Select(x => new { type = (string)x.type, count = (long)x.count, revenue = (decimal)x.revenue }),
+                topCustomers = topRaw.Select(x => new { userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, orders = (long)x.orders, revenue = (decimal)x.revenue, lastOrderAt = (DateTime)x.lastorderat }),
+                upcomingExpirations = upcomingRaw.Select(x => new { userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, period = (string)x.period, computers = (int)x.computers, wydsPerComputer = (int)x.wydspercomputer, totalPrice = (decimal)x.totalprice, expiresAt = (DateTime)x.expiresat }),
+                actionQueue = actionRaw.Select(x => new { type = (string)x.type, userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, totalPrice = (decimal)x.totalprice, eventAt = (DateTime)x.eventat }),
+                recentOrders = recentRaw.Select(o => new { userName = (string)o.username, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wydspercomputer, totalPrice = (decimal)o.totalprice, status = (string)o.status, createdAt = (DateTime)o.createdat, expiresAt = (DateTime)o.expiresat, isActive = (bool)o.isactive })
+            });
         }
 
         [HttpGet("orders")]
