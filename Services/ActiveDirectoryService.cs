@@ -20,6 +20,8 @@ namespace PremierAPI.Services
         public string OuPath { get; set; } = ""; // "USUARIOS" ou "USUARIOS_EXPIRADOS"
         public bool AllowAllComputers { get; set; } // true quando userWorkstations está vazio no AD (sem restrição)
         public long? UserAccountControl { get; set; }
+        public string TelephoneNumber { get; set; } = "";
+        public bool PasswordNeverExpires => UserAccountControl.HasValue && (UserAccountControl.Value & 65536) != 0;
     }
 
     public class AdGroupDto
@@ -382,7 +384,7 @@ namespace PremierAPI.Services
             {
                 var encodedPass = System.Text.Encoding.Unicode.GetBytes($"\"{password}\"");
                 var passMod = new LdapModification(LdapModification.Replace, new LdapAttribute("unicodePwd", encodedPass));
-                var uacMod = new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", "512")); // NORMAL_ACCOUNT
+                var uacMod = new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", "66048")); // NORMAL_ACCOUNT | DONT_EXPIRE_PASSWORD
                 var pwdLastSetMod = new LdapModification(LdapModification.Replace, new LdapAttribute("pwdLastSet", "-1"));
                 try
                 {
@@ -466,13 +468,94 @@ namespace PremierAPI.Services
             }
         }
 
+        public async Task UpdateUserDetailsAsync(string username, string fullName, string? whatsapp, string? password, bool isActive, bool passwordNeverExpires)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            using var conn = GetConnection();
+            string dn = GetUserDn(conn, username) ?? throw new Exception("Usuario nao encontrado no AD.");
+
+            var modifications = new List<LdapModification>();
+
+            if (!string.IsNullOrWhiteSpace(fullName))
+            {
+                modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("displayName", fullName)));
+                string[] nameParts = fullName.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("givenName", nameParts.Length > 0 ? nameParts[0] : fullName)));
+                if (nameParts.Length > 1)
+                {
+                    modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("sn", nameParts[1])));
+                }
+            }
+
+            if (whatsapp != null)
+            {
+                string cleanPhone = System.Text.RegularExpressions.Regex.Replace(whatsapp, @"\D", "");
+                if (string.IsNullOrWhiteSpace(cleanPhone))
+                {
+                    modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("telephoneNumber", "")));
+                }
+                else
+                {
+                    modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("telephoneNumber", cleanPhone)));
+                }
+            }
+
+            var res = conn.Search(_baseDn, LdapConnection.ScopeSub,
+                $"(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))",
+                new[] { "userAccountControl" }, false);
+            
+            if (res.HasMore())
+            {
+                var entry = res.Next();
+                long currentUac = GetAttributeAsLong(entry, "userAccountControl");
+                if (currentUac == 0) currentUac = 512; 
+
+                currentUac &= ~2L; 
+                currentUac &= ~65536L; 
+
+                if (!isActive) currentUac |= 2L;
+                if (passwordNeverExpires) currentUac |= 65536L;
+
+                modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", currentUac.ToString())));
+            }
+
+            if (!string.IsNullOrEmpty(password))
+            {
+                EnsureSecurePasswordTransport(password);
+                var encodedPass = System.Text.Encoding.Unicode.GetBytes($"\"{password}\"");
+                modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("unicodePwd", encodedPass)));
+                modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("pwdLastSet", "-1")));
+            }
+
+            if (modifications.Count > 0)
+            {
+                conn.Modify(dn, modifications.ToArray());
+            }
+
+            if (!string.IsNullOrWhiteSpace(fullName))
+            {
+                string newRdn = $"CN={fullName}";
+                if (!dn.StartsWith(newRdn, StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        conn.Rename(dn, newRdn, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[AD] Falha ao renomear o CN para {NewRdn}.", newRdn);
+                    }
+                }
+            }
+        }
+
         public async Task<AdUserDto?> GetUserDetailsAsync(string username)
         {
             if (!await IsOnlineAsync()) return null;
             using var conn = GetConnection();
             var res = conn.Search(_baseDn, LdapConnection.ScopeSub,
                 $"(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))",
-                new[] { "sAMAccountName", "displayName", "userAccountControl", "accountExpires", "memberOf", "userWorkstations" }, false);
+                new[] { "sAMAccountName", "displayName", "userAccountControl", "accountExpires", "memberOf", "userWorkstations", "telephoneNumber" }, false);
             if (!res.HasMore()) return null;
             var entry = res.Next();
 
@@ -491,7 +574,8 @@ namespace PremierAPI.Services
                 ExpiresAt = (expires > 0 && expires != long.MaxValue)
                     ? AccountExpiresToDisplayDate(expires)
                     : null,
-                UserAccountControl = uac > 0 ? uac : null
+                UserAccountControl = uac > 0 ? uac : null,
+                TelephoneNumber = GetAttribute(entry, "telephoneNumber")
             };
 
             foreach (string groupDn in GetAttributeValues(entry, "memberOf"))

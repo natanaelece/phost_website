@@ -73,7 +73,7 @@ namespace PremierAPI.Controllers
             if (_ipRateLimits.TryGetValue(ip, out var limit))
             {
                 if (DateTime.UtcNow < limit.LockoutEnd)
-                    return StatusCode(403, new { erro = $"Muitas tentativas. Bloqueado atÃ© {limit.LockoutEnd.ToLocalTime():HH:mm:ss}." });
+                    return StatusCode(403, new { erro = $"Muitas tentativas. Bloqueado até {limit.LockoutEnd.ToLocalTime():HH:mm:ss}." });
             }
 
             if (string.IsNullOrWhiteSpace(req.TurnstileResponse))
@@ -94,7 +94,7 @@ namespace PremierAPI.Controllers
                 if (newLimit.Attempts >= 5)
                 {
                     newLimit.LockoutEnd = DateTime.UtcNow.AddMinutes(30);
-                    _logger.LogWarning($"âš ï¸ ALERTA DE SEGURANÃ‡A: MÃºltiplas tentativas de acesso ao Admin! O IP {ip} foi bloqueado por 30 minutos.");
+                    _logger.LogWarning($"⚠️ ALERTA DE SEGURANÇA: Múltiplas tentativas de acesso ao Admin! O IP {ip} foi bloqueado por 30 minutos.");
                 }
                 _ipRateLimits[ip] = newLimit;
                 return Unauthorized(new { erro = "Token invalido." });
@@ -120,25 +120,264 @@ namespace PremierAPI.Controllers
         }
 
         [HttpGet("dashboard")]
-        public async Task<IActionResult> GetDashboard()
+        public async Task<IActionResult> GetDashboard([FromQuery] string period = "month", [FromQuery] DateTime? start = null, [FromQuery] DateTime? end = null)
         {
             if (!await ValidateAdmin()) { _logger.LogWarning("[ADMIN] Acesso negado ao dashboard."); return Unauthorized(new { erro = "Acesso negado." }); }
+
+            var now = DateTime.Now;
+            var today = now.Date;
+            DateTime periodStart;
+            DateTime periodEnd;
+            string periodLabel;
+
+            switch ((period ?? "month").Trim().ToLowerInvariant())
+            {
+                case "today":
+                    periodStart = today;
+                    periodEnd = today.AddDays(1);
+                    periodLabel = "Hoje";
+                    break;
+                case "yesterday":
+                    periodStart = today.AddDays(-1);
+                    periodEnd = today;
+                    periodLabel = "Ontem";
+                    break;
+                case "7d":
+                    periodStart = today.AddDays(-6);
+                    periodEnd = today.AddDays(1);
+                    periodLabel = "Ultimos 7 dias";
+                    break;
+                case "30d":
+                    periodStart = today.AddDays(-29);
+                    periodEnd = today.AddDays(1);
+                    periodLabel = "Ultimos 30 dias";
+                    break;
+                case "last_month":
+                    periodStart = new DateTime(today.Year, today.Month, 1).AddMonths(-1);
+                    periodEnd = new DateTime(today.Year, today.Month, 1);
+                    periodLabel = "Mes anterior";
+                    break;
+                case "quarter":
+                    var quarterMonth = ((today.Month - 1) / 3) * 3 + 1;
+                    periodStart = new DateTime(today.Year, quarterMonth, 1);
+                    periodEnd = periodStart.AddMonths(3);
+                    periodLabel = "Trimestre atual";
+                    break;
+                case "year":
+                    periodStart = new DateTime(today.Year, 1, 1);
+                    periodEnd = new DateTime(today.Year + 1, 1, 1);
+                    periodLabel = "Ano atual";
+                    break;
+                case "custom":
+                    if (!start.HasValue || !end.HasValue) return BadRequest(new { erro = "Informe data inicial e final." });
+                    periodStart = start.Value.Date;
+                    periodEnd = end.Value.Date.AddDays(1);
+                    if (periodEnd <= periodStart) return BadRequest(new { erro = "Periodo personalizado invalido." });
+                    periodLabel = "Personalizado";
+                    break;
+                default:
+                    periodStart = new DateTime(today.Year, today.Month, 1);
+                    periodEnd = periodStart.AddMonths(1);
+                    periodLabel = "Mes atual";
+                    period = "month";
+                    break;
+            }
+
+            var span = periodEnd - periodStart;
+            var priorEnd = periodStart;
+            var priorStart = periodStart.Subtract(span);
+            var bucket = span.TotalDays > 92 ? "month" : "day";
+            var labelFormat = bucket == "month" ? "Mon/YY" : "DD/MM";
+            var p = new { Start = periodStart, End = periodEnd, PriorStart = priorStart, PriorEnd = priorEnd, Now = now };
+
             using var db = new NpgsqlConnection(_connString);
             var s = await db.QueryFirstOrDefaultAsync(@"
                 SELECT
-                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())), 0) AS revenue_this_month,
-                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW() - INTERVAL '1 month')), 0) AS revenue_last_month,
-                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago'), 0) AS total_revenue,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago') AS paid_orders,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > NOW()) AS active_licenses,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) <= NOW()) AS expired_licenses,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pendente') AS pending_orders,
-                    (SELECT COUNT(*) FROM users) AS total_users,
-                    (SELECT COUNT(*) FROM users WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())) AS new_users_this_month
-            ");
-            var monthlyRaw = await db.QueryAsync(@"SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon/YY') AS month, COALESCE(SUM(total_price), 0) AS revenue FROM orders WHERE status = 'pago' AND created_at >= DATE_TRUNC('month', NOW() - INTERVAL '5 months') GROUP BY DATE_TRUNC('month', created_at) ORDER BY DATE_TRUNC('month', created_at)");
-            var recentRaw = await db.QueryAsync(@"SELECT u.name AS user_name, u.email, u.whatsapp, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.created_at DESC LIMIT 10");
-            return Ok(new { stats = new { revenueThisMonth = (decimal)(s?.revenue_this_month ?? 0), revenueLastMonth = (decimal)(s?.revenue_last_month ?? 0), totalRevenue = (decimal)(s?.total_revenue ?? 0), paidOrders = (long)(s?.paid_orders ?? 0), activeLicenses = (long)(s?.active_licenses ?? 0), expiredLicenses = (long)(s?.expired_licenses ?? 0), pendingOrders = (long)(s?.pending_orders ?? 0), totalUsers = (long)(s?.total_users ?? 0), newUsersThisMonth = (long)(s?.new_users_this_month ?? 0) }, monthlyRevenue = monthlyRaw.Select(m => new { month = (string)m.month, revenue = (decimal)m.revenue }), recentOrders = recentRaw.Select(o => new { userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active }) });
+                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND created_at >= @Start AND created_at < @End), 0) AS Revenue,
+                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND created_at >= @PriorStart AND created_at < @PriorEnd), 0) AS PriorRevenue,
+                    COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago'), 0) AS TotalRevenue,
+                    COALESCE((SELECT SUM((total_price / GREATEST(days, 1)) * 30) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now), 0) AS EstimatedMrr,
+                    (SELECT COUNT(*) FROM orders WHERE created_at >= @Start AND created_at < @End) AS OrdersInPeriod,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND created_at >= @Start AND created_at < @End) AS PaidOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND created_at >= @PriorStart AND created_at < @PriorEnd) AS PriorPaidOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pendente' AND created_at >= @Start AND created_at < @End) AS PendingOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'cancelado' AND created_at >= @Start AND created_at < @End) AS CanceledOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'expirado' AND created_at >= @Start AND created_at < @End) AS ExpiredPixOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND paid_manually = true AND created_at >= @Start AND created_at < @End) AS ManualPaidOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND delivered = true AND created_at >= @Start AND created_at < @End) AS DeliveredOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND delivered = false) AS PendingDeliveryOrders,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now) AS ActiveLicenses,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) <= @Now) AS ExpiredLicenses,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now AND (created_at + (days || ' days')::INTERVAL) <= (@Now + INTERVAL '7 days')) AS ExpiringSoon,
+                    (SELECT COUNT(DISTINCT user_id) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now) AS ActiveCustomers,
+                    (SELECT COUNT(*) FROM users) AS TotalUsers,
+                    (SELECT COUNT(*) FROM users WHERE created_at >= @Start AND created_at < @End) AS NewUsers
+            ", p);
+
+            var revenueRaw = await db.QueryAsync($@"
+                SELECT
+                    TO_CHAR(DATE_TRUNC('{bucket}', created_at), '{labelFormat}') AS Label,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue,
+                    COUNT(*) AS Orders
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY DATE_TRUNC('{bucket}', created_at)
+                ORDER BY DATE_TRUNC('{bucket}', created_at)
+            ", p);
+
+            var statusRaw = await db.QueryAsync(@"
+                SELECT
+                    status AS Status,
+                    COUNT(*) AS Count,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY status
+                ORDER BY Count DESC
+            ", p);
+
+            var planRaw = await db.QueryAsync(@"
+                SELECT
+                    COALESCE(period, 'Indefinido') AS Period,
+                    COUNT(*) AS Count,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue,
+                    COALESCE(SUM(computers), 0) AS Computers,
+                    COALESCE(SUM(computers * wyds_per_computer), 0) AS Slots
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY COALESCE(period, 'Indefinido')
+                ORDER BY Revenue DESC, Count DESC
+            ", p);
+
+            var typeRaw = await db.QueryAsync(@"
+                SELECT
+                    CASE WHEN paid_manually = true OR asaas_payment_id LIKE 'MANUAL_%' THEN 'Manual' ELSE 'Asaas PIX' END AS Type,
+                    COUNT(*) AS Count,
+                    COALESCE(SUM(CASE WHEN status = 'pago' THEN total_price ELSE 0 END), 0) AS Revenue
+                FROM orders
+                WHERE created_at >= @Start AND created_at < @End
+                GROUP BY CASE WHEN paid_manually = true OR asaas_payment_id LIKE 'MANUAL_%' THEN 'Manual' ELSE 'Asaas PIX' END
+                ORDER BY Revenue DESC, Count DESC
+            ", p);
+
+            var topRaw = await db.QueryAsync(@"
+                SELECT
+                    u.name AS UserName,
+                    u.email AS Email,
+                    u.whatsapp AS Whatsapp,
+                    COUNT(o.id) AS Orders,
+                    COALESCE(SUM(o.total_price), 0) AS Revenue,
+                    MAX(o.created_at) AS LastOrderAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND o.created_at >= @Start AND o.created_at < @End
+                GROUP BY u.id, u.name, u.email, u.whatsapp
+                ORDER BY Revenue DESC
+                LIMIT 8
+            ", p);
+
+            var upcomingRaw = await db.QueryAsync(@"
+                SELECT
+                    u.name AS UserName,
+                    u.email AS Email,
+                    u.whatsapp AS Whatsapp,
+                    o.period AS Period,
+                    o.computers AS Computers,
+                    o.wyds_per_computer AS WydsPerComputer,
+                    o.total_price AS TotalPrice,
+                    (o.created_at + (o.days || ' days')::INTERVAL) AS ExpiresAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now
+                ORDER BY ExpiresAt ASC
+                LIMIT 8
+            ", p);
+
+            var actionRaw = await db.QueryAsync(@"
+                SELECT 'Pagamento pendente' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, o.created_at AS EventAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pendente'
+                UNION ALL
+                SELECT 'Entrega pendente' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, o.created_at AS EventAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND o.delivered = false
+                UNION ALL
+                SELECT 'Licenca vencendo' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, (o.created_at + (o.days || ' days')::INTERVAL) AS EventAt
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now AND (o.created_at + (o.days || ' days')::INTERVAL) <= (@Now + INTERVAL '7 days')
+                ORDER BY EventAt ASC
+                LIMIT 10
+            ", p);
+
+            var recentRaw = await db.QueryAsync(@"
+                SELECT
+                    u.name AS UserName,
+                    u.email AS Email,
+                    u.whatsapp AS Whatsapp,
+                    o.period AS Period,
+                    o.days AS Days,
+                    o.computers AS Computers,
+                    o.wyds_per_computer AS WydsPerComputer,
+                    o.total_price AS TotalPrice,
+                    o.status AS Status,
+                    o.created_at AS CreatedAt,
+                    (o.created_at + (o.days || ' days')::INTERVAL) AS ExpiresAt,
+                    CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now THEN true ELSE false END AS IsActive
+                FROM orders o
+                JOIN users u ON o.user_id = u.id
+                ORDER BY o.created_at DESC
+                LIMIT 10
+            ", p);
+
+            decimal revenue = (decimal)(s?.revenue ?? 0);
+            long ordersInPeriod = (long)(s?.ordersinperiod ?? 0);
+            long paidOrders = (long)(s?.paidorders ?? 0);
+            decimal averageTicket = paidOrders > 0 ? revenue / paidOrders : 0;
+            decimal conversionRate = ordersInPeriod > 0 ? (decimal)paidOrders / ordersInPeriod * 100 : 0;
+
+            return Ok(new
+            {
+                period = new { key = period, label = periodLabel, start = periodStart, end = periodEnd.AddDays(-1), previousStart = priorStart, previousEnd = priorEnd.AddDays(-1) },
+                stats = new
+                {
+                    revenueThisMonth = revenue,
+                    revenueLastMonth = (decimal)(s?.priorrevenue ?? 0),
+                    revenue,
+                    priorRevenue = (decimal)(s?.priorrevenue ?? 0),
+                    totalRevenue = (decimal)(s?.totalrevenue ?? 0),
+                    estimatedMrr = (decimal)(s?.estimatedmrr ?? 0),
+                    averageTicket,
+                    conversionRate,
+                    ordersInPeriod,
+                    paidOrders,
+                    priorPaidOrders = (long)(s?.priorpaidorders ?? 0),
+                    pendingOrders = (long)(s?.pendingorders ?? 0),
+                    canceledOrders = (long)(s?.canceledorders ?? 0),
+                    expiredPixOrders = (long)(s?.expiredpixorders ?? 0),
+                    manualPaidOrders = (long)(s?.manualpaidorders ?? 0),
+                    deliveredOrders = (long)(s?.deliveredorders ?? 0),
+                    pendingDeliveryOrders = (long)(s?.pendingdeliveryorders ?? 0),
+                    activeLicenses = (long)(s?.activelicenses ?? 0),
+                    expiredLicenses = (long)(s?.expiredlicenses ?? 0),
+                    expiringSoon = (long)(s?.expiringsoon ?? 0),
+                    activeCustomers = (long)(s?.activecustomers ?? 0),
+                    totalUsers = (long)(s?.totalusers ?? 0),
+                    newUsersThisMonth = (long)(s?.newusers ?? 0),
+                    newUsers = (long)(s?.newusers ?? 0)
+                },
+                monthlyRevenue = revenueRaw.Select(m => new { month = (string)m.label, revenue = (decimal)m.revenue, orders = (long)m.orders }),
+                revenueSeries = revenueRaw.Select(m => new { label = (string)m.label, revenue = (decimal)m.revenue, orders = (long)m.orders }),
+                statusBreakdown = statusRaw.Select(x => new { status = (string)x.status, count = (long)x.count, revenue = (decimal)x.revenue }),
+                planBreakdown = planRaw.Select(x => new { period = (string)x.period, count = (long)x.count, revenue = (decimal)x.revenue, computers = (long)x.computers, slots = (long)x.slots }),
+                orderTypeBreakdown = typeRaw.Select(x => new { type = (string)x.type, count = (long)x.count, revenue = (decimal)x.revenue }),
+                topCustomers = topRaw.Select(x => new { userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, orders = (long)x.orders, revenue = (decimal)x.revenue, lastOrderAt = (DateTime)x.lastorderat }),
+                upcomingExpirations = upcomingRaw.Select(x => new { userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, period = (string)x.period, computers = (int)x.computers, wydsPerComputer = (int)x.wydspercomputer, totalPrice = (decimal)x.totalprice, expiresAt = (DateTime)x.expiresat }),
+                actionQueue = actionRaw.Select(x => new { type = (string)x.type, userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, totalPrice = (decimal)x.totalprice, eventAt = (DateTime)x.eventat }),
+                recentOrders = recentRaw.Select(o => new { userName = (string)o.username, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wydspercomputer, totalPrice = (decimal)o.totalprice, status = (string)o.status, createdAt = (DateTime)o.createdat, expiresAt = (DateTime)o.expiresat, isActive = (bool)o.isactive })
+            });
         }
 
         [HttpGet("orders")]
@@ -153,8 +392,8 @@ namespace PremierAPI.Controllers
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>($"SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id = u.id {where}");
-            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, o.asaas_payment_id, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY o.created_at DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
-            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
+            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY o.created_at DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
+            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
         }
 
         [HttpGet("users")]
@@ -172,6 +411,52 @@ namespace PremierAPI.Controllers
             return Ok(new { total, page, limit, users = raw.Select(u => new { id = (Guid)u.id, name = (string)u.name, email = (string)u.email, whatsapp = u.whatsapp as string, isActive = (bool)u.is_active, emailConfirmed = (bool)u.email_confirmed, adUsername = u.ad_username as string, createdAt = (DateTime)u.user_created_at, totalOrders = (long)u.total_orders, totalSpent = (decimal)u.total_spent, activeLicenses = (long)u.active_licenses }) });
         }
 
+        // ==========================================
+        // WHATSAPP NOTIFICATIONS
+        // ==========================================
+        [HttpGet("whatsapp/templates")]
+        public async Task<IActionResult> GetWhatsAppTemplates([FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            return Ok(new { templates = await templates.GetTemplatesAsync() });
+        }
+
+        [HttpPost("whatsapp/templates")]
+        public async Task<IActionResult> CreateWhatsAppTemplate([FromBody] CreateWhatsAppTemplateRequest req, [FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            if (string.IsNullOrWhiteSpace(req.Title)) return BadRequest(new { erro = "Informe um nome para a mensagem." });
+            if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest(new { erro = "A mensagem nao pode ficar vazia." });
+            if (req.Body.Length > 4000) return BadRequest(new { erro = "A mensagem deve ter no maximo 4000 caracteres." });
+
+            var created = await templates.CreateTemplateAsync(req.Title, req.Audience, req.TriggerDescription, req.Body);
+            if (created == null) return BadRequest(new { erro = "Nao foi possivel criar a mensagem." });
+
+            return Ok(new { msg = "Mensagem criada.", template = created });
+        }
+
+        [HttpPut("whatsapp/templates/{key}")]
+        public async Task<IActionResult> UpdateWhatsAppTemplate(string key, [FromBody] UpdateWhatsAppTemplateRequest req, [FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            if (string.IsNullOrWhiteSpace(req.Body)) return BadRequest(new { erro = "A mensagem nao pode ficar vazia." });
+            if (req.Body.Length > 4000) return BadRequest(new { erro = "A mensagem deve ter no maximo 4000 caracteres." });
+
+            var updated = await templates.UpdateTemplateAsync(key, req.Body.TrimEnd());
+            if (updated == null) return NotFound(new { erro = "Template nao encontrado." });
+
+            return Ok(new { msg = "Mensagem atualizada.", template = updated });
+        }
+
+        [HttpPost("whatsapp/templates/{key}/reset")]
+        public async Task<IActionResult> ResetWhatsAppTemplate(string key, [FromServices] PremierAPI.Services.WhatsAppTemplateService templates)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            var updated = await templates.ResetTemplateAsync(key);
+            if (updated == null) return NotFound(new { erro = "Template nao encontrado." });
+
+            return Ok(new { msg = "Mensagem restaurada para o padrao.", template = updated });
+        }
         // ==========================================
         // LOCAL USERS CRUD
         // ==========================================
@@ -284,7 +569,7 @@ namespace PremierAPI.Controllers
             return Ok(new
             {
                 msg = string.IsNullOrWhiteSpace(adUsername)
-                    ? "VÃ­nculo AD removido."
+                    ? "Vínculo AD removido."
                     : logonPrepared
                         ? "Usuario AD vinculado."
                         : "Usuario AD vinculado. Aviso: a conta LDAP nao tem permissao para atualizar os computadores obrigatorios no AD."
@@ -327,11 +612,81 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
+            var status = await db.QueryFirstOrDefaultAsync<string>("SELECT status FROM orders WHERE id = @Id", new { Id = id });
+            if (status == null) return NotFound(new { erro = "Pedido nao encontrado." });
+            if (req.Delivered && status != "pago") return BadRequest(new { erro = "Nao e possivel entregar um pedido que nao esta pago." });
+
             int rows = await db.ExecuteAsync(
                 "UPDATE orders SET delivered = @Delivered, delivered_at = CASE WHEN @Delivered THEN COALESCE(delivered_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = @Id",
                 new { req.Delivered, Id = id });
             if (rows == 0) return NotFound(new { erro = "Pedido nao encontrado." });
             return Ok(new { msg = req.Delivered ? "Pedido marcado como entregue." : "Pedido marcado como pendente." });
+        }
+
+        [HttpPut("orders/{id}/mark-paid")]
+        public async Task<IActionResult> MarkOrderPaid(Guid id)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            using var db = new NpgsqlConnection(_connString);
+            var order = await db.QueryFirstOrDefaultAsync(
+                "SELECT status, asaas_payment_id, asaas_pix_qr_code_id FROM orders WHERE id = @Id",
+                new { Id = id });
+            if (order == null) return NotFound(new { erro = "Pedido nao encontrado." });
+
+            string status = (string)order.status;
+            string? paymentId = order.asaas_payment_id as string;
+            string? qrCodeId = order.asaas_pix_qr_code_id as string;
+            if (status != "pendente" && status != "expirado") return BadRequest(new { erro = "Apenas pedidos pendentes ou expirados podem ser marcados como pagos." });
+
+            bool asaasCanceled = false;
+            if (status == "pendente" &&
+                ((!string.IsNullOrWhiteSpace(qrCodeId)) ||
+                 (!string.IsNullOrWhiteSpace(paymentId) && !paymentId.StartsWith("MANUAL_"))))
+            {
+                try
+                {
+                    bool useSandbox = _config.GetValue<bool>("Asaas:UseSandbox");
+                    string baseUrl = useSandbox ? _config["Asaas:SandBoxBaseUrl"]! : _config["Asaas:BaseUrl"]!;
+                    string apiKey = useSandbox ? (_config["Asaas:SandBoxApiKey"] ?? "") : (_config["Asaas:ApiKey"] ?? "");
+
+                    var handler = new System.Net.Http.HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
+                    using var http = new System.Net.Http.HttpClient(handler);
+                    http.DefaultRequestHeaders.Add("access_token", apiKey);
+                    http.DefaultRequestHeaders.Add("User-Agent", "Premierhost-BFF/1.0");
+
+                    string cancelUrl = !string.IsNullOrWhiteSpace(qrCodeId)
+                        ? $"{baseUrl}/pix/qrCodes/static/{qrCodeId}"
+                        : $"{baseUrl}/payments/{paymentId}";
+                    var response = await http.DeleteAsync(cancelUrl);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync();
+                        return BadRequest(new { erro = $"Nao foi possivel cancelar a cobranca pendente na Asaas antes de marcar como pago manualmente: {body}" });
+                    }
+                    asaasCanceled = true;
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest(new { erro = $"Erro ao cancelar cobranca pendente na Asaas: {ex.Message}" });
+                }
+            }
+
+            await db.ExecuteAsync(
+                @"UPDATE orders
+                  SET status = 'pago',
+                      paid_manually = true,
+                      manual_paid_at = CURRENT_TIMESTAMP,
+                      canceled_at = NULL,
+                      refunded = false,
+                      delivered = false,
+                      delivered_at = NULL
+                  WHERE id = @Id",
+                new { Id = id });
+
+            string msg = asaasCanceled
+                ? "Pedido marcado como pago manualmente. A cobranca pendente na Asaas foi cancelada para evitar pagamento duplicado."
+                : "Pedido marcado como pago manualmente.";
+            return Ok(new { msg });
         }
         [HttpPost("orders/manual")]
         public async Task<IActionResult> CreateManualOrder([FromBody] ManualOrderRequest req)
@@ -340,8 +695,8 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
             
             string paymentId = "MANUAL_" + Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
-            string sqlOrder = @"INSERT INTO orders (user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price, asaas_payment_id, status) 
-                                VALUES (@UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total, @PayId, 'pago')";
+            string sqlOrder = @"INSERT INTO orders (user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price, asaas_payment_id, status, paid_manually, manual_paid_at) 
+                                VALUES (@UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total, @PayId, 'pago', true, CURRENT_TIMESTAMP)";
             
             await db.ExecuteAsync(sqlOrder, new { 
                 UserId = req.UserId, 
@@ -377,16 +732,22 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
             
             var order = await db.QueryFirstOrDefaultAsync(
-                "SELECT asaas_payment_id, status, user_id FROM orders WHERE id = @Id", new { Id = id });
+                "SELECT asaas_payment_id, asaas_pix_qr_code_id, status, user_id, paid_manually FROM orders WHERE id = @Id", new { Id = id });
             
             if (order == null) return NotFound(new { erro = "Pedido nao encontrado." });
             
-            string paymentId = (string)order.asaas_payment_id;
+            string? paymentId = order.asaas_payment_id as string;
+            string? qrCodeId = order.asaas_pix_qr_code_id as string;
             string status = (string)order.status;
+            bool paidManually = order.paid_manually as bool? ?? false;
 
-            if (!string.IsNullOrWhiteSpace(paymentId) && !paymentId.StartsWith("MANUAL_"))
+            if (refund && paidManually)
+                return BadRequest(new { erro = "Este pedido foi pago manualmente e nao possui reembolso pela Asaas." });
+
+            if ((!string.IsNullOrWhiteSpace(paymentId) && !paymentId.StartsWith("MANUAL_")) ||
+                !string.IsNullOrWhiteSpace(qrCodeId))
             {
-                if (refund)
+                if (refund || status == "pendente" || status == "expirado")
                 {
                     try 
                     {
@@ -402,6 +763,9 @@ namespace PremierAPI.Controllers
 
                         if (status == "pago")
                         {
+                            if (string.IsNullOrWhiteSpace(paymentId))
+                                return BadRequest(new { erro = "O identificador da cobrança paga ainda não foi conciliado pelo webhook do Asaas." });
+
                             var response = await http.PostAsync($"{baseUrl}/payments/{paymentId}/refund", null);
                             var responseBody = await response.Content.ReadAsStringAsync();
                             
@@ -413,7 +777,10 @@ namespace PremierAPI.Controllers
                         }
                         else
                         {
-                            var response = await http.DeleteAsync($"{baseUrl}/payments/{paymentId}");
+                            string cancelUrl = !string.IsNullOrWhiteSpace(qrCodeId)
+                                ? $"{baseUrl}/pix/qrCodes/static/{qrCodeId}"
+                                : $"{baseUrl}/payments/{paymentId}";
+                            var response = await http.DeleteAsync(cancelUrl);
                             if (!response.IsSuccessStatusCode)
                             {
                                 return BadRequest(new { erro = "Falha ao cancelar cobranca na Asaas." });
@@ -503,7 +870,7 @@ namespace PremierAPI.Controllers
             if (!await ValidateAdmin()) return Unauthorized();
             try
             {
-                await ad.CreateUserAsync(req.Username, req.FullName, req.Password);
+                await ad.CreateUserAsync(req.Username, req.FullName, req.Password, null, req.Whatsapp);
                 _logger.LogInformation("[ADMIN][AD] Usuario criado: {Username}.", req.Username);
                 return Ok(new { msg = "Usuario criado no AD." });
             }
@@ -553,6 +920,31 @@ namespace PremierAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[ADMIN][AD] Falha ao redefinir senha de {Username}.", username);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
+        [HttpGet("ad/users/{username}")]
+        public async Task<IActionResult> GetAdUser(string username, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            var user = await ad.GetUserDetailsAsync(username);
+            if (user == null) return NotFound(new { erro = "Usuario nao encontrado no AD." });
+            return Ok(user);
+        }
+
+        [HttpPut("ad/users/{username}")]
+        public async Task<IActionResult> UpdateAdUser(string username, [FromBody] UpdateAdUserDetailsRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.UpdateUserDetailsAsync(username, req.FullName, req.Whatsapp, req.Password, req.IsActive, req.PasswordNeverExpires);
+                _logger.LogInformation("[ADMIN][AD] Usuario atualizado: {Username}.", username);
+                return Ok(new { msg = "Usuario AD atualizado com sucesso." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao atualizar usuario {Username}.", username);
                 return BadRequest(new { erro = ex.Message });
             }
         }
@@ -674,10 +1066,13 @@ namespace PremierAPI.Controllers
     }
 
 
+    public class CreateWhatsAppTemplateRequest { public string Title { get; set; } = ""; public string Audience { get; set; } = "Personalizada"; public string TriggerDescription { get; set; } = ""; public string Body { get; set; } = ""; }
+    public class UpdateWhatsAppTemplateRequest { public string Body { get; set; } = ""; }
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
+    public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }
     public class UpdateAdLinkRequest { public string? AdUsername { get; set; } }
     public class UpdateOrderDeliveryRequest { public bool Delivered { get; set; } }
-    public class CreateAdUserRequest { public string Username { get; set; } = ""; public string FullName { get; set; } = ""; public string Password { get; set; } = ""; }
+    public class CreateAdUserRequest { public string Username { get; set; } = ""; public string FullName { get; set; } = ""; public string Password { get; set; } = ""; public string? Whatsapp { get; set; } }
     public class SetAdPasswordRequest { public string Password { get; set; } = ""; public bool ForceChangeOnNextLogon { get; set; } }
     public class SetExpirationRequest { public DateTime? ExpiresAt { get; set; } }
     public class ManageGroupRequest { public string GroupName { get; set; } = ""; public bool Add { get; set; } }
@@ -701,6 +1096,7 @@ namespace PremierAPI.Controllers
         public string Description { get; set; } = "";
     }
 }
+
 
 
 

@@ -35,6 +35,13 @@ namespace PremierAPI.Controllers
             public DateTime CreatedAt { get; set; }
         }
 
+        private sealed class CouponDiscountData
+        {
+            public string Code { get; set; } = "";
+            public string DiscountType { get; set; } = "";
+            public decimal DiscountValue { get; set; }
+        }
+
         public CheckoutController(ILogger<CheckoutController> logger, IConfiguration config)
         {
             _logger = logger;
@@ -87,26 +94,39 @@ namespace PremierAPI.Controllers
             if (_debugLogs) _logger.LogInformation($"[CHECKOUT] Iniciado - AnyDesk: {pedido.AnydeskId}");
 
             using var db = new NpgsqlConnection(_connString);
+            await db.OpenAsync();
             
             // 1. Validar Sessão
             if (!await ValidateSession(db, pedido.UserId)) 
                 return Unauthorized(new { erro = "Sessão expirada ou inválida." });
 
             // 2. Validar limites básicos
-            if (pedido.Pcs < 1 || pedido.Wyds < 1)
+            if (pedido.Pcs < 1 || pedido.Wyds < 1 || pedido.Wyds > 8)
                 return BadRequest(new { erro = "Valores inválidos." });
+
+            if (pedido.Periodo != "diaria" && pedido.Periodo != "semanal" && pedido.Periodo != "mensal")
+                return BadRequest(new { erro = "Período inválido." });
+
+            if (!Regex.IsMatch(pedido.AnydeskId ?? "", @"^\d{6,15}$"))
+                return BadRequest(new { erro = "O ID do AnyDesk deve conter de 6 a 15 números." });
 
             if (pedido.Periodo == "diaria" && pedido.Pcs < 3) 
                 pedido.Pcs = 3;
                 
             if (pedido.Periodo == "diaria" && pedido.Dias < 3)
                 pedido.Dias = 3;
+            else if (pedido.Periodo == "semanal")
+                pedido.Dias = 7;
+            else if (pedido.Periodo == "mensal")
+                pedido.Dias = 30;
 
             // 3. Recalcular Preço no Backend
             decimal bruto = 0;
             decimal descPeriodo = 0;
             decimal descHardware = 0;
             decimal descIndicacao = 0;
+            decimal descCupom = 0;
+            CouponDiscountData? coupon = null;
             decimal basePadrao = 35 + ((Math.Max(pedido.Wyds, 1) - 1) * 10);
 
             if (pedido.Periodo == "diaria")
@@ -150,66 +170,139 @@ namespace PremierAPI.Controllers
                 }
             }
 
-            decimal totalCalculado = bruto - descPeriodo - descHardware - descIndicacao;
+            if (!string.IsNullOrWhiteSpace(pedido.CodigoCupom) && bruto > 0)
+            {
+                coupon = await db.QueryFirstOrDefaultAsync<CouponDiscountData>(
+                    @"SELECT code AS Code,
+                             discount_type AS DiscountType,
+                             discount_value AS DiscountValue
+                      FROM coupons
+                      WHERE code = @Code
+                        AND is_active = true
+                        AND (max_uses IS NULL OR COALESCE(uses, 0) < max_uses)",
+                    new { Code = pedido.CodigoCupom.Trim().ToUpperInvariant() });
+
+                if (coupon == null)
+                    return BadRequest(new { erro = "Cupom inválido ou esgotado." });
+
+                descCupom = coupon.DiscountType == "percent"
+                    ? bruto * (coupon.DiscountValue / 100M)
+                    : coupon.DiscountValue;
+            }
+
+            decimal totalCalculado = bruto - descPeriodo - descHardware - descIndicacao - descCupom;
             if (totalCalculado <= 0) totalCalculado = 0.01M; // Prevenção de bug
+
+            // Mantém o mesmo arredondamento comercial exibido pelo painel.
+            if (totalCalculado > 50M)
+                totalCalculado = Math.Floor(totalCalculado);
 
             // Forçar o total calculado
             pedido.Total = Math.Round(totalCalculado, 2);
 
-            string customerId = await GetOrCreateCustomerAsync(pedido.Nome, pedido.Whatsapp);
-            if (string.IsNullOrEmpty(customerId)) 
-                return BadRequest(new { erro = "Falha de comunicação com o gateway. Verifique os logs." });
+            string pixAddressKey = await GetActivePixAddressKeyAsync();
+            if (string.IsNullOrWhiteSpace(pixAddressKey))
+                return BadRequest(new { erro = "Nenhuma chave Pix ativa foi encontrada na conta Asaas." });
 
+            Guid orderId = Guid.NewGuid();
+            const int pixExpirationSeconds = 900;
+            DateTime pixExpiresAt = DateTime.Now.AddSeconds(pixExpirationSeconds);
             var asaasPayload = new
             {
-                customer = customerId,
-                billingType = "PIX",
+                addressKey = pixAddressKey,
+                description = $"Licença ({pedido.Periodo}) - AnyDesk: {pedido.AnydeskId}",
                 value = pedido.Total,
-                dueDate = System.DateTime.Now.AddDays(1).ToString("yyyy-MM-dd"),
-                description = $"Licença ({pedido.Periodo}) - AnyDesk: {pedido.AnydeskId}"
+                format = "ALL",
+                expirationSeconds = pixExpirationSeconds,
+                allowsMultiplePayments = false,
+                externalReference = orderId.ToString()
             };
 
             var content = new StringContent(JsonSerializer.Serialize(asaasPayload), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync($"{_asaasBaseUrl}/payments", content);
+            var response = await _httpClient.PostAsync($"{_asaasBaseUrl}/pix/qrCodes/static", content);
             var responseString = await response.Content.ReadAsStringAsync();
             
-            if (_debugLogs) _logger.LogInformation($"[ASAAS PAY] Status: {response.StatusCode} | Body: {responseString}");
+            if (_debugLogs) _logger.LogInformation("[ASAAS PIX QR] Status: {Status}", response.StatusCode);
 
-            if (!response.IsSuccessStatusCode) return BadRequest(new { erro = "Falha ao gerar cobrança." });
-
-            using var doc = JsonDocument.Parse(responseString);
-            string paymentId = doc.RootElement.GetProperty("id").GetString() ?? "";
-
-            // 1. Gravar pedido pendente no banco
-            string sqlOrder = @"INSERT INTO orders (user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price, asaas_payment_id, status) 
-                                VALUES (@UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total, @PayId, 'pendente')";
-            await db.ExecuteAsync(sqlOrder, new { 
-                UserId = pedido.UserId, 
-                Anydesk = pedido.AnydeskId, 
-                Comps = pedido.Pcs, 
-                Wyds = pedido.Wyds, 
-                Period = pedido.Periodo, 
-                Days = pedido.Dias,
-                Total = pedido.Total, 
-                PayId = paymentId 
-            });
-
-            // 2. Trava de Segurança Atômica: Queima a flag de desconto de indicação se usada
-            if (pedido.UsouDescontoIndicacao)
+            if (!response.IsSuccessStatusCode)
             {
-                await db.ExecuteAsync("UPDATE users SET used_referral_discount = true WHERE id = @UserId", new { UserId = pedido.UserId });
+                _logger.LogError("[ASAAS PIX QR] Falha ao gerar QR Code. Status: {Status} | Body: {Body}", response.StatusCode, responseString);
+                return BadRequest(new { erro = "O Asaas não conseguiu gerar o QR Code Pix. Verifique se a chave Pix da conta está ativa." });
             }
 
-            // 3. Puxa o QR Code e finaliza
-            var qrCodeResponse = await _httpClient.GetAsync($"{_asaasBaseUrl}/payments/{paymentId}/pixQrCode");
-            var qrCodeString = await qrCodeResponse.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseString);
+            string qrCodeId = doc.RootElement.GetProperty("id").GetString() ?? "";
+            string encodedImage = doc.RootElement.GetProperty("encodedImage").GetString() ?? "";
+            string pixPayload = doc.RootElement.GetProperty("payload").GetString() ?? "";
 
-            using var qrDoc = JsonDocument.Parse(qrCodeString);
+            if (string.IsNullOrWhiteSpace(qrCodeId) || string.IsNullOrWhiteSpace(encodedImage) || string.IsNullOrWhiteSpace(pixPayload))
+            {
+                _logger.LogError("[ASAAS PIX QR] Resposta incompleta ao gerar QR Code.");
+                if (!string.IsNullOrWhiteSpace(qrCodeId))
+                    await _httpClient.DeleteAsync($"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}");
+                return BadRequest(new { erro = "O gateway retornou um QR Code incompleto." });
+            }
+
+            try
+            {
+                using var transaction = await db.BeginTransactionAsync();
+                string sqlOrder = @"INSERT INTO orders
+                    (id, user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price,
+                     asaas_pix_qr_code_id, pix_payload, pix_encoded_image, pix_expires_at, status)
+                    VALUES
+                    (@Id, @UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total,
+                     @QrCodeId, @PixPayload, @EncodedImage, @PixExpiresAt, 'pendente')";
+                await db.ExecuteAsync(sqlOrder, new {
+                    Id = orderId,
+                    UserId = pedido.UserId,
+                    Anydesk = pedido.AnydeskId,
+                    Comps = pedido.Pcs,
+                    Wyds = pedido.Wyds,
+                    Period = pedido.Periodo,
+                    Days = pedido.Dias,
+                    Total = pedido.Total,
+                    QrCodeId = qrCodeId,
+                    PixPayload = pixPayload,
+                    EncodedImage = encodedImage,
+                    PixExpiresAt = pixExpiresAt
+                }, transaction);
+
+                if (pedido.UsouDescontoIndicacao)
+                {
+                    await db.ExecuteAsync(
+                        "UPDATE users SET used_referral_discount = true WHERE id = @UserId",
+                        new { UserId = pedido.UserId }, transaction);
+                }
+
+                if (coupon != null)
+                {
+                    int couponRows = await db.ExecuteAsync(
+                        @"UPDATE coupons
+                          SET uses = COALESCE(uses, 0) + 1
+                          WHERE code = @Code
+                            AND is_active = true
+                            AND (max_uses IS NULL OR COALESCE(uses, 0) < max_uses)",
+                        new { coupon.Code }, transaction);
+                    if (couponRows != 1)
+                        throw new InvalidOperationException("O cupom ficou indisponível durante a geração do Pix.");
+                }
+
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await _httpClient.DeleteAsync($"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}");
+                throw;
+            }
+
             return Ok(new
             {
-                encodedImage = qrDoc.RootElement.GetProperty("encodedImage").GetString(),
-                payload = qrDoc.RootElement.GetProperty("payload").GetString(),
-                paymentId = paymentId
+                encodedImage,
+                payload = pixPayload,
+                paymentId = qrCodeId,
+                total = pedido.Total,
+                expiresAt = pixExpiresAt,
+                expiresInSeconds = pixExpirationSeconds
             });
         }
 
@@ -219,10 +312,9 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
             if (!await ValidateSession(db, userId)) return Unauthorized(new { erro = "Sessão inválida." });
             
-            // Resolve o erro do F5: Calcula a diferença de tempo (em segundos) direto no PostgreSQL
             var pendingOrder = await db.QueryFirstOrDefaultAsync(
-                @"SELECT asaas_payment_id, total_price, 
-                         EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - created_at)) as seconds_passed 
+                @"SELECT asaas_payment_id, asaas_pix_qr_code_id, total_price, pix_payload,
+                         pix_encoded_image, pix_expires_at, created_at
                   FROM orders 
                   WHERE user_id = @UserId AND status = 'pendente' 
                   ORDER BY created_at DESC LIMIT 1",
@@ -230,31 +322,51 @@ namespace PremierAPI.Controllers
 
             if (pendingOrder == null) return NotFound();
 
-            double secondsPassed = (double)pendingOrder.seconds_passed;
-            
-            // Se passou de 15 minutos (900 segundos), expira
-            if (secondsPassed >= 900)
+            string? staticQrCodeId = pendingOrder.asaas_pix_qr_code_id as string;
+            DateTime expiresAt = pendingOrder.pix_expires_at as DateTime?
+                ?? ((DateTime)pendingOrder.created_at).AddMinutes(15);
+            if (expiresAt <= DateTime.Now)
             {
-                await db.ExecuteAsync("UPDATE orders SET status = 'expirado' WHERE asaas_payment_id = @Id", new { Id = pendingOrder.asaas_payment_id });
+                string expiredId = staticQrCodeId ?? (string)pendingOrder.asaas_payment_id;
+                await db.ExecuteAsync(
+                    @"UPDATE orders
+                      SET status = 'expirado', pix_payload = NULL, pix_encoded_image = NULL
+                      WHERE (asaas_pix_qr_code_id = @Id OR asaas_payment_id = @Id) AND status = 'pendente'",
+                    new { Id = expiredId });
+                string deleteUrl = staticQrCodeId != null
+                    ? $"{_asaasBaseUrl}/pix/qrCodes/static/{staticQrCodeId}"
+                    : $"{_asaasBaseUrl}/payments/{expiredId}";
+                await _httpClient.DeleteAsync(deleteUrl);
                 return NotFound();
             }
 
-            var qrCodeResponse = await _httpClient.GetAsync($"{_asaasBaseUrl}/payments/{pendingOrder.asaas_payment_id}/pixQrCode");
-            if (!qrCodeResponse.IsSuccessStatusCode) return NotFound();
+            if (staticQrCodeId == null)
+            {
+                string legacyPaymentId = (string)pendingOrder.asaas_payment_id;
+                var qrCodeResponse = await _httpClient.GetAsync($"{_asaasBaseUrl}/payments/{legacyPaymentId}/pixQrCode");
+                if (!qrCodeResponse.IsSuccessStatusCode) return NotFound();
 
-            var qrCodeString = await qrCodeResponse.Content.ReadAsStringAsync();
-            using var qrDoc = JsonDocument.Parse(qrCodeString);
-
-            // Retorna a expiração baseada no tempo que falta
-            DateTime expiresAt = DateTime.Now.AddSeconds(900 - secondsPassed);
+                string qrCodeString = await qrCodeResponse.Content.ReadAsStringAsync();
+                using var qrDoc = JsonDocument.Parse(qrCodeString);
+                return Ok(new
+                {
+                    paymentId = legacyPaymentId,
+                    total = pendingOrder.total_price,
+                    encodedImage = qrDoc.RootElement.GetProperty("encodedImage").GetString(),
+                    payload = qrDoc.RootElement.GetProperty("payload").GetString(),
+                    expiresAt,
+                    expiresInSeconds = Math.Max(0, (int)(expiresAt - DateTime.Now).TotalSeconds)
+                });
+            }
 
             return Ok(new
             {
-                paymentId = pendingOrder.asaas_payment_id,
+                paymentId = staticQrCodeId,
                 total = pendingOrder.total_price,
-                encodedImage = qrDoc.RootElement.GetProperty("encodedImage").GetString(),
-                payload = qrDoc.RootElement.GetProperty("payload").GetString(),
-                expiresAt = expiresAt
+                encodedImage = pendingOrder.pix_encoded_image,
+                payload = pendingOrder.pix_payload,
+                expiresAt = expiresAt,
+                expiresInSeconds = Math.Max(0, (int)(expiresAt - DateTime.Now).TotalSeconds)
             });
         }
 
@@ -268,45 +380,58 @@ namespace PremierAPI.Controllers
             
             // Ensure the payment belongs to a valid session
             var order = await db.QueryFirstOrDefaultAsync(
-                @"SELECT o.user_id FROM orders o
+                @"SELECT o.user_id, o.asaas_pix_qr_code_id, o.status,
+                         o.pix_expires_at, o.created_at
+                  FROM orders o
                   INNER JOIN user_sessions s ON s.user_id = o.user_id
-                  WHERE o.asaas_payment_id = @Id AND s.token = @Token AND s.expires_at > @Now",
+                  WHERE (o.asaas_pix_qr_code_id = @Id OR o.asaas_payment_id = @Id)
+                    AND s.token = @Token AND s.expires_at > @Now",
                 new { Id = paymentId, Token = token, Now = DateTime.UtcNow });
                 
             if (order == null) return Unauthorized(new { erro = "Não autorizado." });
+            if ((string)order.status != "pendente")
+                return BadRequest(new { erro = "Este Pix não está mais pendente." });
 
-            await db.ExecuteAsync("UPDATE orders SET status = 'cancelado' WHERE asaas_payment_id = @Id", new { Id = paymentId });
-            
-            // Cancela no gateway também
-            await _httpClient.DeleteAsync($"{_asaasBaseUrl}/payments/{paymentId}");
+            string? qrCodeId = order.asaas_pix_qr_code_id as string;
+            DateTime orderExpiresAt = order.pix_expires_at as DateTime?
+                ?? ((DateTime)order.created_at).AddMinutes(15);
+            bool expired = orderExpiresAt <= DateTime.Now;
+            string deleteUrl = !string.IsNullOrWhiteSpace(qrCodeId)
+                ? $"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}"
+                : $"{_asaasBaseUrl}/payments/{paymentId}";
+            var deleteResponse = await _httpClient.DeleteAsync(deleteUrl);
+            if (!deleteResponse.IsSuccessStatusCode && deleteResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
+                return BadRequest(new { erro = "Não foi possível cancelar o Pix no Asaas." });
+
+            await db.ExecuteAsync(
+                @"UPDATE orders
+                  SET status = @Status,
+                      canceled_at = CASE WHEN @Status = 'cancelado' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                      pix_payload = NULL, pix_encoded_image = NULL
+                  WHERE (asaas_pix_qr_code_id = @Id OR asaas_payment_id = @Id) AND status = 'pendente'",
+                new { Id = paymentId, Status = expired ? "expirado" : "cancelado" });
             
             return Ok(new { success = true });
         }
 
-        private async Task<string> GetOrCreateCustomerAsync(string nome, string phone)
+        private async Task<string> GetActivePixAddressKeyAsync()
         {
-            string cleanPhone = Regex.Replace(phone, @"[^\d]", "");
-            var searchRes = await _httpClient.GetAsync($"{_asaasBaseUrl}/customers?mobilePhone={cleanPhone}");
-            if (searchRes.IsSuccessStatusCode)
+            var response = await _httpClient.GetAsync($"{_asaasBaseUrl}/pix/addressKeys?status=ACTIVE&limit=100");
+            if (!response.IsSuccessStatusCode)
             {
-                var searchStr = await searchRes.Content.ReadAsStringAsync();
-                using var searchDoc = JsonDocument.Parse(searchStr);
-                var dataArray = searchDoc.RootElement.GetProperty("data");
-                if (dataArray.GetArrayLength() > 0) return dataArray[0].GetProperty("id").GetString() ?? "";
+                string responseBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("[ASAAS PIX KEY] Falha ao listar chaves ativas. Status: {Status} | Body: {Body}", response.StatusCode, responseBody);
+                return string.Empty;
             }
 
-            var newCustomer = new { name = nome, mobilePhone = cleanPhone, groupName = "PremierHost" };
-            var content = new StringContent(JsonSerializer.Serialize(newCustomer), Encoding.UTF8, "application/json");
-            var createRes = await _httpClient.PostAsync($"{_asaasBaseUrl}/customers", content);
-            var createStr = await createRes.Content.ReadAsStringAsync();
-            
-            if (_debugLogs) _logger.LogInformation($"[ASAAS CUSTOMER CREATE] Body: {createStr}");
-
-            if (createRes.IsSuccessStatusCode)
+            string responseString = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseString);
+            foreach (var addressKey in doc.RootElement.GetProperty("data").EnumerateArray())
             {
-                using var createDoc = JsonDocument.Parse(createStr);
-                return createDoc.RootElement.GetProperty("id").GetString() ?? "";
+                if (addressKey.TryGetProperty("key", out var keyElement))
+                    return keyElement.GetString() ?? string.Empty;
             }
+
             return string.Empty;
         }
         
@@ -314,7 +439,9 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> CheckStatus(string paymentId)
         {
             using var db = new NpgsqlConnection(_connString);
-            string? status = await db.QueryFirstOrDefaultAsync<string>("SELECT status FROM orders WHERE asaas_payment_id = @Id", new { Id = paymentId });
+            string? status = await db.QueryFirstOrDefaultAsync<string>(
+                "SELECT status FROM orders WHERE asaas_payment_id = @Id OR asaas_pix_qr_code_id = @Id",
+                new { Id = paymentId });
             return Ok(new { status = status ?? "pendente" });
         }
         
@@ -343,5 +470,6 @@ namespace PremierAPI.Controllers
         public int Wyds { get; set; }
         public int Dias { get; set; }
         public bool UsouDescontoIndicacao { get; set; }
+        public string CodigoCupom { get; set; } = "";
     }
 }

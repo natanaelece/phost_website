@@ -9,8 +9,12 @@ using System.Net.Http;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using System; // Necessário para capturar a Exception
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
 using MailKit.Net.Smtp;
 using MimeKit;
+using PremierAPI.Services;
 
 namespace PremierAPI.Controllers
 {
@@ -27,14 +31,16 @@ namespace PremierAPI.Controllers
         private readonly string _evoInstance;
         private readonly string _evoApikey;
         private readonly bool _dryRun;
+        private readonly WhatsAppTemplateService _whatsAppTemplates;
 
         // Variáveis para os tokens de segurança da Asaas
         private readonly string _apiToken;
         private readonly string _sandboxApiToken;
 
-        public WebhookController(IConfiguration config, ILogger<WebhookController> logger)
+        public WebhookController(IConfiguration config, ILogger<WebhookController> logger, WhatsAppTemplateService whatsAppTemplates)
         {
             _config = config;
+            _whatsAppTemplates = whatsAppTemplates;
             _connectionString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _dryRun = config.GetValue<bool>("Evolution:DryRun");
@@ -85,25 +91,84 @@ namespace PremierAPI.Controllers
                     var payment = payload.GetProperty("payment");
                     string paymentId = payment.GetProperty("id").GetString()!;
                     string description = payment.GetProperty("description").GetString() ?? "";
-                    
-                    // SEGURANÇA: Valida se o pagamento pertence realmente a uma Licença Premierhost
-                    if (!description.StartsWith("Licença", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _logger.LogInformation($"[WEBHOOK] Ignorado: Descrição não corresponde a uma licença do site ({description})");
-                        return Ok(new { success = true, ignored = true });
-                    }
+                    string pixQrCodeId = payment.TryGetProperty("pixQrCodeId", out var pixQrCodeIdElement)
+                        ? pixQrCodeIdElement.GetString() ?? ""
+                        : "";
+                    string asaasCustomerId = payment.TryGetProperty("customer", out var customerElement)
+                        && customerElement.ValueKind == JsonValueKind.String
+                        ? customerElement.GetString() ?? ""
+                        : "";
 
                     using var db = new NpgsqlConnection(_connectionString);
-                    
-                    // Efetiva o pagamento no banco para o Polling do F5 reagir instantaneamente
-                    await db.ExecuteAsync("UPDATE orders SET status = 'pago' WHERE asaas_payment_id = @Id", new { Id = paymentId });
+
+                    int updatedRows;
+                    if (!string.IsNullOrWhiteSpace(pixQrCodeId))
+                    {
+                        // QR estático: o Asaas cria a cobrança apenas depois que o Pix é recebido.
+                        updatedRows = await db.ExecuteAsync(
+                            @"UPDATE orders
+                              SET status = 'pago', asaas_payment_id = @PaymentId,
+                                  asaas_customer_id = @CustomerId,
+                                  pix_payload = NULL, pix_encoded_image = NULL
+                              WHERE asaas_pix_qr_code_id = @QrCodeId
+                                AND status <> 'pago'",
+                            new { PaymentId = paymentId, CustomerId = asaasCustomerId, QrCodeId = pixQrCodeId });
+                    }
+                    else
+                    {
+                        // Compatibilidade com cobranças dinâmicas geradas antes da migração.
+                        if (!description.StartsWith("Licença", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogInformation($"[WEBHOOK] Ignorado: pagamento sem QR vinculado e descrição desconhecida ({description})");
+                            return Ok(new { success = true, ignored = true });
+                        }
+
+                        updatedRows = await db.ExecuteAsync(
+                            @"UPDATE orders
+                              SET status = 'pago', asaas_customer_id = @CustomerId
+                              WHERE asaas_payment_id = @Id AND status <> 'pago'",
+                            new { Id = paymentId, CustomerId = asaasCustomerId });
+                    }
 
                     // Busca os dados consolidados do Cliente e do Pedido para os e-mails/whatsapp
                     var orderData = await db.QueryFirstOrDefaultAsync<dynamic>(
-                        @"SELECT u.whatsapp, u.email, u.name, o.period, o.days, o.total_price, o.computers, o.wyds_per_computer 
+                        @"SELECT u.id AS user_id, u.whatsapp, u.email, u.name, o.period, o.days,
+                                 o.total_price, o.computers, o.wyds_per_computer,
+                                 COALESCE(o.asaas_customer_id, @CustomerId) AS asaas_customer_id
                           FROM orders o JOIN users u ON o.user_id = u.id 
-                          WHERE o.asaas_payment_id = @Id", 
-                        new { Id = paymentId });
+                          WHERE o.asaas_payment_id = @PaymentId
+                             OR o.asaas_pix_qr_code_id = @QrCodeId
+                          ORDER BY o.created_at DESC
+                          LIMIT 1",
+                        new { PaymentId = paymentId, QrCodeId = pixQrCodeId, CustomerId = asaasCustomerId });
+
+                    if (orderData == null)
+                    {
+                        _logger.LogInformation(
+                            "[WEBHOOK] Pagamento ignorado por não possuir pedido vinculado. Payment: {PaymentId} | QR: {QrCodeId}",
+                            paymentId, pixQrCodeId);
+                        return Ok(new { success = true, ignored = true });
+                    }
+
+                    string customerIdToSync = orderData.asaas_customer_id as string ?? asaasCustomerId;
+                    if (!string.IsNullOrWhiteSpace(customerIdToSync))
+                    {
+                        await SyncAsaasCustomerAndDisableNotificationsAsync(
+                            customerIdToSync,
+                            (Guid)orderData.user_id,
+                            (string)orderData.name,
+                            (string)orderData.email,
+                            orderData.whatsapp as string ?? "",
+                            isSandbox);
+                    }
+
+                    if (updatedRows == 0)
+                    {
+                        _logger.LogInformation(
+                            "[WEBHOOK] Pagamento já processado; cadastro e notificações foram reconciliados novamente. Payment: {PaymentId}",
+                            paymentId);
+                        return Ok(new { success = true, ignored = true });
+                    }
 
                     string clientPhone = _adminPhone; // Fallback se der erro
                     string clientEmail = "";
@@ -127,8 +192,20 @@ namespace PremierAPI.Controllers
                     }
 
                     // Disparos WhatsApp
-                    string msgAdmin = $"💰 *Pagamento Confirmado!*\nAmbiente: {envName}\nPedido: {paymentId}\nO cliente efetuou o pagamento. Configure o AnyDesk.";
-                    string msgClient = $"✅ *Pagamento Aprovado!*\nRecebemos seu pagamento. Um de nossos técnicos já está conectando no seu AnyDesk para realizar a configuração. Obrigado por escolher a Premierhost!";
+                    var paymentVariables = WhatsAppTemplateService.BuildPaymentVariables(
+                        envName,
+                        paymentId,
+                        clientName,
+                        clientPhone,
+                        clientEmail,
+                        period,
+                        days,
+                        totalPrice,
+                        computers,
+                        wydsPerComputer);
+
+                    string msgClient = await _whatsAppTemplates.RenderAsync(WhatsAppTemplateService.PaymentApprovedClient, paymentVariables);
+                    string msgAdmin = await _whatsAppTemplates.RenderAsync(WhatsAppTemplateService.PaymentApprovedAdmin, paymentVariables);
 
                     await DispararWhatsAppComRetry(clientPhone, msgClient);
                     await DispararWhatsAppComRetry(_adminPhone, msgAdmin);
@@ -147,6 +224,108 @@ namespace PremierAPI.Controllers
                 // Loga o erro real no console/journalctl antes de retornar o BadRequest
                 _logger.LogError($"[WEBHOOK ASAAS ERRO] Falha ao processar: {ex.Message}");
                 return BadRequest(); 
+            }
+        }
+
+        private async Task SyncAsaasCustomerAndDisableNotificationsAsync(
+            string customerId,
+            Guid userId,
+            string name,
+            string email,
+            string whatsapp,
+            bool isSandbox)
+        {
+            try
+            {
+                string baseUrl = isSandbox ? _config["Asaas:SandBoxBaseUrl"]! : _config["Asaas:BaseUrl"]!;
+                string apiKey = isSandbox
+                    ? (_config["Asaas:SandBoxApiKey"] ?? "")
+                    : (_config["Asaas:ApiKey"] ?? "");
+
+                var handler = new HttpClientHandler
+                {
+                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
+                };
+                using var http = new HttpClient(handler);
+                http.DefaultRequestHeaders.Add("access_token", apiKey);
+                http.DefaultRequestHeaders.Add("User-Agent", "Premierhost-BFF/1.0");
+
+                string cleanPhone = Regex.Replace(whatsapp ?? "", @"[^\d]", "");
+                var customerUpdate = new
+                {
+                    name,
+                    email,
+                    mobilePhone = cleanPhone,
+                    externalReference = userId.ToString(),
+                    groupName = "PremierHost",
+                    notificationDisabled = true
+                };
+                var customerContent = new StringContent(
+                    JsonSerializer.Serialize(customerUpdate), Encoding.UTF8, "application/json");
+                var customerResponse = await http.PutAsync($"{baseUrl}/customers/{customerId}", customerContent);
+                if (!customerResponse.IsSuccessStatusCode)
+                {
+                    string body = await customerResponse.Content.ReadAsStringAsync();
+                    _logger.LogError(
+                        "[ASAAS CUSTOMER SYNC] Falha ao atualizar cliente {CustomerId}. Status: {Status} | Body: {Body}",
+                        customerId, customerResponse.StatusCode, body);
+                }
+
+                var notificationsResponse = await http.GetAsync($"{baseUrl}/customers/{customerId}/notifications");
+                if (!notificationsResponse.IsSuccessStatusCode)
+                {
+                    string body = await notificationsResponse.Content.ReadAsStringAsync();
+                    _logger.LogError(
+                        "[ASAAS NOTIFICATIONS] Falha ao listar notificações de {CustomerId}. Status: {Status} | Body: {Body}",
+                        customerId, notificationsResponse.StatusCode, body);
+                    return;
+                }
+
+                string notificationsJson = await notificationsResponse.Content.ReadAsStringAsync();
+                using var notificationsDoc = JsonDocument.Parse(notificationsJson);
+                var notificationUpdates = notificationsDoc.RootElement.GetProperty("data")
+                    .EnumerateArray()
+                    .Where(item => item.TryGetProperty("id", out _))
+                    .Select(item => new Dictionary<string, object>
+                    {
+                        ["id"] = item.GetProperty("id").GetString() ?? "",
+                        ["enabled"] = false,
+                        ["emailEnabledForProvider"] = false,
+                        ["smsEnabledForProvider"] = false,
+                        ["emailEnabledForCustomer"] = false,
+                        ["smsEnabledForCustomer"] = false,
+                        ["phoneCallEnabledForCustomer"] = false,
+                        ["whatsappEnabledForCustomer"] = false
+                    })
+                    .Where(item => !string.IsNullOrWhiteSpace((string)item["id"]))
+                    .ToList();
+
+                if (notificationUpdates.Count == 0)
+                {
+                    _logger.LogWarning("[ASAAS NOTIFICATIONS] Nenhuma notificação encontrada para {CustomerId}.", customerId);
+                    return;
+                }
+
+                var batchPayload = new { customer = customerId, notifications = notificationUpdates };
+                var batchContent = new StringContent(
+                    JsonSerializer.Serialize(batchPayload), Encoding.UTF8, "application/json");
+                var batchResponse = await http.PutAsync($"{baseUrl}/notifications/batch", batchContent);
+                if (!batchResponse.IsSuccessStatusCode)
+                {
+                    string body = await batchResponse.Content.ReadAsStringAsync();
+                    _logger.LogError(
+                        "[ASAAS NOTIFICATIONS] Falha ao desativar notificações de {CustomerId}. Status: {Status} | Body: {Body}",
+                        customerId, batchResponse.StatusCode, body);
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "[ASAAS CUSTOMER SYNC] Cliente {CustomerId} atualizado, incluído no grupo PremierHost e com {Count} notificações desativadas.",
+                    customerId, notificationUpdates.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ASAAS CUSTOMER SYNC] Erro ao sincronizar {CustomerId} e desativar notificações.", customerId);
             }
         }
 
@@ -245,3 +424,4 @@ namespace PremierAPI.Controllers
         }
     }
 }
+

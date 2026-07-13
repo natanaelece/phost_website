@@ -1,0 +1,211 @@
+<div id="custom-modals">
+    <div class="modal-overlay" id="modal-cancel-order">
+        <div class="modal-box">
+            <div class="modal-title">Cancelar Pedido</div>
+            <div class="modal-body">
+                <p class="modal-note" id="cancel-order-note">Deseja realmente cancelar este pedido?</p>
+                <input type="hidden" id="cancel-order-id">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Voltar</button>
+                <button class="btn btn-outline" style="color:var(--err);border-color:var(--err)" id="btn-cancel-no-refund" onclick="confirmCancelOrder(false)">Cancelar SEM Reembolso</button>
+                <button class="btn" style="background:var(--err);border-color:var(--err)" id="btn-cancel-refund" onclick="confirmCancelOrder(true)">Cancelar COM Reembolso</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-local-user">
+        <div class="modal-box">
+            <div class="modal-title" id="m-l-title">Usu&aacute;rio Local</div>
+            <div class="modal-body">
+                <input type="hidden" id="m-l-id">
+                <div class="form-group"><label>Nome</label><input type="text" id="m-l-name"></div>
+                <div class="form-group"><label>E-mail</label><input type="email" id="m-l-email"></div>
+                <div class="form-group"><label>WhatsApp</label><input type="text" id="m-l-whatsapp" oninput="mascaraTelefone(this)" maxlength="15" placeholder="(11) 99999-9999"></div>
+                <div class="form-group"><label id="m-l-password-label">Senha</label><input type="password" id="m-l-password"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="submitLocalUser()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ad-user">
+        <div class="modal-box">
+            <div class="modal-title">Novo Usu&aacute;rio AD</div>
+            <div class="modal-body">
+                <div class="form-group"><label>Usu&aacute;rio (Login sem @phost.local)</label><input type="text" id="m-ad-username"></div>
+                <div class="form-group"><label>Nome Completo</label><input type="text" id="m-ad-fullname"></div>
+                <div class="form-group"><label>WhatsApp</label><input type="text" id="m-ad-whatsapp" autocomplete="off" oninput="mascaraTelefone(this)" maxlength="15" placeholder="(11) 99999-9999"></div>
+                <div class="form-group"><label>Senha Inicial</label><input type="password" id="m-ad-password"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="submitAdUser()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ad-edit">
+        <div class="modal-box">
+            <div class="modal-title" id="m-ad-edit-title">Editar Usu&aacute;rio AD</div>
+            <div class="modal-body">
+                <input type="hidden" id="m-ad-edit-username">
+                <div class="form-group"><label>Nome Completo</label><input type="text" id="m-ad-edit-fullname"></div>
+                <div class="form-group"><label>WhatsApp</label><input type="text" id="m-ad-edit-whatsapp" autocomplete="off" oninput="mascaraTelefone(this)" maxlength="15" placeholder="(11) 99999-9999"></div>
+                <div class="form-group"><label>Nova Senha (Opcional)</label><input type="password" id="m-ad-edit-password" placeholder="Deixe em branco para manter a atual"></div>
+                
+                <div style="margin-top:15px; padding-top:15px; border-top:1px solid var(--border)">
+                    <label class="inline-check" style="display:flex; margin-bottom:10px;">
+                        <input type="checkbox" id="m-ad-edit-active"> 
+                        <span style="margin-left:8px;">Conta Ativa</span>
+                    </label>
+                    <label class="inline-check" style="display:flex;">
+                        <input type="checkbox" id="m-ad-edit-never-expires"> 
+                        <span style="margin-left:8px;">Senha nunca expira</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="submitAdEdit()">Salvar Altera&ccedil;&otilde;es</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ad-password">
+        <div class="modal-box">
+            <div class="modal-title" id="m-ad-password-title">Redefinir senha AD</div>
+            <div class="modal-body">
+                <input type="hidden" id="m-ad-password-username">
+                <div class="form-group"><label>Nova senha</label><input type="password" id="m-ad-new-password" autocomplete="new-password"></div>
+                <div class="form-group"><label>Confirmar senha</label><input type="password" id="m-ad-confirm-password" autocomplete="new-password"></div>
+                <label class="inline-check"><input type="checkbox" id="m-ad-force-change" checked><span>For&ccedil;ar altera&ccedil;&atilde;o no pr&oacute;ximo logon</span></label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="submitAdPassword()">Salvar senha</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ad-link">
+        <div class="modal-box">
+            <div class="modal-title">Vincular usu&aacute;rio AD</div>
+            <div class="modal-body">
+                <input type="hidden" id="m-ad-link-id">
+                <div class="link-meta" id="m-ad-link-local"></div>
+                <div class="form-group ad-link-picker" id="ad-link-picker">
+                    <label>Usu&aacute;rio AD</label>
+                    <div class="ad-link-input-wrap">
+                        <input type="text" id="m-ad-link-username" placeholder="Ex: NatanaelEduardo" autocomplete="off" spellcheck="false" data-bwignore="true" onfocus="openAdLinkDropdown()" oninput="renderAdLinkDropdown(true)">
+                        <button type="button" class="btn btn-outline ad-link-toggle" title="Selecionar usu&aacute;rio AD" onclick="toggleAdLinkDropdown()">&#9662;</button>
+                    </div>
+                    <div class="ad-link-menu" id="ad-link-dropdown"></div>
+                </div>
+                <p class="modal-note">Deixe em branco para remover o v&iacute;nculo.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="submitAdLink()">Salvar v&iacute;nculo</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ad-access">
+        <div class="modal-box modal-box-wide">
+            <div class="modal-title" id="m-ad-access-title">Acessos do usu&aacute;rio</div>
+            <div class="modal-body">
+                <p class="modal-note">Selecione os computadores ativos permitidos para este usu&aacute;rio. Os computadores j&aacute; vinculados aparecem marcados.</p>
+                <div class="check-toolbar"><input type="search" id="ad-computer-search" placeholder="Filtrar computador, descri&ccedil;&atilde;o ou sistema..." oninput="renderAdComputerChecks()"></div>
+                <div class="check-list" id="ad-computer-checks"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="saveAdAccesses()">Salvar acessos</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-confirm">
+        <div class="modal-box">
+            <div class="modal-title">Confirmar a&ccedil;&atilde;o</div>
+            <div class="modal-body"><p class="modal-note" id="confirm-message"></p></div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="resolveAdminConfirm(false)">Cancelar</button>
+                <button class="btn" onclick="resolveAdminConfirm(true)">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ad-group-select">
+        <div class="modal-box">
+            <div class="modal-title">Selecionar grupo de acesso</div>
+            <div class="modal-body">
+                <p class="modal-note" id="ad-group-select-note"></p>
+                <div class="form-group" style="margin-top:14px">
+                    <label>Grupo do Active Directory</label>
+                    <select id="ad-manual-group" class="mini-select" style="width:100%"></select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="cancelManualGroupSelection()">Voltar</button>
+                <button class="btn" onclick="confirmManualGroupSelection()">Usar grupo</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="manualOrderModal">
+        <div class="modal-box">
+            <div class="modal-title">Novo Pedido Manual</div>
+            <div class="modal-body">
+                <div class="form-group"><label>Cliente</label><select id="m-order-user" class="mini-select" style="width:100%"></select></div>
+                <div class="form-group"><label>Plano</label><select id="m-order-period" class="mini-select" style="width:100%" onchange="const d=document.getElementById('m-order-days'); if(this.value==='semanal')d.value=7; else if(this.value==='mensal')d.value=30;"><option value="diaria">Diária</option><option value="semanal" selected>Semanal</option><option value="mensal">Mensal</option></select></div>
+                <div class="form-group"><label>Dias (Duração)</label><input type="number" id="m-order-days" min="1" value="7"></div>
+                <div class="form-group"><label>Computadores</label><input type="number" id="m-order-pcs" min="1" value="1"></div>
+                <div class="form-group"><label>Slots por computador</label><input type="number" id="m-order-slots" min="1" value="4"></div>
+                <div class="form-group"><label>Valor total</label><input type="number" id="m-order-price" min="0" step="0.01" value="0.00"></div>
+                <div class="form-group"><label>Descri&ccedil;&atilde;o</label><input type="text" id="m-order-desc" placeholder="Pedido Manual"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="saveManualOrder()">Criar pedido</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-delete-user">
+        <div class="modal-box">
+            <div class="modal-title">Excluir Usuário</div>
+            <div class="modal-body">
+                <p class="modal-note">Deseja realmente excluir este usuário localmente?</p>
+                <div id="delete-user-ad-note" style="display:none; color:var(--warn); margin-top:10px; font-weight:bold;">
+                    Atenção: Este usuário possui vínculo com o Active Directory.
+                </div>
+            </div>
+            <div class="modal-footer" id="delete-user-footer">
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-ad-duplicate">
+        <div class="modal-box">
+            <div class="modal-title" id="m-ad-dup-title">Duplicar usu&aacute;rio AD</div>
+            <div class="modal-body">
+                <input type="hidden" id="m-ad-dup-source">
+                <p class="modal-note" style="margin-bottom:12px">Ser&atilde;o copiados: computadores, grupos e vencimento do usu&aacute;rio fonte.</p>
+                <div class="form-group"><label>Novo Username (login)</label><input type="text" id="m-ad-dup-username" autocomplete="off" placeholder="Ex: joao.silva"></div>
+                <div class="form-group"><label>Nome Completo</label><input type="text" id="m-ad-dup-fullname" autocomplete="off" placeholder="Ex: Jo&atilde;o Silva"></div>
+                <div class="form-group"><label>WhatsApp</label><input type="text" id="m-ad-dup-whatsapp" autocomplete="off" oninput="mascaraTelefone(this)" maxlength="15" placeholder="(11) 99999-9999"></div>
+                <div class="form-group"><label>Senha inicial</label><input type="password" id="m-ad-dup-password" autocomplete="new-password"></div>
+                <div class="form-group"><label>Confirmar senha</label><input type="password" id="m-ad-dup-confirm" autocomplete="new-password"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
+                <button class="btn" onclick="submitDuplicate()">&#128203; Criar usu&aacute;rio</button>
+            </div>
+        </div>
+    </div>
+
+</div>
