@@ -27,6 +27,20 @@
         .glass-panel { background: rgba(8, 17, 33, 0.85); backdrop-filter: blur(12px); }
         .success-check { stroke-dasharray: 100; stroke-dashoffset: 100; animation: dash 1s ease-in-out forwards; }
         @keyframes dash { to { stroke-dashoffset: 0; } }
+
+        .range-control { position: relative; height: 2.75rem; display: flex; align-items: center; }
+        .range-line { position: absolute; left: 0.5rem; right: 0.5rem; top: 50%; height: 0.2rem; border-radius: 999px; background: #334155; transform: translateY(-50%); pointer-events: none; }
+        .range-line::before { content: ""; display: block; width: var(--range-progress, 0%); height: 100%; border-radius: inherit; background: #3b82f6; }
+        .range-dots { position: absolute; inset: 0 0.5rem; top: 50%; display: flex; justify-content: space-between; transform: translateY(-50%); pointer-events: none; }
+        .range-dot { width: 0.55rem; height: 0.55rem; border: 2px solid #64748b; border-radius: 999px; background: #0f172a; }
+        .range-dot.is-active { border-color: #60a5fa; background: #3b82f6; }
+        .range-slider { position: relative; z-index: 1; width: 100%; height: 2.75rem; margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; touch-action: pan-y; }
+        .range-slider:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; border-radius: 999px; }
+        .range-slider::-webkit-slider-runnable-track { height: 0.2rem; background: transparent; }
+        .range-slider::-webkit-slider-thumb { width: 1.35rem; height: 1.35rem; margin-top: -0.575rem; appearance: none; -webkit-appearance: none; border: 3px solid #dbeafe; border-radius: 999px; background: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2); }
+        .range-slider::-moz-range-track { height: 0.2rem; background: transparent; }
+        .range-slider::-moz-range-progress { height: 0.2rem; background: transparent; }
+        .range-slider::-moz-range-thumb { width: 1.05rem; height: 1.05rem; border: 3px solid #dbeafe; border-radius: 999px; background: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2); }
     </style>
 </head>
 <body class="min-h-screen text-slate-300 relative flex flex-col">
@@ -232,8 +246,9 @@
                 
                 <div>
                     <!-- CORREÇÃO: Tooltip incorporado no Label -->
-                    <label class="flex items-center gap-1 text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
-                        Qt. Computadores (PCs)
+                    <label for="qtdPcs" class="flex items-center justify-between gap-3 text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        <span>Qt. Computadores (PCs)</span>
+                        <output id="qtdPcsValor" for="qtdPcs" class="min-w-9 rounded-md bg-blue-500/15 px-2 py-1 text-center text-sm text-blue-300" aria-live="polite">1</output>
                         <!-- <div class="relative group cursor-pointer flex items-center"> -->
                             <!-- <svg class="w-4 h-4 text-slate-500 hover:text-blue-400 transition-colors" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg> -->
                             <!-- <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-xs text-slate-300 rounded-lg shadow-lg border border-slate-700 z-10 text-center font-normal normal-case"> -->
@@ -241,22 +256,23 @@
                             <!-- </div> -->
                         <!-- </div> -->
                     </label>
-                    <input type="number" id="qtdPcs" value="1" min="1" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none transition-all" oninput="limparErro('qtdPcs', 'msgPcsAlert'); calcular()">
+                    <div class="range-control" data-range-for="qtdPcs"><div class="range-line"></div><div class="range-dots" aria-hidden="true"></div><input type="range" id="qtdPcs" value="1" min="1" max="20" step="1" aria-label="Quantidade de computadores" class="range-slider" oninput="atualizarSlider(this); limparErro('qtdPcs', 'msgPcsAlert'); calcular()"></div>
                     <p id="msgDescPc" class="text-xs text-blue-500 mt-1">Desconto de R$ 5,00 a cada PC adicional.</p>
                     <p id="msgPcsAlert" class="text-xs text-amber-500 mt-1 hidden font-bold">⚠️ O plano Diário exige no mínimo 3 computadores.</p>
                 </div>
 
                 <div>
-                    <label class="flex items-center gap-1 text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
-                        Instâncias por Computador
+                    <label for="qtdWyds" class="flex items-center justify-between gap-3 text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        <span class="flex items-center gap-1">Instâncias por Computador
                         <div class="relative group cursor-pointer flex items-center">
                             <svg class="w-4 h-4 text-slate-500 hover:text-blue-400 transition-colors" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
                             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-xs text-slate-300 rounded-lg shadow-lg border border-slate-700 z-10 text-center font-normal normal-case">
                                 Quantas janelas do jogo você quer abrir por computador.
                             </div>
-                        </div>
+                        </div></span>
+                        <output id="qtdWydsValor" for="qtdWyds" class="min-w-9 rounded-md bg-blue-500/15 px-2 py-1 text-center text-sm text-blue-300" aria-live="polite">1</output>
                     </label>
-                    <input type="number" id="qtdWyds" value="1" min="1" max="8" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none transition-all" oninput="limparErro('qtdWyds'); calcular()">
+                    <div class="range-control" data-range-for="qtdWyds"><div class="range-line"></div><div class="range-dots" aria-hidden="true"></div><input type="range" id="qtdWyds" value="1" min="1" max="8" step="1" aria-label="Instâncias por computador" class="range-slider" oninput="atualizarSlider(this); limparErro('qtdWyds'); calcular()"></div>
                 </div>
 
                 <div>
@@ -280,8 +296,8 @@
                 </div>
 
                 <div id="containerDias" class="hidden">
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Quantidade de Dias</label>
-                    <input type="number" id="qtdDias" value="3" min="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none transition-all" oninput="limparErro('qtdDias', 'msgDiasAlert'); calcular()">
+                    <label for="qtdDias" class="flex items-center justify-between gap-3 text-xs font-bold text-slate-400 uppercase tracking-wide mb-1"><span>Quantidade de Dias</span><output id="qtdDiasValor" for="qtdDias" class="min-w-9 rounded-md bg-blue-500/15 px-2 py-1 text-center text-sm text-blue-300" aria-live="polite">3</output></label>
+                    <div class="range-control" data-range-for="qtdDias"><div class="range-line"></div><div class="range-dots" aria-hidden="true"></div><input type="range" id="qtdDias" value="3" min="3" max="6" step="1" aria-label="Quantidade de dias" class="range-slider" oninput="atualizarSlider(this); limparErro('qtdDias', 'msgDiasAlert'); calcular()"></div>
                     <p id="msgDiasAlert" class="text-xs text-amber-500 mt-1 hidden font-bold">⚠️ Acima de 6 dias, compensa assinar o plano Semanal!</p>
                 </div>
 
@@ -1072,16 +1088,50 @@
             }
         }
 
+        function atualizarSlider(input) {
+            if (!input) return;
+
+            const min = Number(input.min);
+            const max = Number(input.max);
+            const value = Number(input.value);
+            const control = input.closest('.range-control');
+            const output = document.getElementById(`${input.id}Valor`);
+            const dots = control?.querySelector('.range-dots');
+            const steps = Math.max(1, max - min);
+
+            control?.style.setProperty('--range-progress', `${((value - min) / steps) * 100}%`);
+            if (output) output.value = String(value);
+
+            if (dots && dots.dataset.range !== `${min}-${max}`) {
+                dots.replaceChildren(...Array.from({ length: max - min + 1 }, (_, index) => {
+                    const dot = document.createElement('span');
+                    dot.className = 'range-dot';
+                    dot.dataset.value = String(min + index);
+                    return dot;
+                }));
+                dots.dataset.range = `${min}-${max}`;
+            }
+
+            dots?.querySelectorAll('.range-dot').forEach(dot => {
+                dot.classList.toggle('is-active', Number(dot.dataset.value) <= value);
+            });
+        }
+
+        function atualizarSliders() {
+            document.querySelectorAll('.range-slider').forEach(atualizarSlider);
+        }
+
         let lastPeriodo = 'semanal';
 
         function calcular() {
             let periodo = document.querySelector('input[name="periodo"]:checked').value;
             let pcsInput = document.getElementById('qtdPcs');
             let wydsInput = document.getElementById('qtdWyds');
+            pcsInput.min = periodo === 'diaria' ? '3' : '1';
             
-            // CORREÇÃO: Reescrita agressiva restaurada
             let pcs = parseInt(pcsInput.value);
             if (isNaN(pcs) || pcs < 1) { pcsInput.value = 1; pcs = 1; }
+            if (pcs > 20) { pcsInput.value = 20; pcs = 20; }
             let wyds = parseInt(wydsInput.value);
             if (isNaN(wyds) || wyds < 1) { wydsInput.value = 1; wyds = 1; }
 
@@ -1132,6 +1182,10 @@
                 descHardware = (pcs - 1) * 5; if (descHardware < 0) descHardware = 0;
             }
 
+            atualizarSlider(pcsInput);
+            atualizarSlider(wydsInput);
+            atualizarSlider(document.getElementById('qtdDias'));
+
             // Aplicar 5% de desconto de Indicação
             if (eligibleForDiscount && bruto > 0) {
                 descIndicacao = bruto * 0.05;
@@ -1173,6 +1227,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            atualizarSliders();
+
             const periodo = new URLSearchParams(window.location.search).get('periodo');
             const periodosValidos = ['diaria', 'semanal', 'mensal'];
             const opcao = periodosValidos.includes(periodo)
@@ -1250,6 +1306,7 @@
 
             // Restoring strict block if someone tries to hack the DOM/bypass input filters
             if (!pcsInput.value || parseInt(pcsInput.value) < 1) { showError('qtdPcs'); return; }
+            if (parseInt(pcsInput.value) > 20) { showError('qtdPcs'); return; }
             if (periodo === 'diaria' && parseInt(pcsInput.value) < 3) { showError('qtdPcs', 'msgPcsAlert'); return; }
             if (!wydsInput.value || parseInt(wydsInput.value) < 1) { showError('qtdWyds'); return; }
             if (periodo === 'diaria' && (!diasInput.value || parseInt(diasInput.value) < 3)) { showError('qtdDias', 'msgDiasAlert'); return; }

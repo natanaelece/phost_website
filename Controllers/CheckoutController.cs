@@ -101,7 +101,7 @@ namespace PremierAPI.Controllers
                 return Unauthorized(new { erro = "Sessão expirada ou inválida." });
 
             // 2. Validar limites básicos
-            if (pedido.Pcs < 1 || pedido.Wyds < 1 || pedido.Wyds > 8)
+            if (pedido.Pcs < 1 || pedido.Pcs > 20 || pedido.Wyds < 1 || pedido.Wyds > 8)
                 return BadRequest(new { erro = "Valores inválidos." });
 
             if (pedido.Periodo != "diaria" && pedido.Periodo != "semanal" && pedido.Periodo != "mensal")
