@@ -150,6 +150,7 @@ app.Use(async (context, next) =>
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.tailwindcss.com; " +
         "font-src 'self' https://fonts.gstatic.com; " +
         "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com; " +
+        "media-src 'self' https://phost.pro https://www.phost.pro; " +
         "frame-src https://challenges.cloudflare.com https://*.cloudflare.com; " +
         "connect-src 'self' https://challenges.cloudflare.com https://*.cloudflare.com; ";
     await next();

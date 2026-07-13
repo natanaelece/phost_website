@@ -92,9 +92,8 @@
     <header class="border-b border-slate-800 bg-slate-900 px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-md">
         <a href="/"><img src="img/oficialsemfundo.png" alt="Premierhost" class="h-10"></a>
         <nav class="hidden md:flex gap-6 items-center">
-            <a href="/#tecnologias" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Tecnologias</a>
-            <a href="como-usar" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Como Usar</a>
-            <a href="faq" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">FAQ</a>
+            <button type="button" onclick="abrirAjuda('como-usar')" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Como usar</button>
+            <button type="button" onclick="abrirAjuda('faq')" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Dúvidas frequentes</button>
             
             <div class="relative group ml-4 border-l border-slate-700 pl-4">
                 <button id="profileMenuButton" class="flex items-center gap-2 text-sm font-bold text-blue-400 hover:text-blue-300">
@@ -114,12 +113,41 @@
 
     <div id="mobileMenu" class="hidden md:hidden bg-slate-800 border-b border-slate-700 px-6 py-5 fixed top-[73px] left-0 w-full z-50 shadow-2xl">
         <div class="flex flex-col gap-5">
-            <a href="/#tecnologias" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Tecnologias</a>
-            <a href="como-usar" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Como Usar</a>
-            <a href="faq" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">FAQ</a>
+            <button type="button" onclick="abrirAjuda('como-usar'); fecharMenuMobile()" class="text-left text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Como usar</button>
+            <button type="button" onclick="abrirAjuda('faq'); fecharMenuMobile()" class="text-left text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Dúvidas frequentes</button>
             <hr class="border-slate-700 my-1">
             <button id="mobileProfileButton" onclick="abrirPerfil(); document.getElementById('mobileMenu').classList.add('hidden')" class="text-left text-sm font-bold text-blue-400 block py-1.5">Editar Perfil</button>
             <button id="mobileLogoutButton" onclick="logout()" class="text-left text-sm font-bold text-red-400 block py-1.5">Sair da Conta</button>
+        </div>
+    </div>
+
+    <div id="ajudaModal" class="hidden fixed inset-0 z-[60] items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="ajudaTitulo" onclick="fecharAjudaAoClicarFora(event)">
+        <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl relative">
+            <div class="sticky top-0 z-10 flex items-center justify-between gap-4 px-6 py-5 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+                <div><p class="text-xs font-bold uppercase tracking-widest text-blue-400">Central de ajuda</p><h2 id="ajudaTitulo" class="text-2xl font-bold text-white mt-1">Como usar</h2></div>
+                <button type="button" onclick="fecharAjuda()" class="text-slate-500 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors" aria-label="Fechar">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div id="ajudaComoUsar" class="p-6 md:p-8">
+                <div class="grid sm:grid-cols-2 gap-4 mb-7">
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">1</span><h3 class="font-bold text-white mb-2">Monte seu plano</h3><p class="text-sm text-slate-400 leading-relaxed">Escolha a quantidade de computadores, instâncias e o período. A simulação de preço funciona mesmo sem login.</p></div>
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">2</span><h3 class="font-bold text-white mb-2">Entre ou crie sua conta</h3><p class="text-sm text-slate-400 leading-relaxed">O login é necessário somente para gerar o PIX, acompanhar pedidos, credenciais e indicações.</p></div>
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">3</span><h3 class="font-bold text-white mb-2">Pague com PIX</h3><p class="text-sm text-slate-400 leading-relaxed">Revise o resumo, gere a cobrança e faça o pagamento. A confirmação é recebida automaticamente pela plataforma.</p></div>
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">4</span><h3 class="font-bold text-white mb-2">Receba seu acesso</h3><p class="text-sm text-slate-400 leading-relaxed">Após a confirmação, acompanhe a liberação no painel. Nossa equipe auxilia na configuração inicial quando necessário.</p></div>
+                </div>
+                <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950"><video class="w-full aspect-video" controls preload="metadata" playsinline><source src="/vid/comofunciona.mp4" type="video/mp4">Seu navegador não consegue reproduzir este vídeo.</video><p class="px-4 py-3 text-center text-xs text-slate-500">Se o vídeo não abrir, <a href="/vid/comofunciona.mp4" target="_blank" class="text-blue-400 hover:underline">assista diretamente pelo navegador</a>.</p></div>
+            </div>
+
+            <div id="ajudaFaq" class="hidden p-6 md:p-8 space-y-3">
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Preciso estar logado para consultar os preços?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Não. O simulador é público. Você só precisa entrar ou criar uma conta quando quiser gerar o PIX e contratar.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Os computadores são máquinas virtuais?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Não. São computadores físicos reais, com conexão e IP próprios. O serviço não fornece hacks ou bots.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Como acesso o computador contratado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Você pode acessar pelo navegador em nossa página com Guacamole ou usar o RealVNC Viewer no computador. O suporte orienta a configuração inicial.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Quando o acesso é liberado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">O sistema recebe a confirmação do PIX e inicia a liberação. Você acompanha o pedido e as credenciais pelo painel.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Posso testar antes de contratar?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Sim. O teste gratuito dura 30 minutos e deve ser solicitado pelo WhatsApp, sujeito à disponibilidade e agendamento.</p></details>
+                <div class="mt-6 rounded-xl border border-green-500/20 bg-green-500/10 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h3 class="font-bold text-white">Ainda ficou com alguma dúvida?</h3><p class="text-sm text-slate-400 mt-1">Fale diretamente com a equipe da Premier Host.</p></div><a href="https://wa.me/5534999187189?text=Ol%C3%A1%21+Tenho+uma+d%C3%BAvida+sobre+a+Premier+Host." target="_blank" rel="noopener" class="text-center bg-[#25D366] hover:bg-[#20bd5a] text-slate-950 px-5 py-3 rounded-lg font-black transition-colors whitespace-nowrap">Chamar no WhatsApp</a></div>
+            </div>
         </div>
     </div>
 
@@ -199,7 +227,7 @@
             <p>Cada computador possui um IP válido único (não é proxy nem VPN, sem risco de banimento) !</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div id="simular-planos" class="grid grid-cols-1 md:grid-cols-2 gap-8 scroll-mt-28">
             <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-6">
                 
                 <div>
@@ -447,6 +475,43 @@
         let cupomAtivo = null;
         let pendingPixData = null;
         let isLoggedIn = false;
+
+        function fecharMenuMobile() {
+            document.getElementById('mobileMenu')?.classList.add('hidden');
+        }
+
+        function abrirAjuda(tipo) {
+            const modal = document.getElementById('ajudaModal');
+            const comoUsar = document.getElementById('ajudaComoUsar');
+            const faq = document.getElementById('ajudaFaq');
+            const titulo = document.getElementById('ajudaTitulo');
+            const mostrarFaq = tipo === 'faq';
+
+            comoUsar.classList.toggle('hidden', mostrarFaq);
+            faq.classList.toggle('hidden', !mostrarFaq);
+            titulo.innerText = mostrarFaq ? 'Dúvidas frequentes' : 'Como usar a Premier Host';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function fecharAjuda() {
+            const modal = document.getElementById('ajudaModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+            modal.querySelectorAll('video').forEach(video => video.pause());
+        }
+
+        function fecharAjudaAoClicarFora(event) {
+            if (event.target.id === 'ajudaModal') fecharAjuda();
+        }
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !document.getElementById('ajudaModal')?.classList.contains('hidden')) {
+                fecharAjuda();
+            }
+        });
 
         function goLogin() {
             window.location.href = '/?action=login';
@@ -1072,6 +1137,25 @@
 
             document.getElementById('totalPagar').innerText = `R$ ${totalLiq.toFixed(2).replace('.', ',')}`;
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const periodo = new URLSearchParams(window.location.search).get('periodo');
+            const periodosValidos = ['diaria', 'semanal', 'mensal'];
+            const opcao = periodosValidos.includes(periodo)
+                ? document.querySelector(`input[name="periodo"][value="${periodo}"]`)
+                : null;
+
+            if (opcao) {
+                opcao.checked = true;
+                calcular();
+            }
+
+            if (window.location.hash === '#simular-planos') {
+                setTimeout(() => {
+                    document.getElementById('simular-planos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+        });
 
         function iniciarTimerIndicacao() {
             discountInterval = setInterval(() => {

@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Premier Host | Infraestrutura de Alta Performance</title>
-    <meta name="description" content="Infraestrutura de alta performance e acesso automatizado para sua experiência no WYD.">
+    <title>Premier Host | Computadores remotos para WYD</title>
+    <meta name="description" content="Acesse computadores remotos preparados para WYD pelo navegador, celular, tablet ou RealVNC. Planos diário, semanal e mensal com ativação automatizada.">
     <link rel="canonical" href="https://phost.pro/">
     <meta property="og:locale" content="pt_BR">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Premier Host">
-    <meta property="og:title" content="Premier Host | Infraestrutura de Alta Performance">
-    <meta property="og:description" content="Infraestrutura de alta performance e acesso automatizado para sua experiência no WYD.">
+    <meta property="og:title" content="Premier Host | Computadores remotos para WYD">
+    <meta property="og:description" content="Computadores remotos preparados para WYD, com acesso pelo navegador ou RealVNC e planos flexíveis.">
     <meta property="og:url" content="https://phost.pro/">
     <meta property="og:image" content="https://phost.pro/img/oficialsemfundo.png">
     <meta property="og:image:width" content="849">
     <meta property="og:image:height" content="281">
     <meta property="og:image:alt" content="Premier Host">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Premier Host | Infraestrutura de Alta Performance">
-    <meta name="twitter:description" content="Infraestrutura de alta performance e acesso automatizado para sua experiência no WYD.">
+    <meta name="twitter:title" content="Premier Host | Computadores remotos para WYD">
+    <meta name="twitter:description" content="Computadores remotos preparados para WYD, com acesso pelo navegador ou RealVNC e planos flexíveis.">
     <meta name="twitter:image" content="https://phost.pro/img/oficialsemfundo.png">
     <link rel="icon" href="img/Ícone48x48.ico">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -27,6 +27,9 @@
         body { background-color: #081121; } 
         .glow-blue { box-shadow: 0 0 25px rgba(37, 99, 235, 0.3); }
         .text-glow { text-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+        .hero-grid { background-image: linear-gradient(rgba(59,130,246,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,.05) 1px, transparent 1px); background-size: 42px 42px; }
+        .card-hover { transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+        .card-hover:hover { transform: translateY(-4px); border-color: rgba(59,130,246,.55); box-shadow: 0 18px 45px rgba(0,0,0,.22); }
 		.whatsapp-float {
 		position: fixed;
 		right: 20px;
@@ -86,9 +89,10 @@
     <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 py-4 flex justify-between items-center sticky top-0 z-40">
         <img src="img/oficialsemfundo.png" alt="Premierhost" class="h-10">
         <nav class="hidden md:flex gap-6 items-center">
-            <a href="#tecnologias" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Tecnologias</a>
-            <a href="como-usar" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Como Usar</a>
-            <a href="faq" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">FAQ</a>
+            <a href="#sobre" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Sobre nós</a>
+            <a href="#beneficios" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Benefícios</a>
+            <a href="#planos" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Planos</a>
+            <a href="#teste" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Teste grátis</a>
             <!-- Botão Único -->
             <button onclick="abrirModalAuth('login')" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg font-bold transition-all shadow-[0_0_10px_rgba(37,99,235,0.4)]">Painel do Cliente</button>
         </nav>
@@ -99,9 +103,10 @@
 
     <div id="mobileMenuIndex" class="hidden md:hidden bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-6 py-5 fixed top-[73px] left-0 w-full z-50 shadow-2xl">
         <div class="flex flex-col gap-5">
-            <a href="#tecnologias" onclick="document.getElementById('mobileMenuIndex').classList.add('hidden')" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Tecnologias</a>
-            <a href="como-usar" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Como Usar</a>
-            <a href="faq" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">FAQ</a>
+            <a href="#sobre" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Sobre nós</a>
+            <a href="#beneficios" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Benefícios</a>
+            <a href="#planos" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Planos</a>
+            <a href="#teste" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Teste grátis</a>
             <hr class="border-slate-800 my-1">
             <button onclick="abrirModalAuth('login'); document.getElementById('mobileMenuIndex').classList.add('hidden')" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold transition-all text-center block shadow-[0_0_15px_rgba(37,99,235,0.3)]">
                 Painel do Cliente
@@ -109,28 +114,53 @@
         </div>
     </div>
 
-    <section class="max-w-6xl mx-auto px-6 py-20 text-center">
-        <h1 class="text-5xl md:text-7xl font-extrabold text-white tracking-tight mb-6">A infraestrutura que o seu <span class="text-blue-500 text-glow">jogo exige.</span></h1>
-        <p class="text-lg text-slate-400 max-w-2xl mx-auto mb-10">Hospedagem otimizada com IP's dedicados, hardware de alta performance e roteamento transparente. Sem lag, sem quedas.</p>
-        <button onclick="abrirModalAuth('register')" class="bg-blue-600 hover:bg-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all glow-blue">Criar Conta Agora</button>
-    </section>
+    <main>
+        <section class="hero-grid relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-b from-blue-600/10 via-transparent to-[#081121]"></div>
+            <div class="relative max-w-6xl mx-auto px-6 py-20 md:py-28 text-center">
+                <span class="inline-flex items-center gap-2 border border-blue-500/30 bg-blue-500/10 text-blue-300 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full mb-7">Infraestrutura remota para WYD</span>
+                <h1 class="text-4xl md:text-7xl font-extrabold text-white tracking-tight mb-6">Seu jogo disponível onde <span class="text-blue-500 text-glow">você estiver.</span></h1>
+                <p class="text-lg md:text-xl text-slate-400 max-w-3xl mx-auto mb-9 leading-relaxed">Computadores remotos preparados para manter suas instâncias online, com acesso pelo navegador ou RealVNC e ativação organizada pelo nosso painel.</p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button onclick="abrirModalAuth('register')" class="bg-blue-600 hover:bg-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all glow-blue">Ver planos e contratar</button>
+                    <a href="#teste" class="border border-slate-700 hover:border-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Testar grátis por 30 min</a>
+                </div>
+                <div class="mt-9 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-slate-400"><span>✓ Pagamento via PIX</span><span>✓ Liberação automatizada</span><span>✓ Suporte pelo WhatsApp</span></div>
+            </div>
+        </section>
 
-    <section id="tecnologias" class="border-t border-slate-800 bg-slate-900/50 py-16">
-        <div class="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div class="p-6 bg-slate-800 border border-slate-700 rounded-2xl">
-                <h3 class="text-xl font-bold text-white mb-3">🌐 Cloudflare Edge</h3>
-                <p class="text-sm text-slate-400">Proteção DDoS de nível empresarial e roteamento acelerado pelas bordas da Cloudflare.</p>
+        <section id="sobre" class="border-t border-slate-800 py-20">
+            <div class="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
+                <div><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Sobre a Premier Host</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-5">Máquinas físicas reais, prontas para acesso remoto</h2><p class="text-slate-400 leading-relaxed mb-4">Há mais de dois anos, a Premier Host aluga notebooks, mini PCs e outros computadores físicos preparados para jogadores de WYD. Não usamos máquinas virtuais e o IP de cada equipamento pertence à sua própria conexão — não é um IP compartilhado de VPN ou proxy.</p><p class="text-slate-400 leading-relaxed mb-4">Nossa plataforma reúne contratação, pagamento, liberação de credenciais e acompanhamento da licença em um só painel. Você escolhe os computadores e instâncias, paga por PIX e recebe o acesso após a confirmação.</p><p class="text-sm text-slate-500">A Premier Host fornece infraestrutura remota. Não vendemos, instalamos ou oferecemos hacks e bots.</p></div>
+                <div class="grid grid-cols-2 gap-4"><div class="bg-slate-900 border border-slate-800 rounded-2xl p-6"><strong class="text-3xl text-blue-500 block mb-2">3</strong><span class="text-sm text-slate-400">períodos flexíveis</span></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-6"><strong class="text-3xl text-blue-500 block mb-2">8</strong><span class="text-sm text-slate-400">instâncias por PC</span></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-6"><strong class="text-3xl text-blue-500 block mb-2">PIX</strong><span class="text-sm text-slate-400">confirmação integrada</span></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-6"><strong class="text-3xl text-blue-500 block mb-2">30 min</strong><span class="text-sm text-slate-400">de teste gratuito</span></div></div>
             </div>
-            <div class="p-6 bg-slate-800 border border-slate-700 rounded-2xl">
-                <h3 class="text-xl font-bold text-white mb-3">📡 MikroTik Routing</h3>
-                <p class="text-sm text-slate-400">Gerenciamento inteligente de pacotes e regras de firewall avançadas com MikroTik RouterOS.</p>
-            </div>
-            <div class="p-6 bg-slate-800 border border-slate-700 rounded-2xl">
-                <h3 class="text-xl font-bold text-white mb-3">🖥️ RealVNC</h3>
-                <p class="text-sm text-slate-400">Acesso remoto criptografado e de baixíssima latência direto para a sua instância.</p>
-            </div>
-        </div>
-    </section>
+        </section>
+
+        <section class="pb-20"><div class="max-w-6xl mx-auto px-6"><div class="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 grid lg:grid-cols-[.8fr_1.2fr] items-center"><div class="p-8 md:p-10 text-left"><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Veja na prática</span><h2 class="text-2xl md:text-3xl font-extrabold text-white mt-3 mb-4">Entenda como funciona</h2><p class="text-slate-400 leading-relaxed">Assista à demonstração oficial e conheça o computador físico, a forma de acesso e o funcionamento do serviço antes de contratar.</p></div><div class="bg-slate-950"><video class="w-full aspect-video bg-slate-950" controls preload="metadata" playsinline><source src="/vid/comofunciona.mp4" type="video/mp4">Seu navegador não consegue reproduzir este vídeo.</video><p class="px-4 py-3 text-center text-xs text-slate-500">Se o vídeo não abrir, <a href="/vid/comofunciona.mp4" target="_blank" class="text-blue-400 hover:underline">assista diretamente pelo navegador</a>.</p></div></div></div></section>
+
+        <section id="beneficios" class="border-y border-slate-800 bg-slate-900/50 py-20">
+            <div class="max-w-6xl mx-auto px-6"><div class="text-center max-w-3xl mx-auto mb-12"><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Benefícios e ferramentas</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3">Controle, praticidade e acesso protegido</h2></div><div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <article class="card-hover p-6 bg-slate-900 border border-slate-800 rounded-2xl"><div class="text-2xl mb-4">⚡</div><h3 class="text-lg font-bold text-white mb-2">Ativação automatizada</h3><p class="text-sm text-slate-400 leading-relaxed">O pagamento via PIX é acompanhado pelo sistema e a licença é liberada após a confirmação.</p></article>
+                <article class="card-hover p-6 bg-slate-900 border border-slate-800 rounded-2xl"><div class="text-2xl mb-4">🛡️</div><h3 class="text-lg font-bold text-white mb-2">Acesso individual</h3><p class="text-sm text-slate-400 leading-relaxed">Cada cliente recebe credenciais próprias, com validade vinculada ao período contratado e controle pelo Active Directory.</p></article>
+                <article class="card-hover p-6 bg-slate-900 border border-slate-800 rounded-2xl"><div class="text-2xl mb-4">🌐</div><h3 class="text-lg font-bold text-white mb-2">Rede protegida</h3><p class="text-sm text-slate-400 leading-relaxed">O Cloudflare WARP cria somente o túnel protegido até a rede interna. Ele não substitui o IP de internet próprio da máquina alugada.</p></article>
+                <article class="card-hover p-6 bg-slate-900 border border-slate-800 rounded-2xl"><div class="text-2xl mb-4">🖥️</div><h3 class="text-lg font-bold text-white mb-2">RealVNC Viewer</h3><p class="text-sm text-slate-400 leading-relaxed">No computador, use o RealVNC Viewer para uma experiência de acesso remoto prática e estável.</p></article>
+                <article class="card-hover p-6 bg-slate-900 border border-slate-800 rounded-2xl"><div class="text-2xl mb-4">📱</div><h3 class="text-lg font-bold text-white mb-2">Acesso pelo navegador</h3><p class="text-sm text-slate-400 leading-relaxed">Nossa página web com Guacamole permite acessar pelo celular, tablet ou computador sem instalar o cliente VNC.</p></article>
+                <article class="card-hover p-6 bg-slate-900 border border-slate-800 rounded-2xl"><div class="text-2xl mb-4">💬</div><h3 class="text-lg font-bold text-white mb-2">Configuração assistida</h3><p class="text-sm text-slate-400 leading-relaxed">Quando necessário, o suporte orienta e auxilia a configuração do ambiente de acesso remoto.</p></article>
+            </div></div>
+        </section>
+
+        <section id="planos" class="py-20"><div class="max-w-6xl mx-auto px-6"><div class="text-center max-w-3xl mx-auto mb-12"><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Planos</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Escolha o período ideal</h2><p class="text-slate-400">Valores para 1 instância por computador. Adicione computadores e instâncias no painel e veja o cálculo completo antes de pagar.</p></div><div class="grid md:grid-cols-3 gap-6 items-stretch">
+            <article class="card-hover bg-slate-900 border border-slate-800 rounded-2xl p-7 flex flex-col"><span class="text-sm font-bold text-blue-400 uppercase">Diário</span><div class="my-5"><span class="text-4xl font-black text-white">R$ 5,71</span><span class="text-slate-500"> / PC por dia</span></div><ul class="space-y-3 text-sm text-slate-400 mb-7"><li>✓ Contratação de 3 a 6 dias</li><li>✓ Mínimo de 3 computadores</li><li>✓ Ideal para necessidades pontuais</li></ul><a href="/painel?periodo=diaria#simular-planos" class="mt-auto text-center border border-blue-500 text-blue-400 hover:bg-blue-600 hover:text-white py-3 rounded-lg font-bold transition-all">Simular plano diário</a></article>
+            <article class="card-hover bg-slate-900 border-2 border-blue-500 rounded-2xl p-7 flex flex-col relative shadow-[0_0_30px_rgba(37,99,235,.16)]"><span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full">Mais escolhido</span><span class="text-sm font-bold text-blue-400 uppercase">Semanal</span><div class="my-5"><span class="text-4xl font-black text-white">R$ 35</span><span class="text-slate-500"> / PC</span></div><ul class="space-y-3 text-sm text-slate-400 mb-7"><li>✓ 7 dias de acesso</li><li>✓ A partir de 1 computador</li><li>✓ R$ 5 de desconto por PC adicional</li></ul><a href="/painel?periodo=semanal#simular-planos" class="mt-auto text-center bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold transition-all">Simular plano semanal</a></article>
+            <article class="card-hover bg-slate-900 border border-slate-800 rounded-2xl p-7 flex flex-col"><span class="text-sm font-bold text-blue-400 uppercase">Mensal</span><div class="my-5"><span class="text-4xl font-black text-white">R$ 105</span><span class="text-slate-500"> / PC</span></div><ul class="space-y-3 text-sm text-slate-400 mb-7"><li>✓ 30 dias de acesso</li><li>✓ 25% de desconto no período</li><li>✓ R$ 5 de desconto por PC adicional</li></ul><a href="/painel?periodo=mensal#simular-planos" class="mt-auto text-center border border-blue-500 text-blue-400 hover:bg-blue-600 hover:text-white py-3 rounded-lg font-bold transition-all">Simular plano mensal</a></article>
+            </div><p class="text-xs text-slate-500 text-center mt-6">Valores-base vigentes no painel. Instâncias adicionais alteram o total e você também pode ganhar desconto por indicação. Consulte as condições no simulador.</p></div></section>
+
+        <section id="teste" class="border-y border-slate-800 bg-gradient-to-r from-blue-950/60 to-slate-900 py-20"><div class="max-w-5xl mx-auto px-6 grid md:grid-cols-[1fr_auto] gap-8 items-center"><div><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Conheça antes de contratar</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Teste grátis por 30 minutos</h2><p class="text-slate-400 leading-relaxed max-w-2xl">Fale com nossa equipe pelo WhatsApp. Conectamos você a um computador remoto de demonstração para conferir o acesso e entender como o serviço funciona. Sujeito à disponibilidade e agendamento.</p></div><a href="https://wa.me/5534999187189?text=Ol%C3%A1%21+Quero+agendar+meu+teste+gr%C3%A1tis+de+30+minutos+na+Premier+Host." target="_blank" rel="noopener" class="inline-flex justify-center bg-[#25D366] hover:bg-[#20bd5a] text-slate-950 px-7 py-4 rounded-xl font-black transition-all whitespace-nowrap">Solicitar pelo WhatsApp</a></div></section>
+
+        <section id="dispositivos" class="py-20"><div class="max-w-6xl mx-auto px-6 text-center"><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Flexibilidade</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Acesse em seus dispositivos favoritos</h2><p class="text-slate-400 max-w-3xl mx-auto mb-10">Escolha a forma que combina com sua rotina: pelo navegador com nossa página Guacamole ou pelo RealVNC Viewer no computador.</p><div class="grid md:grid-cols-3 gap-6"><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">💻</div><h3 class="font-bold text-white mb-2">Computador</h3><p class="text-sm text-slate-400">Acesso via RealVNC Viewer ou navegador.</p></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">📱</div><h3 class="font-bold text-white mb-2">Celular</h3><p class="text-sm text-slate-400">Entre pela página web compatível com navegadores modernos.</p></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">▣</div><h3 class="font-bold text-white mb-2">Tablet</h3><p class="text-sm text-slate-400">Mais espaço de tela com a mesma facilidade do acesso web.</p></div></div></div></section>
+
+        <section class="border-t border-slate-800 bg-slate-900/50 py-16"><div class="max-w-6xl mx-auto px-6"><div class="grid md:grid-cols-4 gap-8"><div><h3 class="font-bold text-white mb-2">Proteção de conta</h3><p class="text-sm text-slate-400">Login protegido, senhas armazenadas com hash e confirmação de e-mail.</p></div><div><h3 class="font-bold text-white mb-2">Prevenção contra robôs</h3><p class="text-sm text-slate-400">Cloudflare Turnstile protege os formulários de autenticação.</p></div><div><h3 class="font-bold text-white mb-2">Pagamento integrado</h3><p class="text-sm text-slate-400">Cobranças PIX processadas pela integração com a Asaas.</p></div><div><h3 class="font-bold text-white mb-2">Privacidade</h3><p class="text-sm text-slate-400">Dados utilizados para gestão da licença e suporte, conforme nossa política.</p></div></div></div></section>
+    </main>
 
     <!-- Modal de Autenticação -->
     <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
@@ -245,15 +275,19 @@
     </div>
 	
 	<!-- Rodapé -->
-	<footer class="border-t border-slate-800 bg-slate-900/80 mt-auto py-6 px-6 relative z-20">
-		<div class="max-w-6xl mx-auto flex flex-col justify-center items-center gap-4">
-			<p class="text-xs text-slate-600 font-semibold text-center">
-				© 2026 Premier Host. Todos os direitos reservados.
-			</p>
+	<footer class="border-t border-slate-800 bg-slate-950 mt-auto py-10 px-6 relative z-20">
+		<div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="text-center md:text-left"><img src="img/oficialsemfundo.png" alt="Premier Host" class="h-9 mx-auto md:mx-0 mb-3"><p class="text-xs text-slate-500">Máquinas físicas remotas e acesso automatizado para WYD.</p></div>
+            <div class="flex flex-wrap justify-center gap-5 text-xs font-semibold"><a href="#planos" class="text-slate-400 hover:text-blue-400">Planos</a><a href="#teste" class="text-slate-400 hover:text-blue-400">Teste grátis</a><a href="https://whatsapp.com/channel/0029Vb8DiAO0wajyAnLMGY3T" target="_blank" rel="noopener" class="text-slate-400 hover:text-blue-400">Canal de novidades</a><a href="privacidade" class="text-slate-400 hover:text-blue-400">Política de Privacidade</a><a href="https://wa.me/5534999187189?text=Ol%C3%A1%21+Preciso+de+ajuda+com+a+Premier+Host." target="_blank" rel="noopener" class="text-slate-400 hover:text-blue-400">Contato</a></div>
+			<p class="text-xs text-slate-600 font-semibold text-center">© 2026 Premier Host. Todos os direitos reservados.</p>
 		</div>
 	</footer>
 
     <script>
+        function fecharMenuMobile() {
+            document.getElementById('mobileMenuIndex').classList.add('hidden');
+        }
+
         function abrirModalAuth(tab = 'login') {
             const token = localStorage.getItem('premier_token');
             const user = localStorage.getItem('premier_user');

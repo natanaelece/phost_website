@@ -44,6 +44,8 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 │   │   ├── assets/           # CSS e JavaScript compartilhados do admin
 │   │   └── partials/         # Modais compartilhados
 │   ├── painel.html           # Dashboard do cliente (minha conta, meus pedidos)
+│   ├── vid/
+│   │   └── comofunciona.mp4  # Vídeo demonstrativo da landing e do modal de ajuda
 │   └── recuperar-senha.html  # Fluxo de redefinição de senha
 │
 ├── appsettings.json          # Configurações do ambiente (Asaas, Postgres, AD, JWT)
@@ -91,6 +93,28 @@ A aplicação fará a criação e atualização automática da estrutura de tabe
 - Hashes de senha utilizando Bcrypt (via `BCrypt.Net-Next`).
 - **Painel Admin:** A autenticação administrativa (`ValidateAdmin`) não depende mais do banco de dados (estateless). O login é feito com validação estrita baseada nas chaves de ambiente secretas do servidor (`AdminToken`).
 - Proteção nativa no formulário de acesso com **Cloudflare Turnstile** anti-bot.
+- A Content Security Policy de `Program.cs` declara separadamente scripts, estilos, imagens, frames, conexões e mídia. Vídeos locais devem usar URL da própria origem, como `/vid/comofunciona.mp4`; novos provedores externos precisam ser adicionados explicitamente à diretiva `media-src`.
+
+## 🌐 Landing page e Painel do Cliente
+
+A landing page (`wwwroot/index.html`) apresenta o serviço de aluguel de máquinas físicas para WYD, benefícios, segurança, formas de acesso, planos diário/semanal/mensal e teste gratuito de 30 minutos solicitado pelo WhatsApp. Os valores exibidos são referências do cálculo implementado no painel; a contratação e o total definitivo continuam centralizados no simulador.
+
+O painel (`wwwroot/painel.html`) permite consulta pública do simulador de preços. Links no formato abaixo abrem diretamente a área de cálculo e deixam o período correspondente selecionado:
+
+```text
+/painel?periodo=diaria#simular-planos
+/painel?periodo=semanal#simular-planos
+/painel?periodo=mensal#simular-planos
+```
+
+Sem autenticação, o visitante pode alterar computadores, instâncias e período para consultar o total. Login ou cadastro são exigidos para gerar PIX, acompanhar pedidos e credenciais, editar o perfil, usar indicações e consultar o histórico.
+
+O cabeçalho do painel possui dois modais locais:
+
+- **Como usar:** explica simulação, autenticação, pagamento e liberação, além de exibir o vídeo demonstrativo.
+- **Dúvidas frequentes:** responde questões comerciais e operacionais e oferece contato pelo WhatsApp.
+
+O vídeo compartilhado por essas duas telas fica em `wwwroot/vid/comofunciona.mp4`. As páginas devem referenciá-lo como `/vid/comofunciona.mp4` para funcionar no domínio principal, em `www` e em ambientes de teste sem conflito com a CSP.
 
 ## 🌐 Detalhes de Infraestrutura e Ambiente
 - **Ambiente de Hospedagem:** Container LXC dentro do Proxmox VE (Rodando Debian 12).

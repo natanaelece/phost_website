@@ -31,7 +31,8 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 - TelegramLogger.cs: Servico global de monitoramento. Intercepta logs de erro (Nivel Error) e os encaminha diretamente para o Telegram do administrador.
 
 ### /wwwroot (Frontend)
-- index.html: Landing page, formulario de cadastro (validacao forte anti-fake), login e redefinicao.
-- painel.html: SPA do usuario final, onde ele ve os pedidos dele e as credenciais geradas.
+- index.html: Landing page comercial, planos, teste gratuito, video demonstrativo, formulario de cadastro (validacao forte anti-fake), login e redefinicao.
+- painel.html: SPA do usuario final e simulador publico de precos. Visitantes podem calcular sem login; login e exigido para gerar PIX, acessar indicacoes, perfil, historico e credenciais. O topo possui modais nativos de Como usar e Duvidas frequentes.
+- vid/comofunciona.mp4: Video demonstrativo compartilhado pela landing e pelo modal Como usar. Referencie-o por URL da propria origem (`/vid/comofunciona.mp4`). Ao adicionar midia externa, revise explicitamente a diretiva `media-src` da CSP em Program.cs.
 - admin.html: Entrada compativel que redireciona para `/admin/dashboard.html`.
 - admin/: Painel Administrativo dividido em telas HTML estaticas (`dashboard.html`, `financeiro.html`, `crm.html`, `pedidos.html`, `usuarios.html`, `active-directory.html`), com UI customizada, modais nativos, fetch direto e CSS/JS compartilhados em `admin/assets/`. Mantenha CSS nativo/puro e reaproveite o endpoint `/api/admin/dashboard` para metricas de receita, pedidos, clientes, vencimentos e fila operacional.
