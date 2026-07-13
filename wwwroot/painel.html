@@ -710,12 +710,27 @@
                     histBlock.classList.remove('hidden');
                     
                     histList.innerHTML = data.orders.map(o => {
-                        const dStart = new Date(o.created_at);
+                        const dStart = new Date(o.createdAt);
                         const dEnd = new Date(dStart.getTime() + (o.days * 24 * 60 * 60 * 1000));
                         const now = new Date();
-                        const isActive = now <= dEnd;
-                        const statusBadge = isActive ? '<span class="text-green-400 font-bold bg-green-400/10 px-2 py-1 rounded text-xs">Ativo</span>' : '<span class="text-red-400 font-bold bg-red-400/10 px-2 py-1 rounded text-xs">Expirado</span>';
-                        const deliveryBadge = o.delivered ? '<span class="text-blue-300 font-bold bg-blue-400/10 px-2 py-1 rounded text-xs">Entregue</span>' : '<span class="text-amber-300 font-bold bg-amber-400/10 px-2 py-1 rounded text-xs">Pendente</span>';
+                        const isCanceled = o.status === 'cancelado';
+                        const isActive = !isCanceled && now <= dEnd;
+                        const statusBadge = isCanceled
+                            ? '<span class="text-slate-300 font-bold bg-slate-400/10 px-2 py-1 rounded text-xs">Cancelado</span>'
+                            : (isActive
+                                ? '<span class="text-green-400 font-bold bg-green-400/10 px-2 py-1 rounded text-xs">Ativo</span>'
+                                : '<span class="text-red-400 font-bold bg-red-400/10 px-2 py-1 rounded text-xs">Expirado</span>');
+                        const deliveryBadge = isCanceled
+                            ? (o.refunded
+                                ? '<span class="text-violet-300 font-bold bg-violet-400/10 px-2 py-1 rounded text-xs">Reembolsado</span>'
+                                : '<span class="text-slate-400 font-bold bg-slate-400/10 px-2 py-1 rounded text-xs">Sem reembolso</span>')
+                            : (o.delivered
+                                ? '<span class="text-blue-300 font-bold bg-blue-400/10 px-2 py-1 rounded text-xs">Entregue</span>'
+                                : '<span class="text-amber-300 font-bold bg-amber-400/10 px-2 py-1 rounded text-xs">Pendente</span>');
+                        const canceledAt = o.canceledAt ? new Date(o.canceledAt) : null;
+                        const dateSummary = isCanceled
+                            ? `Cancelado em: ${(canceledAt || dStart).toLocaleDateString('pt-BR')}`
+                            : `${isActive ? 'Vence' : 'Venceu'} em: ${dEnd.toLocaleDateString('pt-BR')}`;
                         
                         return `
                         <div class="bg-slate-800 border border-slate-700 p-4 rounded-lg flex justify-between items-center">
@@ -730,11 +745,11 @@
                                         ${statusBadge}
                                     </div>
                                     <div class="text-center">
-                                        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Entrega:</p>
+                                        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">${isCanceled ? 'Pagamento:' : 'Entrega:'}</p>
                                         ${deliveryBadge}
                                     </div>
                                 </div>
-                                <p class="text-xs text-slate-500">${isActive ? 'Vence' : 'Venceu'} em: ${dEnd.toLocaleDateString('pt-BR')}</p>
+                                <p class="text-xs text-slate-500">${dateSummary}</p>
                             </div>
                         </div>`;
                     }).join('');

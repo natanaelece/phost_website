@@ -442,7 +442,10 @@ namespace PremierAPI.Controllers
             string? status = await db.QueryFirstOrDefaultAsync<string>(
                 "SELECT status FROM orders WHERE asaas_payment_id = @Id OR asaas_pix_qr_code_id = @Id",
                 new { Id = paymentId });
-            return Ok(new { status = status ?? "pendente" });
+            // O campo known permite que outros webhooks da mesma conta Asaas reconheçam
+            // com segurança os QR Codes da PremierHost sem depender da descrição da cobrança.
+            // Mantemos "pendente" como fallback para não quebrar clientes antigos deste endpoint.
+            return Ok(new { status = status ?? "pendente", known = status != null });
         }
         
         [HttpGet("cupom/{codigo}")]

@@ -59,10 +59,33 @@ namespace PremierAPI.Controllers
                                        && !user.used_referral_discount 
                                        && expiresAt > DateTime.Now;
 
-            // CORREÇÃO: Busca os pedidos pagos para montar o histórico na interface
-            var orders = await db.QueryAsync(
-                "SELECT created_at, period, days, computers, wyds_per_computer, total_price, delivered, delivered_at FROM orders WHERE user_id = @Id AND status = 'pago' ORDER BY created_at DESC",
+            // HISTÓRICO DO CLIENTE: mantém os pedidos pagos e também exibe os cancelados.
+            // Pedidos pendentes continuam no bloco próprio do PIX para não aparecerem duplicados.
+            var ordersRaw = await db.QueryAsync(
+                @"SELECT created_at AS ""CreatedAt"", period AS ""Period"", days AS ""Days"",
+                         computers AS ""Computers"", wyds_per_computer AS ""WydsPerComputer"",
+                         total_price AS ""TotalPrice"", status AS ""Status"",
+                         delivered AS ""Delivered"", delivered_at AS ""DeliveredAt"",
+                         canceled_at AS ""CanceledAt"", COALESCE(refunded, false) AS ""Refunded""
+                  FROM orders
+                  WHERE user_id = @Id AND status IN ('pago', 'cancelado')
+                  ORDER BY created_at DESC",
                 new { Id = id });
+
+            var orders = ordersRaw.Select(order => new
+            {
+                createdAt = (DateTime)order.CreatedAt,
+                period = (string)order.Period,
+                days = (int)order.Days,
+                computers = (int)order.Computers,
+                wydsPerComputer = (int)order.WydsPerComputer,
+                totalPrice = (decimal)order.TotalPrice,
+                status = (string)order.Status,
+                delivered = (bool)order.Delivered,
+                deliveredAt = order.DeliveredAt as DateTime?,
+                canceledAt = order.CanceledAt as DateTime?,
+                refunded = (bool)order.Refunded
+            });
 
             return Ok(new { 
                 user = new {
