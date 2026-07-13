@@ -82,10 +82,20 @@ A aplicação fará a criação e atualização automática da estrutura de tabe
 ## 💳 Fluxo de Compra e Automação
 
 1. O usuário acessa o Painel e realiza o **Checkout** (compra de pacotes de slots).
-2. O `CheckoutController` chama a API do Asaas e gera um QR Code **PIX**.
-3. O Asaas confirma o pagamento através da rota definida em `WebhookController`.
+2. O `CheckoutController` recalcula o valor no backend e gera no Asaas um QR Code **PIX** individual, de valor fixo, uso único e validade de 15 minutos. Não é solicitado CPF/CNPJ ao cliente.
+3. Depois do pagamento, o Asaas cria o cliente e a cobrança correspondentes e envia o `pixQrCodeId` pela rota definida em `WebhookController`, que faz a conciliação com o pedido local. O webhook completa nome, e-mail e WhatsApp do cliente usando o cadastro do site, vincula-o ao grupo `PremierHost` e desativa todas as notificações de cobrança do cliente e do provedor para evitar comunicações e taxas desnecessárias.
 4. Ao constatar o pagamento, o sistema automaticamente gera as permissões e aloca as configurações do **Active Directory**, liberando o acesso ao usuário contratante de acordo com o plano adquirido (dias corridos).
 5. O `AdOrderExpirationWorker` roda em segundo plano desativando acessos de licenças expiradas.
+
+Esse fluxo requer ao menos uma chave Pix ativa na conta Asaas do ambiente utilizado. O QR Code guarda o valor calculado pelo servidor; o pagador não pode escolher ou alterar esse valor.
+
+### Compatibilidade dos webhooks Asaas
+
+- O texto historico enviado ao criar uma cobranca dinamica era `Licença ({periodo}) - AnyDesk: {id}`. Preserve esse formato em qualquer fluxo dinamico legado.
+- O QR Code estatico continua recebendo esse texto no campo `description`, mas o Asaas cria a cobranca somente depois do pagamento e pode atribuir a ela a descricao automatica de Pix recebido. Portanto, a descricao presente no evento da cobranca nao e um identificador confiavel para esse fluxo.
+- Webhooks que compartilham a mesma conta Asaas devem reconhecer compras atuais da PremierHost pelo `payment.pixQrCodeId`, conciliando esse valor com `orders.asaas_pix_qr_code_id`. A descricao iniciada por `Licença` serve apenas como compatibilidade com cobrancas dinamicas antigas.
+- Nao tente corrigir a descricao depois do `PAYMENT_RECEIVED`: a API do Asaas restringe a alteracao de cobrancas ja recebidas e o outro webhook ja pode ter recebido o evento original.
+- Se uma integracao externa exigir obrigatoriamente que a descricao da propria cobranca comece com `Licença`, ela precisa ser adaptada para `pixQrCodeId` ou o checkout teria de voltar para cobranca dinamica, que em producao exige CPF/CNPJ. A decisao atual do projeto e manter o QR estatico para nao solicitar documento ao cliente.
 
 ## 🔐 Segurança
 

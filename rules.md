@@ -20,8 +20,13 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 ### /Controllers (API Endpoints)
 - AdminController.cs: Centro de comando administrativo. Gerencia usuarios (local e AD), cancelamentos de pedidos, listagem de estatisticas, cockpit financeiro/CRM e acoes coercitivas. O endpoint `GET /api/admin/dashboard` aceita periodos fixos e personalizados (`period`, `start`, `end`) e alimenta Dashboard, Financeiro e CRM do admin.
 - AuthController.cs: Fluxo de autenticacao. Realiza o cadastro do usuario, criacao paralela da conta no Active Directory (tratando duplicacoes), Login via JWT e recuperacao de senha.
-- CheckoutController.cs: Interface com o Asaas. Processa a escolha do cliente e gera faturas PIX dinamicas.
-- WebhookController.cs: Ponto vital. Recebe os gatilhos (webhooks) do Asaas. Quando um PIX e pago, este arquivo e responsavel por aprovar o pedido e disparar a logica que concede acesso ao usuario no Active Directory.
+- CheckoutController.cs: Interface com o Asaas. Recalcula o valor do pedido no backend e gera um QR Code PIX estatico, individual, de valor fixo, pagamento unico e validade curta. Esse fluxo nao cadastra previamente o pagador nem solicita CPF/CNPJ; a conciliacao ocorre pelo `pixQrCodeId` recebido no webhook. Preserve no QR a descricao historica exata `Licença ({periodo}) - AnyDesk: {id}`, mas nao presuma que o Asaas a copiara para a cobranca criada automaticamente depois do pagamento.
+- WebhookController.cs: Ponto vital. Recebe os gatilhos (webhooks) do Asaas. Pagamentos atuais por QR estatico devem ser identificados por `payment.pixQrCodeId` e conciliados com `orders.asaas_pix_qr_code_id`, nunca pela descricao automatica da cobranca. O teste `description.StartsWith("Licença")` existe somente para cobrancas dinamicas legadas. Quando um PIX e pago, este arquivo aprova o pedido, sincroniza nome/e-mail/WhatsApp do cadastro local no cliente Asaas, vincula-o ao grupo `PremierHost`, define `notificationDisabled=true`, desativa em lote todos os canais de notificacao do cliente e do provedor, e dispara a logica que concede acesso ao usuario no Active Directory.
+
+### Regra critica de compatibilidade Asaas
+- A escolha atual do produto e QR Pix estatico para nao solicitar CPF/CNPJ. Nao reverta para `/payments` dinamico sem autorizacao expressa: em producao o Asaas exige CPF/CNPJ do cliente nesse fluxo.
+- O campo `description` enviado a `/pix/qrCodes/static` descreve o QR, mas a cobranca e criada automaticamente pelo Asaas somente quando o Pix e recebido e pode chegar aos webhooks com descricao automatica. Integracoes da mesma conta devem filtrar por `pixQrCodeId`, nao apenas pelo prefixo `Licença`.
+- Nao tente atualizar a descricao apos `PAYMENT_RECEIVED`: cobrancas recebidas possuem restricoes de edicao e isso nao altera o payload que outros webhooks ja receberam.
 - ProfileController.cs: Edicao de dados triviais do perfil do cliente.
 
 ### /Services (Logica de Negocios e Background)

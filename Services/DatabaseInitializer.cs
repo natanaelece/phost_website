@@ -49,6 +49,24 @@ namespace PremierAPI.Services
 
                 @"CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token);",
 
+                @"CREATE TABLE IF NOT EXISTS coupons (
+                    id SERIAL PRIMARY KEY,
+                    code VARCHAR(20) UNIQUE NOT NULL,
+                    discount_type VARCHAR(10) NOT NULL CHECK (discount_type IN ('percent', 'fixed')),
+                    discount_value DECIMAL(10,2) NOT NULL,
+                    is_active BOOLEAN DEFAULT true,
+                    max_uses INT,
+                    uses INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );",
+
+                @"INSERT INTO coupons
+                    (code, discount_type, discount_value, is_active, max_uses, uses, created_at)
+                  VALUES
+                    ('PROMO10', 'percent', 10.00, true, NULL, 0, TIMESTAMP '2026-07-05 14:48:23.512924'),
+                    ('BETA15', 'fixed', 15.00, true, NULL, 0, TIMESTAMP '2026-07-05 14:48:23.512924')
+                  ON CONFLICT (code) DO NOTHING;",
+
                 @"CREATE TABLE IF NOT EXISTS orders (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -59,6 +77,11 @@ namespace PremierAPI.Services
                     days INT,
                     total_price DECIMAL(10,2),
                     asaas_payment_id VARCHAR(100),
+                    asaas_customer_id VARCHAR(100),
+                    asaas_pix_qr_code_id VARCHAR(100),
+                    pix_payload TEXT,
+                    pix_encoded_image TEXT,
+                    pix_expires_at TIMESTAMP,
                     status VARCHAR(20),
                     delivered BOOLEAN DEFAULT false,
                     delivered_at TIMESTAMP,
@@ -72,6 +95,11 @@ namespace PremierAPI.Services
 
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT false;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(100);",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS asaas_pix_qr_code_id VARCHAR(100);",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_payload TEXT;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_encoded_image TEXT;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_expires_at TIMESTAMP;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_token VARCHAR(255);",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_username VARCHAR(100);",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered BOOLEAN DEFAULT false;",
@@ -82,6 +110,8 @@ namespace PremierAPI.Services
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_missing_link_alerted BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMP;",
+
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_asaas_pix_qr_code_id ON orders(asaas_pix_qr_code_id) WHERE asaas_pix_qr_code_id IS NOT NULL;",
                 
                 "UPDATE users SET is_active = true WHERE is_active IS NULL;",
                 "UPDATE orders SET delivered = false WHERE delivered IS NULL;",
@@ -213,4 +243,3 @@ namespace PremierAPI.Services
         }
     }
 }
-

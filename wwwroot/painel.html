@@ -724,7 +724,16 @@
                                 <p class="text-xs text-slate-400">Contratado em: ${dStart.toLocaleDateString('pt-BR')}</p>
                             </div>
                             <div class="text-right">
-                                <div class="mb-1 flex justify-end gap-2">${statusBadge}${deliveryBadge}</div>
+                                <div class="mb-1 flex justify-end gap-3">
+                                    <div class="text-center">
+                                        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Plano:</p>
+                                        ${statusBadge}
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Entrega:</p>
+                                        ${deliveryBadge}
+                                    </div>
+                                </div>
                                 <p class="text-xs text-slate-500">${isActive ? 'Vence' : 'Venceu'} em: ${dEnd.toLocaleDateString('pt-BR')}</p>
                             </div>
                         </div>`;
@@ -783,6 +792,7 @@
                 });
                 if (res.ok) {
                     const data = await res.json();
+                    data.expiresAt = new Date(Date.now() + (data.expiresInSeconds * 1000)).toISOString();
                     pendingPixData = data;
                     document.getElementById('pendingPixBlock').classList.remove('hidden');
                     document.getElementById('pendingPixBlock').classList.add('flex');
@@ -804,11 +814,20 @@
             }
             if (!pendingPixData) return;
             try {
-                await fetch(`/api/checkout/cancel/${pendingPixData.paymentId}`, { 
+                const res = await fetch(`/api/checkout/cancel/${pendingPixData.paymentId}`, {
                     method: 'POST',
                     headers: { 'X-Session-Token': localStorage.getItem('premier_token') }
                 });
-            } catch (e) {}
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.erro || 'Não foi possível cancelar o Pix.');
+                }
+            } catch (e) {
+                const geralMsg = document.getElementById('geralErrorMsg');
+                geralMsg.innerText = e.message;
+                geralMsg.classList.remove('hidden');
+                return;
+            }
             
             pendingPixData = null;
             clearInterval(pixPollingInterval);
@@ -1256,7 +1275,8 @@
                         Pcs: pcs,
                         Wyds: wyds,
                         Dias: diasEnvio,
-                        UsouDescontoIndicacao: eligibleForDiscount
+                        UsouDescontoIndicacao: eligibleForDiscount,
+                        CodigoCupom: cupomAtivo?.code || ''
                     })
                 });
                 if (response.status === 401) { clearLocalSession(); configureGuestAccess(); return; }
@@ -1265,22 +1285,22 @@
 
                 pendingPixData = {
                     paymentId: data.paymentId,
-                    total: total,
+                    total: data.total,
                     encodedImage: data.encodedImage,
                     payload: data.payload,
-                    expiresAt: new Date(new Date().getTime() + 15 * 60000).toISOString()
+                    expiresAt: new Date(Date.now() + (data.expiresInSeconds * 1000)).toISOString()
                 };
 
                 document.getElementById('pendingPixBlock').classList.remove('hidden');
                 document.getElementById('pendingPixBlock').classList.add('flex');
-                document.getElementById('pendingPixValue').innerText = `R$ ${total.toFixed(2).replace('.', ',')}`;
+                document.getElementById('pendingPixValue').innerText = `R$ ${data.total.toFixed(2).replace('.', ',')}`;
                 
                 btn.disabled = true;
                 btn.innerText = 'Você tem um pedido pendente acima';
                 btn.classList.replace('bg-blue-600', 'bg-slate-600');
                 btn.classList.replace('hover:bg-blue-500', 'hover:bg-slate-600');
 
-                document.getElementById('pixModalAmount').innerText = `R$ ${total.toFixed(2).replace('.', ',')}`;
+                document.getElementById('pixModalAmount').innerText = `R$ ${data.total.toFixed(2).replace('.', ',')}`;
                 document.getElementById('qrCodeImg').src = `data:image/png;base64,${data.encodedImage}`;
                 document.getElementById('pixCodeText').innerText = data.payload;
                 
@@ -1295,7 +1315,8 @@
                     calcular();
                 }
 
-                iniciarPixPolling(data.paymentId, 900);
+                const secondsLeft = data.expiresInSeconds;
+                iniciarPixPolling(data.paymentId, secondsLeft);
 
             } catch (error) {
                 geralMsg.innerText = "Falha no gateway: " + error.message; geralMsg.classList.remove('hidden');
