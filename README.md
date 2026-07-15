@@ -26,7 +26,7 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 ```text
 /PremierAPI
 │
-├── Controllers/              # Controladores da API (Admin, Auth, Checkout, Webhook)
+├── Controllers/              # Controladores da API (Admin, Auth, Checkout, Webhook, Analytics)
 ├── Services/                 # Regras de Negócio e Background Workers
 │   ├── ActiveDirectoryService.cs    # Manipulação do AD (LDAP) via System.DirectoryServices
 │   ├── AdOrderExpirationWorker.cs   # Background job que verifica e expira licenças não pagas
@@ -119,12 +119,22 @@ O painel (`wwwroot/painel.html`) permite consulta pública do simulador de preç
 
 Sem autenticação, o visitante pode alterar computadores, instâncias e período para consultar o total. Login ou cadastro são exigidos para gerar PIX, acompanhar pedidos e credenciais, editar o perfil, usar indicações e consultar o histórico.
 
+Antes de gerar o Pix, o cliente informa em até 50 caracteres o nome do servidor de WYD em que pretende jogar. O backend rejeita exclusivamente os nomes `wyd2` e `wyd 2` (ignorando maiúsculas, minúsculas e espaços externos), antes de qualquer chamada ao Asaas; nomes diferentes, inclusive `wyd nome 2`, permanecem permitidos. O valor informado fica salvo em `orders.wyd_server_name` e aparece na tela de Pedidos do admin. A coluna é criada ou atualizada automaticamente pelo `DatabaseInitializer.cs`.
+
 O cabeçalho do painel possui dois modais locais:
 
 - **Como usar:** explica simulação, autenticação, pagamento e liberação, além de exibir o vídeo demonstrativo.
 - **Dúvidas frequentes:** responde questões comerciais e operacionais e oferece contato pelo WhatsApp.
 
 O vídeo compartilhado por essas duas telas fica em `wwwroot/vid/comofunciona.mp4`. As páginas devem referenciá-lo como `/vid/comofunciona.mp4` para funcionar no domínio principal, em `www` e em ambientes de teste sem conflito com a CSP.
+
+## Product Analytics first-party
+
+O frontend utiliza `wwwroot/analytics.js` e o endpoint `POST /api/analytics/events` para medir o funil de contratação sem depender de cookies ou plataformas externas. A tabela `product_analytics_events` é criada de forma idempotente pelo `DatabaseInitializer.cs`, recebe somente eventos e propriedades permitidos e remove registros com mais de 13 meses na inicialização.
+
+O funil acompanha landing, simulador, autenticação, cadastro, tentativa de checkout, Pix gerado, pagamento recebido e acesso entregue. Eventos de pagamento e entrega são confirmados pelo backend. E-mail, WhatsApp, AnyDesk, senha, payload Pix e dados bancários não devem ser enviados como propriedades de analytics.
+
+As contagens por evento e por sessão aparecem no bloco **Funil de produto** do Dashboard administrativo e respeitam o filtro de período já existente.
 
 ## 🌐 Detalhes de Infraestrutura e Ambiente
 - **Ambiente de Hospedagem:** Container LXC dentro do Proxmox VE (Rodando Debian 12).
@@ -187,7 +197,7 @@ Principais areas do painel:
 - **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.
 - **Financeiro:** analise de receita paga, total historico, pedidos manuais, conversao, receita por plano, tipo de pedido e status dos pedidos.
 - **CRM:** visao de clientes ativos, licencas vencendo, entregas pendentes, novos usuarios, proximos vencimentos, acoes recomendadas e ranking de clientes.
-- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD.
+- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD. Em Pedidos, textos extensos usam reticências em telas estreitas e o ID do Asaas permanece recolhido até o operador solicitar sua exibição.
 
 ### Dashboard por periodo
 

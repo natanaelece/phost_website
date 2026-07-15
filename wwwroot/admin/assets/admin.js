@@ -9,11 +9,14 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     let _adLinkOptionsLoaded = false;
     let adminToastTimer = null;
     let adminConfirmResolver = null;
+    let adminLastModalTrigger = null;
 
     function showAdminMessage(type, message) {
         const toast = document.getElementById('adminToast');
         if (!toast) return;
         toast.textContent = '';
+        toast.setAttribute('role', type === 'success' ? 'status' : 'alert');
+        toast.setAttribute('aria-live', type === 'success' ? 'polite' : 'assertive');
 
         const title = document.createElement('div');
         title.className = 'toast-title';
@@ -183,6 +186,24 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     function closeModals() {
         document.querySelectorAll('.modal-overlay').forEach(e=>e.classList.remove('active'));
         closeAdLinkDropdown();
+        adminLastModalTrigger?.focus();
+    }
+
+    function enhanceAdminModals() {
+        document.querySelectorAll('.modal-overlay').forEach((modal, index) => {
+            modal.setAttribute('role', 'dialog');
+            modal.setAttribute('aria-modal', 'true');
+            const title = modal.querySelector('.modal-title');
+            if (title) {
+                if (!title.id) title.id = `admin-modal-title-${index}`;
+                modal.setAttribute('aria-labelledby', title.id);
+            }
+            modal.querySelectorAll('label').forEach(label => {
+                if (label.htmlFor) return;
+                const control = label.parentElement?.querySelector('input,select,textarea');
+                if (control?.id) label.htmlFor = control.id;
+            });
+        });
     }
 
     async function openManualOrderModal() {
@@ -372,7 +393,10 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     function openCancelOrderModal(id, isPaid) {
         document.getElementById('cancel-order-id').value = id;
         document.getElementById('btn-cancel-refund').style.display = isPaid ? 'inline-flex' : 'none';
-        document.getElementById('btn-cancel-no-refund').textContent = isPaid ? 'Cancelar SEM Reembolso' : 'Cancelar';
+        document.getElementById('btn-cancel-no-refund').textContent = isPaid ? 'Cancelar sem reembolso' : 'Cancelar pedido';
+        document.getElementById('cancel-order-note').textContent = isPaid
+            ? 'Este pedido está pago. Você pode cancelar apenas no sistema ou cancelar e solicitar o reembolso no Asaas. Ambas as opções encerram o pedido.'
+            : 'Este pedido ainda não está pago. O cancelamento encerrará o Pix pendente e removerá o pedido da fila operacional.';
         document.getElementById('modal-cancel-order').classList.add('active');
     }
 
@@ -538,7 +562,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                         </div>
                     </td>
                     <td>
-                        <div class="action-row">
+                        <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
                             <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#3b82f6;border-color:#3b82f6" onclick="openAdEditModal('${u.username}')">&#9998; Editar</button>
                             <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#60a5fa;border-color:#60a5fa" onclick="openAdPasswordModal('${u.username}')">&#128274; Senha</button>
                             <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#a78bfa;border-color:#a78bfa" onclick="openDuplicateModal('${u.username}', '${esc(u.fullName)}')">&#128203; Duplicar</button>
@@ -546,7 +570,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                                 ? `<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#fbbf24;border-color:#fbbf24" onclick="moveOu('${u.username}', true)">Arquivar</button>`
                                 : `<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#4ade80;border-color:#4ade80" onclick="moveOu('${u.username}', false)">${u.ouPath === 'USUARIOS_WEBSITE' ? 'Mover para ativos' : 'Reativar'}</button>`}
                             <button class="btn btn-outline" style="padding:4px;font-size:10px;color:red;border-color:red" onclick="deleteAdUser('${u.username}')">Excluir</button>
-                        </div>
+                        </div></details>
                     </td>
                 </tr>`;
             };
@@ -784,15 +808,29 @@ const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordF
 const API='/api/admin';
 
 function init(){
+  const loginError=document.getElementById('lerr');if(loginError){loginError.setAttribute('role','alert');loginError.setAttribute('aria-live','assertive');}
+  document.querySelectorAll('label').forEach(label=>{if(label.htmlFor)return;const control=label.parentElement?.querySelector('input,select,textarea');if(control?.id)label.htmlFor=control.id;});
+  document.querySelectorAll('button[title]').forEach(button=>{if(!button.getAttribute('aria-label'))button.setAttribute('aria-label',button.title);});
   try{const d=JSON.parse(localStorage.getItem('premierAdmin')||'{}');if(d.token){S.token=d.token;S.user=d.user;showApp();return;}}catch(e){}
   showLogin();
 }
 function showLogin(){document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';}
 function showApp(){
   document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';
+  setupAdminMobileNavigation();
   const n=S.user?.name||'Admin';document.getElementById('sname').textContent=n;document.getElementById('savatar').textContent=n[0].toUpperCase();
   setupCurrentView();
   loadCurrentView();
+}
+function setupAdminMobileNavigation(){
+  const header=document.querySelector('#main > header');
+  if(!header||header.querySelector('.mobile-nav-toggle'))return;
+  const button=document.createElement('button');button.type='button';button.className='mobile-nav-toggle';button.setAttribute('aria-label','Abrir menu administrativo');button.setAttribute('aria-controls','sidebar');button.setAttribute('aria-expanded','false');button.textContent='☰';
+  header.prepend(button);
+  const backdrop=document.createElement('div');backdrop.className='sidebar-backdrop';document.body.appendChild(backdrop);
+  const close=()=>{document.getElementById('sidebar')?.classList.remove('mobile-open');backdrop.classList.remove('active');button.setAttribute('aria-expanded','false');};
+  button.addEventListener('click',()=>{const sidebar=document.getElementById('sidebar');const open=!sidebar.classList.contains('mobile-open');sidebar.classList.toggle('mobile-open',open);backdrop.classList.toggle('active',open);button.setAttribute('aria-expanded',String(open));});
+  backdrop.addEventListener('click',close);document.querySelectorAll('.ni').forEach(link=>link.addEventListener('click',close));
 }
 
 async function doLogin(){
@@ -812,7 +850,21 @@ async function doLogin(){
   finally{btn.disabled=false;btn.innerHTML='Entrar no Painel';}
   function showErr(m){err.textContent=m;err.style.display='block';}
 }
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login-screen').style.display!=='none')doLogin();});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&document.getElementById('login-screen').style.display!=='none')doLogin();
+  if(e.key==='Escape'&&document.querySelector('.modal-overlay.active')){if(adminConfirmResolver)resolveAdminConfirm(false);else closeModals();}
+  if(e.key==='Tab'){
+    const modal=document.querySelector('.modal-overlay.active');if(!modal)return;
+    const focusable=[...modal.querySelectorAll('button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),a[href]')];if(!focusable.length)return;
+    const first=focusable[0],last=focusable[focusable.length-1];
+    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+  }
+});
+document.addEventListener('click',e=>{
+  const trigger=e.target.closest('button');if(!trigger||document.querySelector('.modal-overlay.active'))return;
+  adminLastModalTrigger=trigger;
+  requestAnimationFrame(()=>document.querySelector('.modal-overlay.active input:not([type="hidden"]),.modal-overlay.active select,.modal-overlay.active textarea,.modal-overlay.active button')?.focus());
+},true);
 document.addEventListener('click',e=>{const p=document.getElementById('ad-link-picker');if(p&&!p.contains(e.target))closeAdLinkDropdown();});
 async function doLogout(){if(hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja sair e descarta-las?'))return;localStorage.removeItem('premierAdmin');S.token=null;S.user=null;if(S.chart){S.chart.destroy();S.chart=null;}if(S.statusChart){S.statusChart.destroy();S.statusChart=null;}showLogin();}
 function hdrs(){return{'X-Session-Token':S.token,'Content-Type':'application/json'};}
@@ -890,6 +942,7 @@ async function loadDash(){
   document.getElementById('s-total').textContent='Total historico '+fmtCur(st.totalRevenue);
   renderChart(data.revenueSeries||data.monthlyRevenue||[]);
   renderStatusChart(data.statusBreakdown||[]);
+  renderAnalyticsFunnel(data.analyticsFunnel||[]);
   renderActionList('action-list',data.actionQueue||[]);
   renderTopMini(data.topCustomers||[]);
   renderRecent(data.recentOrders||[]);
@@ -901,6 +954,13 @@ function renderRecent(rows){
   const rb=document.getElementById('recent-body');
   if(!rows.length){rb.innerHTML='<tr><td colspan="7" class="empty">Nenhum pedido ainda.</td></tr>';return;}
   rb.innerHTML=rows.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td>${esc(o.period)}</td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td>${sbadge(o.status,o.isActive)}</td><td>${o.isActive?'<span style="color:var(--ok);font-size:12px">'+fmtDate(o.expiresAt)+'</span>':'<span class="muted">'+fmtDate(o.expiresAt)+'</span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td></tr>`).join('');
+}
+function renderAnalyticsFunnel(rows){
+  const el=document.getElementById('analytics-funnel');if(!el)return;
+  const order=['landing_viewed','simulator_viewed','auth_opened','signup_completed','checkout_attempted','pix_created','payment_received','access_delivered'];
+  const labels={landing_viewed:'Landing',simulator_viewed:'Simulador',auth_opened:'Autenticação',signup_completed:'Cadastro concluído',checkout_attempted:'Tentativa de compra',pix_created:'Pix gerado',payment_received:'Pagamento recebido',access_delivered:'Acesso entregue'};
+  const map=new Map(rows.map(x=>[x.eventName,x]));
+  el.innerHTML=order.map(name=>{const item=map.get(name)||{events:0,sessions:0};return `<div class="funnel-step"><div class="funnel-label">${labels[name]}</div><div class="funnel-value">${item.sessions}</div><div class="funnel-note">${item.events} eventos</div></div>`;}).join('');
 }
 function renderChart(mr){
   const el=document.getElementById('revenue-chart');if(!el)return;
@@ -968,13 +1028,19 @@ function fmtPct(v){return (parseFloat(v||0)).toFixed(1).replace('.',',')+'%';}
 function initial(s){return esc((s||'?').trim()[0]||'?').toUpperCase();}
 function statusLabel(s){return({pago:'Pago',pendente:'Pendente',cancelado:'Cancelado',expirado:'Expirado PIX'}[s]||s||'Indefinido');}
 function daysUntil(d){const dt=new Date(d);if(isNaN(dt))return'--';const days=Math.ceil((dt-new Date())/86400000);if(days<0)return'vencida';if(days===0)return'hoje';if(days===1)return'amanha';return days+' dias';}
+function renderPaymentId(value,paidManually){
+  const manual=paidManually?'<span class="payment-manual">Pago manual</span>':'';
+  if(!value)return'<span class="muted">&#8212;</span>'+manual;
+  const safe=esc(value);
+  return`<details class="payment-id-details"><summary title="Exibir ID do Asaas">ID...</summary><code title="${safe}">${safe}</code></details>${manual}`;
+}
 
 async function loadOrders(p){
   if(p)S.ordPage=p;
-  const body=document.getElementById('orders-body');body.innerHTML='<tr><td colspan="12" class="loading"><div class="spinner"></div> Carregando...</td></tr>';
+  const body=document.getElementById('orders-body');body.innerHTML='<tr><td colspan="13" class="loading"><div class="spinner"></div> Carregando...</td></tr>';
   const data=await apiFetch(`${API}/orders?status=${S.ordFilter}&page=${S.ordPage}&limit=20`);if(!data)return;
-  if(!data.orders?.length){body.innerHTML='<tr><td colspan="12" class="empty">Nenhum pedido encontrado.</td></tr>';}
-  else{body.innerHTML=data.orders.map(o=>`<tr><td><div class="ucell"><div class="avatar">${esc(o.userName)[0].toUpperCase()}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td class="muted">${esc(o.whatsapp||'&#8212;')}</td><td>${esc(o.period)} <span class="muted">(${o.days}d)</span></td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td class="muted" style="font-family:monospace;font-size:11px">${esc(o.asaasPaymentId||'-')}${o.paidManually?'<div style="font-family:Inter,sans-serif;font-size:10px;color:var(--ok);margin-top:3px">Pago manual</div>':''}</td><td>${sbadge(o.status,o.isActive)}</td><td><label class="inline-check"><input type="checkbox" ${o.status!=='pago'?'disabled':''} ${o.delivered?'checked':''} onchange="toggleOrderDelivery('${o.id}', this.checked, this)"><span ${o.status!=='pago'?'class="muted"':''}>${o.delivered?'Entregue':'Pendente'}</span></label></td><td>${o.isActive?'<span style="color:var(--ok);font-size:12px">Ativa ate '+fmtDate(o.expiresAt)+'</span>':'<span class="muted">Exp. '+fmtDate(o.expiresAt)+'</span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td><td>${o.canceledAt?'<span class="muted" style="color:var(--err)">'+(o.paidManually||(o.asaasPaymentId||'').startsWith('MANUAL_')?'':(o.refunded?'C/R ':'S/R '))+fmtDate(o.canceledAt)+'</span>':'<span class="muted">&#8212;</span>'}</td><td><div class="action-row">${(o.status==='pendente'||o.status==='expirado')?`<button class="btn btn-outline" style="color:var(--ok);border-color:var(--ok);padding:4px 8px;font-size:11px;margin-right:4px;" onclick="markOrderPaid('${o.id}')">Marcar Pago</button>`:''}${(o.status==='pago'||o.status==='pendente')?`<button class="btn btn-outline" style="color:var(--err);border-color:var(--err);padding:4px 8px;font-size:11px" onclick="openCancelOrderModal('${o.id}', ${o.status==='pago' && !o.paidManually && !(o.asaasPaymentId||'').startsWith('MANUAL_')})">Cancelar</button>`:''}${o.status==='cancelado'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="deleteOrder('${o.id}')" title="Excluir">&#128465;</button>`:''}</div></td></tr>`).join('');}
+  if(!data.orders?.length){body.innerHTML='<tr><td colspan="13" class="empty">Nenhum pedido encontrado.</td></tr>';}
+  else{body.innerHTML=data.orders.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div class="cell-shrink"><div class="ucell-name cell-ellipsis" title="${esc(o.userName)}">${esc(o.userName)}</div><div class="ucell-email cell-ellipsis" title="${esc(o.email)}">${esc(o.email)}</div></div></div></td><td class="muted"><span class="cell-ellipsis" title="${esc(o.whatsapp||'Não informado')}">${esc(o.whatsapp||'&#8212;')}</span></td><td><span class="cell-ellipsis" title="${esc(o.wydServerName||'Não informado')}">${esc(o.wydServerName||'&#8212;')}</span></td><td>${esc(o.period)} <span class="muted">(${o.days}d)</span></td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td class="payment-id-cell">${renderPaymentId(o.asaasPaymentId,o.paidManually)}</td><td>${sbadge(o.status,o.isActive)}</td><td><label class="inline-check"><input type="checkbox" ${o.status!=='pago'?'disabled':''} ${o.delivered?'checked':''} onchange="toggleOrderDelivery('${o.id}', this.checked, this)"><span ${o.status!=='pago'?'class="muted"':''}>${o.delivered?'Entregue':'Pendente'}</span></label></td><td>${o.isActive?'<span style="color:var(--ok);font-size:12px">Ativa ate '+fmtDate(o.expiresAt)+'</span>':'<span class="muted">Exp. '+fmtDate(o.expiresAt)+'</span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td><td>${o.canceledAt?'<span class="muted" style="color:var(--err)">'+(o.paidManually||(o.asaasPaymentId||'').startsWith('MANUAL_')?'':(o.refunded?'C/R ':'S/R '))+fmtDate(o.canceledAt)+'</span>':'<span class="muted">&#8212;</span>'}</td><td><div class="action-row">${(o.status==='pendente'||o.status==='expirado')?`<button class="btn btn-outline" style="color:var(--ok);border-color:var(--ok);padding:4px 8px;font-size:11px;margin-right:4px;" onclick="markOrderPaid('${o.id}')">Marcar Pago</button>`:''}${(o.status==='pago'||o.status==='pendente')?`<button class="btn btn-outline" style="color:var(--err);border-color:var(--err);padding:4px 8px;font-size:11px" onclick="openCancelOrderModal('${o.id}', ${o.status==='pago' && !o.paidManually && !(o.asaasPaymentId||'').startsWith('MANUAL_')})">Cancelar</button>`:''}${o.status==='cancelado'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="deleteOrder('${o.id}')" title="Excluir">&#128465;</button>`:''}</div></td></tr>`).join('');}
   renderPag('orders',data.total,S.ordPage,20);
 }
 function setFilter(f,btn){S.ordFilter=f;S.ordPage=1;document.querySelectorAll('#fbar .fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadOrders();}
@@ -997,11 +1063,11 @@ async function loadUsers(p){
           <td class="muted">${fmtDate(u.createdAt)}</td>
           <td><label class="inline-check"><input type="checkbox" data-user-id="${u.id}" ${u.emailConfirmed?'checked disabled':'onchange="confirmEmailFromCheckbox(this)"'}><span>${u.emailConfirmed?'Confirmado':'Validar'}</span></label></td>
           <td>
-              <div class="action-row">
-                  <button class="btn btn-outline" style="padding:4px 8px;font-size:12px" title="Editar" onclick="openUserModal('${u.id}')">&#9998;</button>
+              <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
+                  <button class="btn btn-outline" style="padding:4px 8px;font-size:12px" title="Editar" onclick="openUserModal('${u.id}')">Editar</button>
                   <button class="btn btn-outline" style="padding:4px 8px;font-size:12px;color:${u.isActive?'var(--warn)':'var(--ok)'};border-color:${u.isActive?'var(--warn)':'var(--ok)'}" title="${u.id === S.user?.id ? 'Voc&ecirc; n&atilde;o pode inativar sua pr&oacute;pria conta' : (u.isActive?'Inativar cadastro':'Ativar cadastro')}" ${u.id === S.user?.id && u.isActive ? 'disabled' : `onclick="toggleLocalUser('${u.id}', ${u.isActive?'false':'true'}, this)"`}>${u.isActive?'Inativar':'Ativar'}</button>
-                  <button class="btn btn-outline" style="padding:4px 8px;font-size:12px;color:var(--err);border-color:var(--err)" title="Excluir" onclick="deleteLocalUser('${u.id}', ${u.adUsername ? 'true' : 'false'})">&#128465;</button>
-              </div>
+                  <button class="btn btn-outline" style="padding:4px 8px;font-size:12px;color:var(--err);border-color:var(--err)" title="Excluir" onclick="deleteLocalUser('${u.id}', ${u.adUsername ? 'true' : 'false'})">Excluir</button>
+              </div></details>
           </td>
       </tr>`).join('');
   }
@@ -1059,7 +1125,7 @@ function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/<
 async function loadAdminPartials(){
   const target=document.getElementById('admin-modals-root');
   if(!target)return;
-  try{const r=await fetch('/admin/partials/modals.html',{cache:'no-store'});if(r.ok)target.innerHTML=await r.text();}
+  try{const r=await fetch('/admin/partials/modals.html',{cache:'no-store'});if(r.ok){target.innerHTML=await r.text();enhanceAdminModals();}}
   catch(e){showAdminMessage('error','Nao foi possivel carregar os modais do admin.');}
 }
 loadAdminPartials().finally(init);

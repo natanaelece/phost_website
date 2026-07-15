@@ -170,6 +170,14 @@ namespace PremierAPI.Controllers
                         return Ok(new { success = true, ignored = true });
                     }
 
+                    await db.ExecuteAsync(@"
+                        INSERT INTO product_analytics_events
+                            (event_name, session_id, user_id, page_path, properties)
+                        VALUES
+                            ('payment_received', @SessionId, @UserId, '/webhook/asaas',
+                             jsonb_build_object('result', 'confirmed'))",
+                        new { SessionId = Guid.NewGuid(), UserId = (Guid)orderData.user_id });
+
                     string clientPhone = _adminPhone; // Fallback se der erro
                     string clientEmail = "";
                     string clientName = "Cliente";

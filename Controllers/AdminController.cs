@@ -332,6 +332,16 @@ namespace PremierAPI.Controllers
                 LIMIT 10
             ", p);
 
+            var analyticsRaw = await db.QueryAsync(@"
+                SELECT event_name AS EventName,
+                       COUNT(*) AS Events,
+                       COUNT(DISTINCT session_id) AS Sessions
+                FROM product_analytics_events
+                WHERE occurred_at >= @Start AND occurred_at < @End
+                GROUP BY event_name
+                ORDER BY Events DESC
+            ", p);
+
             decimal revenue = (decimal)(s?.revenue ?? 0);
             long ordersInPeriod = (long)(s?.ordersinperiod ?? 0);
             long paidOrders = (long)(s?.paidorders ?? 0);
@@ -373,6 +383,7 @@ namespace PremierAPI.Controllers
                 statusBreakdown = statusRaw.Select(x => new { status = (string)x.status, count = (long)x.count, revenue = (decimal)x.revenue }),
                 planBreakdown = planRaw.Select(x => new { period = (string)x.period, count = (long)x.count, revenue = (decimal)x.revenue, computers = (long)x.computers, slots = (long)x.slots }),
                 orderTypeBreakdown = typeRaw.Select(x => new { type = (string)x.type, count = (long)x.count, revenue = (decimal)x.revenue }),
+                analyticsFunnel = analyticsRaw.Select(x => new { eventName = (string)x.eventname, events = (long)x.events, sessions = (long)x.sessions }),
                 topCustomers = topRaw.Select(x => new { userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, orders = (long)x.orders, revenue = (decimal)x.revenue, lastOrderAt = (DateTime)x.lastorderat }),
                 upcomingExpirations = upcomingRaw.Select(x => new { userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, period = (string)x.period, computers = (int)x.computers, wydsPerComputer = (int)x.wydspercomputer, totalPrice = (decimal)x.totalprice, expiresAt = (DateTime)x.expiresat }),
                 actionQueue = actionRaw.Select(x => new { type = (string)x.type, userName = (string)x.username, email = (string)x.email, whatsapp = x.whatsapp as string, totalPrice = (decimal)x.totalprice, eventAt = (DateTime)x.eventat }),
@@ -392,8 +403,8 @@ namespace PremierAPI.Controllers
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>($"SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id = u.id {where}");
-            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY o.created_at DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
-            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
+            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY o.created_at DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
+            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, wydServerName = o.wyd_server_name as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
         }
 
         [HttpGet("users")]
@@ -612,14 +623,27 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            var status = await db.QueryFirstOrDefaultAsync<string>("SELECT status FROM orders WHERE id = @Id", new { Id = id });
-            if (status == null) return NotFound(new { erro = "Pedido nao encontrado." });
-            if (req.Delivered && status != "pago") return BadRequest(new { erro = "Nao e possivel entregar um pedido que nao esta pago." });
+            var orderState = await db.QueryFirstOrDefaultAsync(
+                "SELECT status AS Status, COALESCE(delivered, false) AS Delivered FROM orders WHERE id = @Id",
+                new { Id = id });
+            if (orderState == null) return NotFound(new { erro = "Pedido não encontrado." });
+            if (req.Delivered && (string)orderState.status != "pago") return BadRequest(new { erro = "Não é possível entregar um pedido que não está pago." });
+            bool wasDelivered = (bool)orderState.delivered;
 
             int rows = await db.ExecuteAsync(
                 "UPDATE orders SET delivered = @Delivered, delivered_at = CASE WHEN @Delivered THEN COALESCE(delivered_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = @Id",
                 new { req.Delivered, Id = id });
             if (rows == 0) return NotFound(new { erro = "Pedido nao encontrado." });
+            if (req.Delivered && !wasDelivered)
+            {
+                await db.ExecuteAsync(@"
+                    INSERT INTO product_analytics_events
+                        (event_name, session_id, user_id, page_path, properties)
+                    SELECT 'access_delivered', @SessionId, user_id, '/admin/pedidos',
+                           jsonb_build_object('result', 'delivered')
+                    FROM orders WHERE id = @Id",
+                    new { SessionId = Guid.NewGuid(), Id = id });
+            }
             return Ok(new { msg = req.Delivered ? "Pedido marcado como entregue." : "Pedido marcado como pendente." });
         }
 
@@ -1096,10 +1120,6 @@ namespace PremierAPI.Controllers
         public string Description { get; set; } = "";
     }
 }
-
-
-
-
 
 
 

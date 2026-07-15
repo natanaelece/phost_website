@@ -28,6 +28,7 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 - O campo `description` enviado a `/pix/qrCodes/static` descreve o QR, mas a cobranca e criada automaticamente pelo Asaas somente quando o Pix e recebido e pode chegar aos webhooks com descricao automatica. Integracoes da mesma conta devem filtrar por `pixQrCodeId`, nao apenas pelo prefixo `Licença`.
 - Nao tente atualizar a descricao apos `PAYMENT_RECEIVED`: cobrancas recebidas possuem restricoes de edicao e isso nao altera o payload que outros webhooks ja receberam.
 - ProfileController.cs: Edicao de dados triviais do perfil do cliente.
+- AnalyticsController.cs: Recebe somente eventos de produto presentes em uma lista permitida, remove propriedades nao autorizadas e salva telemetria first-party sem e-mail, WhatsApp, AnyDesk, codigo Pix ou senha. O schema e a retencao ficam no DatabaseInitializer.cs.
 
 ### /Services (Logica de Negocios e Background)
 - ActiveDirectoryService.cs: O UNICO responsavel por conversar com o Windows Server (LDAP). Contem metodos para localizar, criar, deletar usuarios, definir senhas, editar (LdapModification) e mover eles entre OUs. Lembre-se: Suas buscas (GetUserDn) usam ScopeSub, logo varrem toda a estrutura partindo do BaseDn. Exige LDAPS (criptografia). Atente-se as limitacoes do LDAP no Linux: "O usuario nao pode alterar a senha" exige acesso ACL que e impossivel; e para renomear o Nome Completo (CN) e mandatorio utilizar ModifyDNRequest, e nao Modify regular.
@@ -37,7 +38,7 @@ Sempre inicie lendo o arquivo README.md na raiz do projeto. Ele contem detalhes 
 
 ### /wwwroot (Frontend)
 - index.html: Landing page comercial, planos, teste gratuito, video demonstrativo, formulario de cadastro (validacao forte anti-fake), login e redefinicao.
-- painel.html: SPA do usuario final e simulador publico de precos. Visitantes podem calcular sem login; login e exigido para gerar PIX, acessar indicacoes, perfil, historico e credenciais. O topo possui modais nativos de Como usar e Duvidas frequentes.
+- painel.html: SPA do usuario final e simulador publico de precos. Visitantes podem calcular sem login; login e exigido para gerar PIX, acessar indicacoes, perfil, historico e credenciais. Antes do PIX, o cliente informa o servidor de WYD; `wyd2` e `wyd 2` sao rejeitados exatamente pelo backend. O topo possui modais nativos de Como usar e Duvidas frequentes.
 - vid/comofunciona.mp4: Video demonstrativo compartilhado pela landing e pelo modal Como usar. Referencie-o por URL da propria origem (`/vid/comofunciona.mp4`). Ao adicionar midia externa, revise explicitamente a diretiva `media-src` da CSP em Program.cs.
 - admin.html: Entrada compativel que redireciona para `/admin/dashboard.html`.
 - admin/: Painel Administrativo dividido em telas HTML estaticas (`dashboard.html`, `financeiro.html`, `crm.html`, `pedidos.html`, `usuarios.html`, `active-directory.html`), com UI customizada, modais nativos, fetch direto e CSS/JS compartilhados em `admin/assets/`. Mantenha CSS nativo/puro e reaproveite o endpoint `/api/admin/dashboard` para metricas de receita, pedidos, clientes, vencimentos e fila operacional.

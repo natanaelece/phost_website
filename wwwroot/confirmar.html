@@ -34,14 +34,15 @@
         <!-- Logotipo Padronizado -->
         <img src="img/iconesemfundo.png" alt="Premierhost" class="h-20 mx-auto mb-6 object-contain">
 
-        <h2 id="statusTitle" class="text-2xl font-bold text-white mb-2 uppercase tracking-wider">Verificando seu token...</h2>
-        <p id="statusMsg" class="text-sm text-slate-400 mb-6">Aguarde enquanto validamos seu cadastro no sistema.</p>
+        <h1 id="statusTitle" class="text-2xl font-bold text-white mb-2 uppercase tracking-wider">Confirmando seu e-mail...</h1>
+        <p id="statusMsg" role="status" aria-live="polite" class="text-sm text-slate-400 mb-6">Aguarde enquanto validamos seu cadastro.</p>
         
         <div id="loader" class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto mb-4"></div>
         
-        <a id="btnLogin" href="/?action=login" class="hidden w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-4 inline-block">Voltar para o Login</a>
+        <a id="btnLogin" href="/?action=login" class="hidden w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-4 inline-block">Entrar na minha conta</a>
     </div>
 
+    <script src="/analytics.js"></script>
     <script>
         window.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -72,7 +73,7 @@
                 loader.classList.add('hidden');
                 
                 if (res.ok) {
-                    title.innerText = "E-mail Confirmado!";
+                    title.innerText = "E-mail confirmado!";
                     title.classList.replace('text-white', 'text-green-500');
                     msg.innerText = data.mensagem || "Sua conta foi ativada com sucesso. Você já pode fazer login no painel.";
 					
@@ -83,6 +84,7 @@
 					}
 	
                     btn.classList.remove('hidden');
+                    window.premierAnalytics?.track('email_confirmed', { result: 'success' });
                 } else {
                     title.innerText = "Falha na Ativação";
                     title.classList.replace('text-white', 'text-red-500');

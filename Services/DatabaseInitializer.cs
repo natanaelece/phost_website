@@ -71,6 +71,7 @@ namespace PremierAPI.Services
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                     anydesk_id VARCHAR(50),
+                    wyd_server_name VARCHAR(50),
                     computers INT,
                     wyds_per_computer INT,
                     period VARCHAR(20),
@@ -110,8 +111,25 @@ namespace PremierAPI.Services
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_missing_link_alerted BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMP;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS wyd_server_name VARCHAR(50);",
 
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_asaas_pix_qr_code_id ON orders(asaas_pix_qr_code_id) WHERE asaas_pix_qr_code_id IS NOT NULL;",
+
+                @"CREATE TABLE IF NOT EXISTS product_analytics_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    event_name VARCHAR(60) NOT NULL,
+                    session_id UUID NOT NULL,
+                    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                    page_path VARCHAR(200) NOT NULL,
+                    referrer_host VARCHAR(150),
+                    properties JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );",
+
+                "CREATE INDEX IF NOT EXISTS idx_analytics_events_name_date ON product_analytics_events(event_name, occurred_at DESC);",
+                "CREATE INDEX IF NOT EXISTS idx_analytics_events_session_date ON product_analytics_events(session_id, occurred_at DESC);",
+                "CREATE INDEX IF NOT EXISTS idx_analytics_events_user_date ON product_analytics_events(user_id, occurred_at DESC) WHERE user_id IS NOT NULL;",
+                "DELETE FROM product_analytics_events WHERE occurred_at < CURRENT_TIMESTAMP - INTERVAL '13 months';",
                 
                 "UPDATE users SET is_active = true WHERE is_active IS NULL;",
                 "UPDATE orders SET delivered = false WHERE delivered IS NULL;",

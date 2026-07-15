@@ -110,6 +110,12 @@ namespace PremierAPI.Controllers
             if (!Regex.IsMatch(pedido.AnydeskId ?? "", @"^\d{6,15}$"))
                 return BadRequest(new { erro = "O ID do AnyDesk deve conter de 6 a 15 números." });
 
+            pedido.WydServerName = (pedido.WydServerName ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(pedido.WydServerName) || pedido.WydServerName.Length > 50)
+                return BadRequest(new { erro = "Informe o nome do servidor de WYD com até 50 caracteres.", campo = "wydServerName" });
+            if (IsUnsupportedWydServer(pedido.WydServerName))
+                return BadRequest(new { erro = "No momento, não atendemos o servidor WYD2.", campo = "wydServerName", codigo = "unsupported_wyd_server" });
+
             if (pedido.Periodo == "diaria" && pedido.Pcs < 3) 
                 pedido.Pcs = 3;
                 
@@ -247,15 +253,16 @@ namespace PremierAPI.Controllers
             {
                 using var transaction = await db.BeginTransactionAsync();
                 string sqlOrder = @"INSERT INTO orders
-                    (id, user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price,
+                    (id, user_id, anydesk_id, wyd_server_name, computers, wyds_per_computer, period, days, total_price,
                      asaas_pix_qr_code_id, pix_payload, pix_encoded_image, pix_expires_at, status)
                     VALUES
-                    (@Id, @UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total,
+                    (@Id, @UserId, @Anydesk, @WydServerName, @Comps, @Wyds, @Period, @Days, @Total,
                      @QrCodeId, @PixPayload, @EncodedImage, @PixExpiresAt, 'pendente')";
                 await db.ExecuteAsync(sqlOrder, new {
                     Id = orderId,
                     UserId = pedido.UserId,
                     Anydesk = pedido.AnydeskId,
+                    WydServerName = pedido.WydServerName,
                     Comps = pedido.Pcs,
                     Wyds = pedido.Wyds,
                     Period = pedido.Periodo,
@@ -304,6 +311,24 @@ namespace PremierAPI.Controllers
                 expiresAt = pixExpiresAt,
                 expiresInSeconds = pixExpirationSeconds
             });
+        }
+
+        [HttpPost("validate-server")]
+        public IActionResult ValidateWydServer([FromBody] ValidateWydServerRequest request)
+        {
+            string serverName = (request.ServerName ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(serverName) || serverName.Length > 50)
+                return BadRequest(new { erro = "Informe o nome do servidor de WYD com até 50 caracteres.", campo = "wydServerName" });
+            if (IsUnsupportedWydServer(serverName))
+                return BadRequest(new { erro = "No momento, não atendemos o servidor WYD2.", campo = "wydServerName", codigo = "unsupported_wyd_server" });
+            return Ok(new { valido = true });
+        }
+
+        private static bool IsUnsupportedWydServer(string serverName)
+        {
+            string normalized = serverName.Trim();
+            return normalized.Equals("wyd2", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("wyd 2", StringComparison.OrdinalIgnoreCase);
         }
 
         [HttpGet("pending/{userId}")]
@@ -466,6 +491,7 @@ namespace PremierAPI.Controllers
         public Guid UserId { get; set; }
         public decimal Total { get; set; } 
         public string AnydeskId { get; set; } = ""; 
+        public string WydServerName { get; set; } = "";
         public string Periodo { get; set; } = ""; 
         public string Nome { get; set; } = ""; 
         public string Whatsapp { get; set; } = ""; 
@@ -474,5 +500,10 @@ namespace PremierAPI.Controllers
         public int Dias { get; set; }
         public bool UsouDescontoIndicacao { get; set; }
         public string CodigoCupom { get; set; } = "";
+    }
+
+    public class ValidateWydServerRequest
+    {
+        public string ServerName { get; set; } = "";
     }
 }

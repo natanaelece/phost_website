@@ -41,6 +41,8 @@
         .range-slider::-moz-range-track { height: 0.2rem; background: transparent; }
         .range-slider::-moz-range-progress { height: 0.2rem; background: transparent; }
         .range-slider::-moz-range-thumb { width: 1.05rem; height: 1.05rem; border: 3px solid #dbeafe; border-radius: 999px; background: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2); }
+        :focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
     </style>
 </head>
 <body class="min-h-screen text-slate-300 relative flex flex-col">
@@ -120,7 +122,7 @@
                 </div>
             </div>
         </nav>
-        <button onclick="document.getElementById('mobileMenu').classList.toggle('hidden')" class="md:hidden text-slate-400 hover:text-white transition-colors">
+        <button type="button" onclick="toggleMobileMenu()" aria-label="Abrir menu" aria-controls="mobileMenu" aria-expanded="false" class="md:hidden text-slate-400 hover:text-white transition-colors rounded-lg">
             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
         </button>
     </header>
@@ -147,8 +149,8 @@
             <div id="ajudaComoUsar" class="p-6 md:p-8">
                 <div class="grid sm:grid-cols-2 gap-4 mb-7">
                     <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">1</span><h3 class="font-bold text-white mb-2">Monte seu plano</h3><p class="text-sm text-slate-400 leading-relaxed">Escolha a quantidade de computadores, instâncias e o período. A simulação de preço funciona mesmo sem login.</p></div>
-                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">2</span><h3 class="font-bold text-white mb-2">Entre ou crie sua conta</h3><p class="text-sm text-slate-400 leading-relaxed">O login é necessário somente para gerar o PIX, acompanhar pedidos, credenciais e indicações.</p></div>
-                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">3</span><h3 class="font-bold text-white mb-2">Pague com PIX</h3><p class="text-sm text-slate-400 leading-relaxed">Revise o resumo, gere a cobrança e faça o pagamento. A confirmação é recebida automaticamente pela plataforma.</p></div>
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">2</span><h3 class="font-bold text-white mb-2">Entre ou crie sua conta</h3><p class="text-sm text-slate-400 leading-relaxed">O login é necessário somente para gerar o Pix, acompanhar pedidos, credenciais e indicações.</p></div>
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">3</span><h3 class="font-bold text-white mb-2">Pague com Pix</h3><p class="text-sm text-slate-400 leading-relaxed">Revise o resumo, gere a cobrança e faça o pagamento. A confirmação é recebida automaticamente pela plataforma.</p></div>
                     <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">4</span><h3 class="font-bold text-white mb-2">Receba seu acesso</h3><p class="text-sm text-slate-400 leading-relaxed">Após a confirmação, acompanhe a liberação no painel. Nossa equipe auxilia na configuração inicial quando necessário.</p></div>
                 </div>
                 <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950"><video class="w-full aspect-video" controls preload="metadata" playsinline><source src="/vid/comofunciona.mp4" type="video/mp4">Seu navegador não consegue reproduzir este vídeo.</video><p class="px-4 py-3 text-center text-xs text-slate-500">Se o vídeo não abrir, <a href="/vid/comofunciona.mp4" target="_blank" class="text-blue-400 hover:underline">assista diretamente pelo navegador</a>.</p></div>
@@ -168,16 +170,16 @@
     <main class="w-full max-w-[1000px] mx-auto px-6 mt-6">
 
         <div class="mb-6">
-            <h2 class="text-2xl font-bold text-white" id="welcomeText">Configuração da Licença</h2>
-            <p class="text-sm text-slate-500 mt-1">Monte sua topologia e obtenha o código de acesso.</p>
+            <h1 class="text-2xl font-bold text-white" id="welcomeText">Monte seu plano e veja o preço</h1>
+            <p class="text-sm text-slate-500 mt-1">Escolha computadores, acessos e período. Você só precisa entrar para gerar o Pix.</p>
         </div>
 
         <div id="loginRequiredBanner" class="hidden mb-6 bg-gradient-to-r from-blue-600/20 via-cyan-500/10 to-amber-400/10 border border-blue-500/30 rounded-xl p-4 shadow-[0_0_30px_rgba(37,99,235,0.10)] items-center justify-between gap-4">
             <div class="flex items-start gap-3">
                 <div class="w-10 h-10 rounded-lg bg-blue-500/15 border border-blue-400/30 flex items-center justify-center text-blue-300 font-black shrink-0">!</div>
                 <div>
-                    <h3 class="text-white font-bold text-sm">Visualização liberada para consulta</h3>
-                    <p class="text-xs text-slate-400 mt-1">Para acessar indicações, perfil, histórico e gerar PIX, faça login na sua conta.</p>
+                    <h3 class="text-white font-bold text-sm">Simulação disponível sem cadastro</h3>
+                    <p class="text-xs text-slate-400 mt-1">Para acessar indicações, perfil, histórico e gerar Pix, faça login na sua conta.</p>
                 </div>
             </div>
             <a href="/?action=login" class="w-full md:w-auto text-center bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all">Fazer login</a>
@@ -212,18 +214,18 @@
                 <span class="text-2xl">⏳</span>
                 <div>
                     <h3 class="text-amber-500 font-bold text-sm">Pedido pendente (<span id="pendingPixValue"></span>)</h3>
-                    <p class="text-xs text-slate-400">Você tem um PIX aguardando pagamento.</p>
+                    <p class="text-xs text-slate-400">Você tem um Pix aguardando pagamento.</p>
                 </div>
             </div>
             <div class="flex gap-2 w-full md:w-auto mt-3 md:mt-0">
                 <button onclick="cancelarPixPendente()" class="bg-slate-800 hover:bg-slate-700 text-red-400 px-4 py-2 rounded-lg text-sm font-bold transition-all w-full md:w-auto">Cancelar</button>
-                <button onclick="retomarPix()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)] transition-all w-full md:w-auto">RETOMAR PIX</button>
+                <button onclick="retomarPix()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)] transition-all w-full md:w-auto">Continuar pagamento</button>
             </div>
         </div>
 
         <!-- HISTÓRICO DE PEDIDOS (INJEÇÃO DA NOVA REGRA) -->
         <div id="historyBlock" class="hidden mb-8 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-            <button onclick="document.getElementById('historyContent').classList.toggle('hidden'); document.getElementById('historyIcon').classList.toggle('rotate-180');" class="w-full px-6 py-4 flex justify-between items-center hover:bg-slate-800/80 transition-colors focus:outline-none">
+            <button type="button" onclick="toggleHistory(this)" aria-expanded="false" aria-controls="historyContent" class="w-full px-6 py-4 flex justify-between items-center hover:bg-slate-800/80 transition-colors rounded-lg">
                 <h3 class="text-lg font-bold text-white flex items-center gap-2">
                     <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     Histórico de Assinaturas
@@ -247,7 +249,7 @@
                 <div>
                     <!-- CORREÇÃO: Tooltip incorporado no Label -->
                     <label for="qtdPcs" class="flex items-center justify-between gap-3 text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">
-                        <span>Qt. Computadores (PCs)</span>
+                        <span>Quantidade de computadores</span>
                         <output id="qtdPcsValor" for="qtdPcs" class="min-w-9 rounded-md bg-blue-500/15 px-2 py-1 text-center text-sm text-blue-300" aria-live="polite">1</output>
                         <!-- <div class="relative group cursor-pointer flex items-center"> -->
                             <!-- <svg class="w-4 h-4 text-slate-500 hover:text-blue-400 transition-colors" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg> -->
@@ -263,7 +265,7 @@
 
                 <div>
                     <label for="qtdWyds" class="flex items-center justify-between gap-3 text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">
-                        <span class="flex items-center gap-1">Instâncias por Computador
+                        <span class="flex items-center gap-1">Acessos por computador
                         <div class="relative group cursor-pointer flex items-center">
                             <svg class="w-4 h-4 text-slate-500 hover:text-blue-400 transition-colors" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
                             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-xs text-slate-300 rounded-lg shadow-lg border border-slate-700 z-10 text-center font-normal normal-case">
@@ -275,8 +277,8 @@
                     <div class="range-control" data-range-for="qtdWyds"><div class="range-line"></div><div class="range-dots" aria-hidden="true"></div><input type="range" id="qtdWyds" value="1" min="1" max="8" step="1" aria-label="Instâncias por computador" class="range-slider" oninput="atualizarSlider(this); limparErro('qtdWyds'); calcular()"></div>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Período de Faturamento</label>
+                <fieldset>
+                    <legend class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Período de contratação</legend>
                     <div class="grid grid-cols-3 gap-2">
                         <label class="cursor-pointer">
                             <input type="radio" name="periodo" value="diaria" class="peer sr-only" onchange="calcular()">
@@ -293,7 +295,7 @@
                             </div>
                         </label>
                     </div>
-                </div>
+                </fieldset>
 
                 <div id="containerDias" class="hidden">
                     <label for="qtdDias" class="flex items-center justify-between gap-3 text-xs font-bold text-slate-400 uppercase tracking-wide mb-1"><span>Quantidade de Dias</span><output id="qtdDiasValor" for="qtdDias" class="min-w-9 rounded-md bg-blue-500/15 px-2 py-1 text-center text-sm text-blue-300" aria-live="polite">3</output></label>
@@ -301,10 +303,18 @@
                     <p id="msgDiasAlert" class="text-xs text-amber-500 mt-1 hidden font-bold">⚠️ Acima de 6 dias, compensa assinar o plano Semanal!</p>
                 </div>
 
+                <div>
+                    <label for="wydServerName" class="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                        Em qual servidor de WYD você quer jogar?
+                    </label>
+                    <input type="text" id="wydServerName" maxlength="50" autocomplete="off" aria-describedby="wydServerErrorMsg" placeholder="Ex.: WYD Global" oninput="limparErro('wydServerName', 'wydServerErrorMsg')" onblur="validarServidorWyd(true)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none transition-colors">
+                    <p id="wydServerErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Informe o nome do servidor de WYD com até 50 caracteres.</p>
+                </div>
+
                 <!-- CORREÇÃO: Classes padrão restauradas, removido estilo font-mono quebrando o layout -->
                 <div>
-                    <label class="flex items-center gap-1 text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
-                        Seu ID AnyDesk
+                    <label for="anydeskId" class="flex items-center gap-1 text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                        ID do AnyDesk para configuração
                         <div class="relative group cursor-pointer flex items-center">
                             <svg class="w-4 h-4 text-slate-500 hover:text-blue-400 transition-colors" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
                             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-xs text-slate-300 rounded-lg shadow-lg border border-slate-700 z-10 text-center font-normal normal-case">
@@ -317,8 +327,8 @@
                 </div>
 
                 <div>
-                    <label class="flex items-center gap-1 text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
-                        WhatsApp Para Instalação
+                    <label for="orderWa" class="flex items-center gap-1 text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                        WhatsApp para receber as instruções
                         <div class="relative group cursor-pointer flex items-center">
                             <svg class="w-4 h-4 text-slate-500 hover:text-blue-400 transition-colors" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
                             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-xs text-slate-300 rounded-lg shadow-lg border border-slate-700 z-10 text-center font-normal normal-case">
@@ -341,7 +351,7 @@
                     </div>
 
                     <div>
-                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wide border-b border-slate-800 pb-3 mb-4">Resumo do Pedido</h3>
+                        <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wide border-b border-slate-800 pb-3 mb-4">Resumo do pedido</h2>
                         
                         <div class="flex justify-between mb-2"><span class="text-slate-500">Custo Base:</span><span id="resBase" class="text-white">R$ 0,00</span></div>
 
@@ -382,7 +392,7 @@
                     </div>
 
                     <button id="btnPagar" onclick="verificarERodarPix()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)] mt-6">
-                        Gerar PIX
+                        Gerar Pix
                     </button>
                     <p id="geralErrorMsg" class="text-xs text-red-500 mt-2 text-center hidden font-bold"></p>
                 </div>
@@ -390,12 +400,12 @@
         </div>
 
         <!-- Modal PIX -->
-        <div id="pixModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center glass-panel p-4">
+        <div id="pixModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center glass-panel p-4" role="dialog" aria-modal="true" aria-labelledby="pixModalTitle">
             <div class="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl p-6 shadow-2xl relative text-center">
-                <button onclick="document.getElementById('pixModal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                <button type="button" onclick="fecharPixModal()" aria-label="Fechar pagamento Pix" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors rounded-lg"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
                 
                 <div id="pixScreen">
-                    <h3 class="text-xl font-bold text-white mb-1 mt-2">Pagamento via PIX</h3>
+                    <h2 id="pixModalTitle" class="text-xl font-bold text-white mb-1 mt-2">Pagamento via Pix</h2>
                     <p id="pixModalAmount" class="text-2xl font-black text-blue-500 mb-1">R$ 0,00</p>
                     <p class="text-xs text-slate-400 mb-4" id="pixTimerText">Expira em: 15:00</p>
                     
@@ -407,66 +417,77 @@
                         <p id="pixCodeText" class="text-[10px] text-slate-500 font-mono break-all text-left h-10 overflow-hidden"></p>
                         <div class="flex gap-2 mt-3">
                             <button onclick="cancelarPixPendente()" class="w-1/3 bg-slate-800 hover:bg-slate-700 text-red-400 text-sm font-bold py-2.5 rounded-md transition-colors">Cancelar</button>
-                            <button id="btnCopiar" onclick="copiarPix()" class="w-2/3 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold py-2.5 rounded-md transition-colors">Copiar Código PIX</button>
+                            <button id="btnCopiar" onclick="copiarPix()" class="w-2/3 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold py-2.5 rounded-md transition-colors">Copiar código Pix</button>
                         </div>
                     </div>
-                    <p class="text-xs text-amber-500 mt-3 animate-pulse">Aguardando pagamento... Não feche esta tela.</p>
+                    <p class="text-xs text-amber-500 mt-3 animate-pulse" role="status" aria-live="polite">Aguardando pagamento. Você pode manter esta janela aberta.</p>
                 </div>
 
                 <div id="successScreen" class="hidden py-8">
                     <svg class="w-24 h-24 mx-auto text-green-500 success-check" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
-                    <h3 class="text-2xl font-bold text-white mt-4">Pagamento Aprovado!</h3>
+                    <h2 class="text-2xl font-bold text-white mt-4">Pagamento aprovado!</h2>
                     <p class="text-sm text-slate-400 mt-2">Nossa equipe já foi notificada e o seu suporte enviará os dados via WhatsApp em instantes.</p>
                     <button onclick="window.location.reload()" class="mt-6 bg-slate-800 hover:bg-slate-700 text-white px-6 py-2 rounded-lg font-bold">Fechar</button>
                 </div>
             </div>
         </div>
 
+        <!-- Modal servidor não atendido -->
+        <div id="wydServerModal" class="hidden fixed inset-0 z-[120] flex items-center justify-center glass-panel p-4" role="dialog" aria-modal="true" aria-labelledby="wydServerModalTitle" aria-describedby="wydServerModalDescription">
+            <div class="bg-slate-900 border border-red-500/50 w-full max-w-sm rounded-2xl p-6 shadow-2xl relative text-center">
+                <button type="button" onclick="fecharAvisoServidor()" aria-label="Fechar aviso" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors rounded-lg"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-2xl text-red-400" aria-hidden="true">!</div>
+                <h2 id="wydServerModalTitle" class="text-xl font-bold text-white">Servidor não atendido</h2>
+                <p id="wydServerModalDescription" class="mt-2 text-sm leading-6 text-slate-400">No momento, não atendemos o servidor WYD2. Informe outro servidor para continuar.</p>
+                <button type="button" onclick="fecharAvisoServidor()" class="mt-6 w-full rounded-lg bg-blue-600 py-3 font-bold text-white transition-colors hover:bg-blue-500">Entendi</button>
+            </div>
+        </div>
+
         <!-- Modal Meu Perfil -->
-        <div id="profileModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center glass-panel p-4">
+        <div id="profileModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center glass-panel p-4" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
             <div class="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl p-6 shadow-2xl relative">
-                <button onclick="fecharPerfil()" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-                <h3 class="text-xl font-bold text-white mb-4">Meu Perfil</h3>
+                <button type="button" onclick="fecharPerfil()" aria-label="Fechar perfil" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors rounded-lg"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                <h2 id="profileModalTitle" class="text-xl font-bold text-white mb-4">Meu perfil</h2>
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Nome</label>
+                        <label for="profName" class="block text-xs font-bold text-slate-400 uppercase mb-1">Nome</label>
                         <input type="text" id="profName" readonly class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-500 cursor-not-allowed">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">E-mail (Não editável)</label>
+                        <label for="profEmail" class="block text-xs font-bold text-slate-400 uppercase mb-1">E-mail (não editável)</label>
                         <input type="text" id="profEmail" readonly class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-500 cursor-not-allowed">
                     </div>
                     
                     <!-- Bloco Oculto se não houver código -->
                     <div id="divProfInvitedBy" class="hidden">
-                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Código Promocional Recebido</label>
+                        <label for="profInvitedBy" class="block text-xs font-bold text-slate-400 uppercase mb-1">Código promocional recebido</label>
                         <input type="text" id="profInvitedBy" readonly class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-500 cursor-not-allowed font-bold">
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">WhatsApp</label>
+                        <label for="profWa" class="block text-xs font-bold text-slate-400 uppercase mb-1">WhatsApp</label>
                         <input type="text" id="profWa" oninput="mascaraTelefone(this)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 outline-none">
                     </div>
                     
                     <!-- CORREÇÃO: Botão para Alterar Senha de forma isolada, abrindo o bloco escondido -->
                     <div class="border-t border-slate-800 pt-4 mt-2">
-                        <button type="button" onclick="document.getElementById('passwordChangeBlock').classList.toggle('hidden')" class="text-xs font-bold text-blue-400 hover:text-blue-300 uppercase tracking-wide mb-3 focus:outline-none">Alterar Senha</button>
+                        <button type="button" onclick="togglePasswordFields(this)" aria-expanded="false" aria-controls="passwordChangeBlock" class="text-xs font-bold text-blue-400 hover:text-blue-300 uppercase tracking-wide mb-3 rounded">Alterar senha</button>
                         <div id="passwordChangeBlock" class="space-y-3 hidden">
                             <div>
-                                <input type="password" id="profPassCurrent" placeholder="Senha Atual" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 outline-none" oninput="limparErro('profPassCurrent', 'profErrorMsg')">
+                                <label for="profPassCurrent" class="sr-only">Senha atual</label><input type="password" id="profPassCurrent" placeholder="Senha atual" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 outline-none" oninput="limparErro('profPassCurrent', 'profErrorMsg')">
                             </div>
                             <div>
-                                <input type="password" id="profPassNew" placeholder="Nova Senha (Min: 6)" minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 outline-none" oninput="limparErro('profPassNew', 'profErrorMsg')">
+                                <label for="profPassNew" class="sr-only">Nova senha</label><input type="password" id="profPassNew" placeholder="Nova senha (6 a 12 caracteres)" minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 outline-none" oninput="limparErro('profPassNew', 'profErrorMsg')">
                             </div>
                             <div>
-                                <input type="password" id="profPassConfirm" placeholder="Confirmar Nova Senha" minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 outline-none" oninput="limparErro('profPassConfirm', 'profErrorMsg')">
+                                <label for="profPassConfirm" class="sr-only">Confirmar nova senha</label><input type="password" id="profPassConfirm" placeholder="Confirmar nova senha" minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-blue-500 outline-none" oninput="limparErro('profPassConfirm', 'profErrorMsg')">
                             </div>
                             <p id="profErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold"></p>
                         </div>
                     </div>
 
-                    <button onclick="salvarPerfil()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-all mt-2">Salvar Alterações</button>
-                    <p id="profSuccessMsg" class="text-xs text-green-400 mt-1 hidden font-bold text-center">Perfil atualizado com sucesso!</p>
+                    <button onclick="salvarPerfil()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-all mt-2">Salvar alterações</button>
+                    <p id="profSuccessMsg" role="status" aria-live="polite" class="text-xs text-green-400 mt-1 hidden font-bold text-center">Perfil atualizado com sucesso!</p>
                 </div>
             </div>
         </div>
@@ -482,6 +503,7 @@
 		</div>
 	</footer>
 
+    <script src="/analytics.js"></script>
     <script>
         let userData = null;
         let eligibleForDiscount = false;
@@ -494,6 +516,49 @@
 
         function fecharMenuMobile() {
             document.getElementById('mobileMenu')?.classList.add('hidden');
+            document.querySelector('[aria-controls="mobileMenu"]')?.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            const button = document.querySelector('[aria-controls="mobileMenu"]');
+            const willOpen = menu.classList.contains('hidden');
+            menu.classList.toggle('hidden');
+            button?.setAttribute('aria-expanded', String(willOpen));
+        }
+
+        function toggleHistory(button) {
+            const content = document.getElementById('historyContent');
+            const willOpen = content.classList.contains('hidden');
+            content.classList.toggle('hidden');
+            document.getElementById('historyIcon').classList.toggle('rotate-180');
+            button.setAttribute('aria-expanded', String(willOpen));
+        }
+
+        function togglePasswordFields(button) {
+            const content = document.getElementById('passwordChangeBlock');
+            const willOpen = content.classList.contains('hidden');
+            content.classList.toggle('hidden');
+            button.setAttribute('aria-expanded', String(willOpen));
+            if (willOpen) document.getElementById('profPassCurrent').focus();
+        }
+
+        function fecharPixModal() {
+            document.getElementById('pixModal').classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        function abrirAvisoServidor() {
+            const modal = document.getElementById('wydServerModal');
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => modal.querySelector('button')?.focus(), 0);
+        }
+
+        function fecharAvisoServidor() {
+            document.getElementById('wydServerModal').classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            document.getElementById('wydServerName')?.focus();
         }
 
         function abrirAjuda(tipo) {
@@ -526,6 +591,18 @@
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && !document.getElementById('ajudaModal')?.classList.contains('hidden')) {
                 fecharAjuda();
+            }
+            if (event.key === 'Escape' && !document.getElementById('pixModal')?.classList.contains('hidden')) fecharPixModal();
+            if (event.key === 'Escape' && !document.getElementById('wydServerModal')?.classList.contains('hidden')) fecharAvisoServidor();
+            if (event.key === 'Escape' && !document.getElementById('profileModal')?.classList.contains('hidden')) fecharPerfil();
+            if (event.key === 'Tab') {
+                const modal = [...document.querySelectorAll('[role="dialog"]')].find(item => !item.classList.contains('hidden'));
+                if (!modal) return;
+                const focusable = [...modal.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),summary,video[controls]')].filter(el => !el.closest('.hidden'));
+                if (!focusable.length) return;
+                const first = focusable[0], last = focusable[focusable.length - 1];
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
             }
         });
 
@@ -620,7 +697,7 @@
             document.getElementById('pendingPixBlock').classList.remove('flex');
 
             const btnPagar = document.getElementById('btnPagar');
-            btnPagar.innerText = 'Faça login para gerar PIX';
+            btnPagar.innerText = 'Entrar para gerar Pix';
             btnPagar.disabled = false;
             btnPagar.onclick = goLogin;
 
@@ -628,6 +705,16 @@
         }
 
         document.addEventListener("DOMContentLoaded", async () => {
+            document.querySelectorAll('#qtdPcs, #qtdWyds, #qtdDias, input[name="periodo"]').forEach(control => {
+                control.addEventListener('change', () => {
+                    window.premierAnalytics?.track('simulation_changed', {
+                        period: document.querySelector('input[name="periodo"]:checked')?.value || 'semanal',
+                        computers: parseInt(document.getElementById('qtdPcs').value) || 1,
+                        instances: parseInt(document.getElementById('qtdWyds').value) || 1,
+                        days: parseInt(document.getElementById('qtdDias').value) || 7
+                    });
+                });
+            });
             const userStr = localStorage.getItem('premier_user');
             const sessionToken = localStorage.getItem('premier_token');
             if (!userStr || !sessionToken) { configureGuestAccess(); return; }
@@ -678,7 +765,7 @@
                 const btnPagar = document.getElementById('btnPagar');
                 if (btnPagar) btnPagar.onclick = verificarERodarPix;
 
-                document.getElementById('welcomeText').innerText = `Olá, ${userData.name.split(' ')[0]}`;
+                document.getElementById('welcomeText').innerText = `Olá, ${userData.name.split(' ')[0]}. Monte seu plano`;
                 document.getElementById('orderWa').value = userData.whatsapp;
                 
                 // Preenche Modal Perfil
@@ -887,6 +974,7 @@
             document.getElementById('pixScreen').classList.remove('hidden');
             document.getElementById('successScreen').classList.add('hidden');
             document.getElementById('pixModal').classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
             
             const expiresAt = new Date(pendingPixData.expiresAt).getTime();
             const now = new Date().getTime();
@@ -1012,8 +1100,14 @@
                 return;
             }
             document.getElementById('profileModal').classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            requestAnimationFrame(() => document.getElementById('profWa')?.focus());
         }
-        function fecharPerfil() { document.getElementById('profileModal').classList.add('hidden'); }
+        function fecharPerfil() {
+            document.getElementById('profileModal').classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            document.getElementById('profileMenuButton')?.focus();
+        }
         async function salvarPerfil() {
             if (!isLoggedIn || !userData) {
                 goLogin();
@@ -1269,6 +1363,7 @@
         function limparErro(inputId, msgId) { 
             const input = document.getElementById(inputId);
             if(input) {
+                input.setAttribute('aria-invalid', 'false');
                 input.classList.remove('border-red-500', 'focus:border-red-500', 'focus:ring-red-500', 'focus:ring-1');
                 input.classList.add('border-slate-700', 'focus:border-blue-500');
             }
@@ -1282,6 +1377,7 @@
         function showError(inputId, msgId) { 
             const input = document.getElementById(inputId); 
             if(input) {
+                input.setAttribute('aria-invalid', 'true');
                 input.classList.remove('border-slate-700', 'focus:border-blue-500');
                 input.classList.add('border-red-500', 'focus:border-red-500', 'focus:ring-1', 'focus:ring-red-500'); 
                 input.focus(); 
@@ -1289,6 +1385,47 @@
             if(msgId) {
                 const msg = document.getElementById(msgId);
                 if(msg) msg.classList.remove('hidden');
+            }
+        }
+
+        function marcarErroServidorWyd(message) {
+            const input = document.getElementById('wydServerName');
+            const msg = document.getElementById('wydServerErrorMsg');
+            input.setAttribute('aria-invalid', 'true');
+            input.classList.remove('border-slate-700', 'focus:border-blue-500');
+            input.classList.add('border-red-500', 'focus:border-red-500', 'focus:ring-1', 'focus:ring-red-500');
+            msg.innerText = message;
+            msg.classList.remove('hidden');
+        }
+
+        async function validarServidorWyd(exibirPopup = false) {
+            const input = document.getElementById('wydServerName');
+            const serverName = input.value.trim();
+
+            if (!serverName || serverName.length > 50) {
+                marcarErroServidorWyd('Informe o nome do servidor de WYD com até 50 caracteres.');
+                return false;
+            }
+
+            try {
+                const response = await fetch('/api/checkout/validate-server', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ServerName: serverName })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (input.value.trim() !== serverName) return true;
+                if (!response.ok) {
+                    marcarErroServidorWyd(data.erro || 'Não foi possível validar o servidor informado.');
+                    if (exibirPopup && data.codigo === 'unsupported_wyd_server') abrirAvisoServidor();
+                    return false;
+                }
+
+                limparErro('wydServerName', 'wydServerErrorMsg');
+                return true;
+            } catch {
+                marcarErroServidorWyd('Não foi possível validar o servidor agora. Tente novamente.');
+                return false;
             }
         }
 
@@ -1303,6 +1440,12 @@
             const wydsInput = document.getElementById('qtdWyds');
             const diasInput = document.getElementById('qtdDias');
             const periodo = document.querySelector('input[name="periodo"]:checked').value;
+            window.premierAnalytics?.track('checkout_attempted', {
+                period: periodo,
+                computers: parseInt(pcsInput.value) || 0,
+                instances: parseInt(wydsInput.value) || 0,
+                logged_in: true
+            });
 
             // Restoring strict block if someone tries to hack the DOM/bypass input filters
             if (!pcsInput.value || parseInt(pcsInput.value) < 1) { showError('qtdPcs'); return; }
@@ -1311,7 +1454,10 @@
             if (!wydsInput.value || parseInt(wydsInput.value) < 1) { showError('qtdWyds'); return; }
             if (periodo === 'diaria' && (!diasInput.value || parseInt(diasInput.value) < 3)) { showError('qtdDias', 'msgDiasAlert'); return; }
 
+            if (!await validarServidorWyd(true)) return;
+
             const anydesk = document.getElementById('anydeskId').value.trim();
+            const wydServerName = document.getElementById('wydServerName').value.trim();
             const wa = document.getElementById('orderWa').value.trim();
             const geralMsg = document.getElementById('geralErrorMsg');
 
@@ -1341,6 +1487,7 @@
                         UserId: userData.id,
                         Total: total, 
                         AnydeskId: anydesk, 
+                        WydServerName: wydServerName,
                         Periodo: periodo,
                         Nome: userData.name, 
                         Whatsapp: wa,
@@ -1353,7 +1500,15 @@
                 });
                 if (response.status === 401) { clearLocalSession(); configureGuestAccess(); return; }
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.erro || "Erro de Gateway");
+                if (!response.ok && data.campo === 'wydServerName') {
+                    marcarErroServidorWyd(data.erro || 'Revise o servidor de WYD informado.');
+                    if (data.codigo === 'unsupported_wyd_server') abrirAvisoServidor();
+                }
+                if (!response.ok) {
+                    const checkoutError = new Error(data.erro || "Erro de Gateway");
+                    checkoutError.isFieldError = data.campo === 'wydServerName';
+                    throw checkoutError;
+                }
 
                 pendingPixData = {
                     paymentId: data.paymentId,
@@ -1379,6 +1534,13 @@
                 document.getElementById('pixScreen').classList.remove('hidden');
                 document.getElementById('successScreen').classList.add('hidden');
                 document.getElementById('pixModal').classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+                window.premierAnalytics?.track('pix_created', {
+                    period: periodo,
+                    computers: pcs,
+                    instances: wyds,
+                    days: diasEnvio
+                });
                 
                 // Queima o desconto visualmente do frontend, já que no Backend já foi queimado.
                 if (eligibleForDiscount) {
@@ -1391,7 +1553,11 @@
                 iniciarPixPolling(data.paymentId, secondsLeft);
 
             } catch (error) {
-                geralMsg.innerText = "Falha no gateway: " + error.message; geralMsg.classList.remove('hidden');
+                if (!error.isFieldError) {
+                    geralMsg.innerText = "Falha no gateway: " + error.message;
+                    geralMsg.classList.remove('hidden');
+                }
+                window.premierAnalytics?.track('checkout_error', { error_code: 'pix_generation_failed', period: periodo });
             } finally {
                 if(!pendingPixData) {
                     btn.innerHTML = isLoggedIn ? 'Gerar PIX' : 'Faça login para gerar PIX';
@@ -1439,7 +1605,8 @@
             const btn = document.getElementById('btnCopiar');
             if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text); } else { let ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.left = "-999999px"; document.body.appendChild(ta); ta.focus(); ta.select(); try { document.execCommand('copy'); } catch (err) {} ta.remove(); }
             btn.innerHTML = '✓ Copiado com sucesso!'; btn.classList.replace('bg-slate-800', 'bg-blue-600');
-            setTimeout(() => { btn.innerHTML = 'Copiar Código PIX'; btn.classList.replace('bg-blue-600', 'bg-slate-800'); }, 3000);
+            window.premierAnalytics?.track('pix_copied', { result: 'success' });
+            setTimeout(() => { btn.innerHTML = 'Copiar código Pix'; btn.classList.replace('bg-blue-600', 'bg-slate-800'); }, 3000);
         }
 
         function logout() { clearLocalSession(); window.location.href = '/'; }
