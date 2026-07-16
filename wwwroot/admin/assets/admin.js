@@ -635,9 +635,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-website-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_WEBSITE').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário de website encontrado.</td></tr>';
         document.getElementById('ad-expired-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_EXPIRADOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário expirado encontrado.</td></tr>';
         const computers=sortAdItems(_adComputers,['name','description','operatingSystem','isActive'],'description');
-        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel"><button class="btn btn-outline" onclick="editAdComputer('${c.name}')">Editar</button><button class="btn btn-outline" onclick="duplicateAdComputer('${c.name}')">Duplicar</button><button class="btn btn-outline danger-action" onclick="deleteAdComputer('${c.name}')">Excluir</button></div></details></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum computador encontrado.</td></tr>';
+        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><button class="btn btn-outline ad-table-action" onclick="editAdComputer('${c.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdComputer('${c.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdComputer('${c.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhum computador encontrado.</td></tr>';
         const groups=sortAdItems(_adGroups,['name','description'],'name');
-        document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel"><button class="btn btn-outline" onclick="editAdGroup('${g.name}')">Editar</button><button class="btn btn-outline" onclick="duplicateAdGroup('${g.name}')">Duplicar</button><button class="btn btn-outline danger-action" onclick="deleteAdGroup('${g.name}')">Excluir</button></div></details></td></tr>`).join('')||'<tr><td colspan="3" class="empty">Nenhum grupo encontrado.</td></tr>';
+        document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><button class="btn btn-outline ad-table-action" onclick="editAdGroup('${g.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdGroup('${g.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdGroup('${g.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum grupo encontrado.</td></tr>';
     }
 
     async function loadAd() {
@@ -684,10 +684,10 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                     <div class="tbl-wrap"><table><thead><tr><th>Usu&aacute;rio</th><th>Nome Completo</th><th>Status</th><th>Acessos (Computadores e Grupos)</th><th>Vencimento</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="ad-expired-body"></tbody></table></div>
                 </div>
                 <div class="tbl-card hidden" id="ad-groups-tbl">
-                    <div class="tbl-wrap"><table><thead><tr><th>Grupo</th><th>Descri&ccedil;&atilde;o</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="ad-groups-body"></tbody></table></div>
+                    <div class="tbl-wrap"><table><thead><tr><th>Grupo</th><th>Descri&ccedil;&atilde;o</th><th>Editar</th><th>Duplicar</th><th>Excluir</th></tr></thead><tbody id="ad-groups-body"></tbody></table></div>
                 </div>
                 <div class="tbl-card hidden" id="ad-computers-tbl">
-                    <div class="tbl-wrap"><table><thead><tr><th>Computador</th><th>Descri&ccedil;&atilde;o</th><th>Sistema Operacional</th><th>Status</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="ad-computers-body"></tbody></table></div>
+                    <div class="tbl-wrap"><table><thead><tr><th>Computador</th><th>Descri&ccedil;&atilde;o</th><th>Sistema Operacional</th><th>Status</th><th>Editar</th><th>Duplicar</th><th>Excluir</th></tr></thead><tbody id="ad-computers-body"></tbody></table></div>
                 </div>
             `;
         }
@@ -960,8 +960,8 @@ const SORTABLE_TABLES={
   'ad-users-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-website-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-expired-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
-  'ad-groups-body':{type:'ad',fields:['name','description',null]},
-  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive',null]}
+  'ad-groups-body':{type:'ad',fields:['name','description',null,null,null]},
+  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive',null,null,null]}
 };
 function enhanceSortableHeaders(root=document){
   Object.entries(SORTABLE_TABLES).forEach(([bodyId,config])=>{
