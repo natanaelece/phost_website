@@ -118,6 +118,21 @@ namespace PremierAPI.Controllers
         // =========================================================================
         // REGISTER
         // =========================================================================
+        [HttpPost("validate-referral")]
+        public async Task<IActionResult> ValidateReferral([FromBody] ValidateReferralRequest req)
+        {
+            string code = (req.Code ?? "").Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(code)) return Ok(new { valid = true });
+            if (code.Length > 20) return Ok(new { valid = false });
+
+            using var db = new NpgsqlConnection(_connString);
+            bool exists = await db.QueryFirstOrDefaultAsync<bool>(
+                "SELECT EXISTS (SELECT 1 FROM users WHERE referral_code = @Code)",
+                new { Code = code });
+
+            return Ok(new { valid = exists });
+        }
+
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest req)
         {
@@ -527,6 +542,11 @@ namespace PremierAPI.Controllers
         public string Password { get; set; } = "";
         public string ReferralCode { get; set; } = "";
         [JsonPropertyName("cf-turnstile-response")] public string TurnstileResponse { get; set; } = "";
+    }
+
+    public class ValidateReferralRequest
+    {
+        public string Code { get; set; } = "";
     }
 
     public class ForgotPasswordRequest
