@@ -296,7 +296,7 @@ namespace PremierAPI.Controllers
                     o.computers AS Computers,
                     o.wyds_per_computer AS WydsPerComputer,
                     o.total_price AS TotalPrice,
-                    (o.created_at::date + o.days) AS ExpiresAt
+                    (o.created_at::date + o.days)::timestamp AS ExpiresAt
                 FROM orders o
                 JOIN users u ON o.user_id = u.id
                 WHERE o.status = 'pago' AND (o.created_at::date + o.days + 1) > @Now
@@ -315,7 +315,7 @@ namespace PremierAPI.Controllers
                 JOIN users u ON o.user_id = u.id
                 WHERE o.status = 'pago' AND o.delivered = false
                 UNION ALL
-                SELECT 'Licenca vencendo' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, (o.created_at::date + o.days) AS EventAt
+                SELECT 'Licenca vencendo' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, (o.created_at::date + o.days)::timestamp AS EventAt
                 FROM orders o
                 JOIN users u ON o.user_id = u.id
                 WHERE o.status = 'pago' AND (o.created_at::date + o.days + 1) > @Now AND (o.created_at::date + o.days + 1) <= (@Now + INTERVAL '7 days')
@@ -335,7 +335,7 @@ namespace PremierAPI.Controllers
                     o.total_price AS TotalPrice,
                     o.status AS Status,
                     o.created_at AS CreatedAt,
-                    (o.created_at::date + o.days) AS ExpiresAt,
+                    (o.created_at::date + o.days)::timestamp AS ExpiresAt,
                     CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > @Now THEN true ELSE false END AS IsActive
                 FROM orders o
                 JOIN users u ON o.user_id = u.id
@@ -431,7 +431,7 @@ namespace PremierAPI.Controllers
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>($"SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id = u.id {where}");
-            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.created_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at::date + o.days) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY {orderColumn} {direction} NULLS LAST, o.id DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
+            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.created_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at::date + o.days)::timestamp AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY {orderColumn} {direction} NULLS LAST, o.id DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
             return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, wydServerName = o.wyd_server_name as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, createdManually = o.created_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
         }
 

@@ -72,7 +72,7 @@ namespace PremierAPI.Services
                 if (order.AdProvisionedAt.HasValue) return;
 
                 DateTime expiresOn = await db.QuerySingleAsync<DateTime>(@"
-                    SELECT MAX(o.created_at::date + o.days) AS ExpirationDate
+                    SELECT MAX(o.created_at::date + o.days)::timestamp AS ExpirationDate
                     FROM orders o
                     WHERE o.user_id = @UserId AND o.status = 'pago'",
                     new { order.UserId });

@@ -69,7 +69,7 @@ namespace PremierAPI.Controllers
             // Pedidos pendentes continuam no bloco próprio do PIX para não aparecerem duplicados.
             var ordersRaw = await db.QueryAsync(
                 @"SELECT created_at AS ""CreatedAt"", period AS ""Period"", days AS ""Days"",
-                         (created_at::date + days) AS ""ExpiresAt"",
+                         (created_at::date + days)::timestamp AS ""ExpiresAt"",
                          computers AS ""Computers"", wyds_per_computer AS ""WydsPerComputer"",
                          total_price AS ""TotalPrice"", status AS ""Status"",
                          delivered AS ""Delivered"", delivered_at AS ""DeliveredAt"",
