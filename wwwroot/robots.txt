@@ -3,3 +3,5 @@ Allow: /
 
 Disallow: /api
 Disallow: /admin
+
+Sitemap: https://phost.pro/sitemap.xml

@@ -128,6 +128,10 @@ O cabeçalho do painel possui dois modais locais:
 
 O vídeo compartilhado por essas duas telas fica em `wwwroot/vid/comofunciona.mp4`. As páginas devem referenciá-lo como `/vid/comofunciona.mp4` para funcionar no domínio principal, em `www` e em ambientes de teste sem conflito com a CSP.
 
+### Indexação pública
+
+O arquivo `wwwroot/sitemap.xml` anuncia ao Google somente as URLs públicas canônicas `/`, `/painel` e `/privacidade`, e `wwwroot/robots.txt` referencia esse sitemap. Rotas administrativas, APIs, confirmação de e-mail e recuperação de senha não devem aparecer nos resultados de busca. Ao restringir bots conhecidos na Cloudflare, mantenha `/sitemap.xml` e `/robots.txt` liberados juntamente com as três páginas públicas e seus recursos de `/img/` e `/vid/`.
+
 ## Product Analytics first-party
 
 O frontend utiliza `wwwroot/analytics.js` e o endpoint `POST /api/analytics/events` para medir o funil de contratação sem depender de cookies ou plataformas externas. A tabela `product_analytics_events` é criada de forma idempotente pelo `DatabaseInitializer.cs`, recebe somente eventos e propriedades permitidos e remove registros com mais de 13 meses na inicialização.
@@ -197,7 +201,7 @@ Principais areas do painel:
 - **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.
 - **Financeiro:** analise de receita paga, total historico, pedidos manuais, conversao, receita por plano, tipo de pedido e status dos pedidos.
 - **CRM:** visao de clientes ativos, licencas vencendo, entregas pendentes, novos usuarios, proximos vencimentos, acoes recomendadas e ranking de clientes.
-- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD. Em Pedidos, textos extensos usam reticências em telas estreitas e o ID do Asaas permanece recolhido até o operador solicitar sua exibição.
+- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD. As listagens permitem ordenar os resultados por campo; no celular, as tabelas viram cartões verticais que preservam todos os dados. O ID do Asaas permanece recolhido até o operador solicitar sua exibição. O vínculo de um cadastro local aceita contas AD das pastas de usuários ativos, expirados e website.
 
 ### Dashboard por periodo
 

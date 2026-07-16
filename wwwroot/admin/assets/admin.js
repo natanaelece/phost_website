@@ -2,11 +2,15 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     let _adComputers = [];
     let _adAccessUser = '';
     let _adSelectedComputers = new Set();
+    let _adAllowAllComputers = false;
     let _adGroups = [];
     let _adComputerGroups = {};
     let _adPendingGroupSelection = null;
     let _adLinkUsers = [];
     let _adLinkOptionsLoaded = false;
+    let _adUsers = [];
+    let _adSortField = 'fullName';
+    let _adSortDirection = 'asc';
     let adminToastTimer = null;
     let adminConfirmResolver = null;
     let adminLastModalTrigger = null;
@@ -207,10 +211,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     }
 
     async function openManualOrderModal() {
-        if (!_allLocalUsers || !_allLocalUsers.length) {
-            if (document.getElementById('users-body')) await loadUsers();
-            else await loadLocalUsersSnapshot();
-        }
+        await loadLocalUsersSnapshot();
         const sel = document.getElementById('m-order-user');
         sel.innerHTML = '<option value="">-- Selecione o Cliente --</option>' + 
             (_allLocalUsers || []).map(u => `<option value="${u.id}">${esc(u.name)} (${esc(u.email)})</option>`).join('');
@@ -218,23 +219,36 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('m-order-pcs').value = 1;
         document.getElementById('m-order-slots').value = 4;
         document.getElementById('m-order-price').value = "0.00";
-        document.getElementById('m-order-desc').value = "";
+        document.getElementById('m-order-anydesk').value = "";
+        document.getElementById('m-order-server').value = "";
         
         document.getElementById('manualOrderModal').classList.add('active');
+    }
+
+    function syncManualOrderPeriod(){
+        const period=document.getElementById('m-order-period').value,days=document.getElementById('m-order-days'),pcs=document.getElementById('m-order-pcs');
+        if(period==='semanal')days.value=7;
+        else if(period==='mensal')days.value=30;
+        else{if(parseInt(days.value)<3)days.value=3;if(parseInt(pcs.value)<3)pcs.value=3;}
     }
 
     async function saveManualOrder() {
         const userId = document.getElementById('m-order-user').value;
         if (!userId) return showAdminMessage('error', 'Selecione um cliente.');
+        const anyDeskId=document.getElementById('m-order-anydesk').value.replace(/\D/g,'');
+        const wydServerName=document.getElementById('m-order-server').value.trim();
+        if(anyDeskId.length<6||anyDeskId.length>15)return showAdminMessage('error','Informe um ID do AnyDesk válido, com 6 a 15 números.');
+        if(!wydServerName)return showAdminMessage('error','Informe o servidor WYD.');
 
         const req = {
             userId,
+            anyDeskId,
+            wydServerName,
             period: document.getElementById('m-order-period').value,
             days: parseInt(document.getElementById('m-order-days').value) || 7,
             computers: parseInt(document.getElementById('m-order-pcs').value) || 1,
             wydsPerComputer: parseInt(document.getElementById('m-order-slots').value) || 4,
-            price: parseFloat(document.getElementById('m-order-price').value) || 0,
-            description: document.getElementById('m-order-desc').value.trim()
+            totalPrice: parseFloat(document.getElementById('m-order-price').value) || 0
         };
 
         const r = await fetch('/api/admin/orders/manual', {
@@ -254,8 +268,15 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     }
     
     async function loadLocalUsersSnapshot() {
-        const data = await apiFetch(API + '/users?page=1&limit=500&search=');
-        _allLocalUsers = data?.users || [];
+        const first = await apiFetch(API + '/users?page=1&limit=100&search=&sortBy=name&sortDir=asc');
+        if(!first){_allLocalUsers=[];return _allLocalUsers;}
+        _allLocalUsers = [...(first.users || [])];
+        const pages = Math.ceil((first.total || 0) / 100);
+        for(let page=2;page<=pages;page++){
+            const data = await apiFetch(API + `/users?page=${page}&limit=100&search=&sortBy=name&sortDir=asc`);
+            if(!data)break;
+            _allLocalUsers.push(...(data.users || []));
+        }
         return _allLocalUsers;
     }
     
@@ -289,7 +310,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     }
     
     async function deleteOrder(id) {
-        if(await askAdminConfirm('Tem certeza que deseja excluir este pedido cancelado permanentemente?')) {
+        if(await askAdminConfirm('Tem certeza que deseja excluir este pedido permanentemente?')) {
             const r = await fetch('/api/admin/orders/' + id, { method: 'DELETE', headers: hdrs() });
             const msg = await readResponseMessage(r, 'Pedido excluído.');
             if(r.ok) { showAdminMessage('success', msg); loadOrders(); } else showAdminMessage('error', msg);
@@ -327,9 +348,10 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         if(_adLinkOptionsLoaded) return;
         const users = await apiFetch('/api/admin/ad/users');
         if(Array.isArray(users)) {
+            const allowedOus = new Set(['USUARIOS', 'USUARIOS_EXPIRADOS', 'USUARIOS_WEBSITE']);
             _adLinkUsers = users
-                .filter(x => x.ouPath === 'USUARIOS')
-                .sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
+                .filter(x => allowedOus.has(x.ouPath))
+                .sort((a, b) => String(a.username || '').localeCompare(String(b.username || ''), 'pt-BR', {sensitivity:'base'}));
             _adLinkOptionsLoaded = true;
         }
     }
@@ -359,10 +381,11 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             .slice(0, 80);
 
         if(!list.length) {
-            menu.innerHTML = '<div class="ad-link-empty">Nenhum usu&aacute;rio da pasta USUARIOS encontrado.</div>';
+            menu.innerHTML = '<div class="ad-link-empty">Nenhum usu&aacute;rio AD encontrado nas pastas de ativos, expirados ou website.</div>';
         } else {
             menu.innerHTML = list.map(x => {
-                const label = x.fullName || x.username;
+                const folder = ({USUARIOS:'Ativos',USUARIOS_EXPIRADOS:'Expirados',USUARIOS_WEBSITE:'Website'})[x.ouPath] || x.ouPath || 'AD';
+                const label = (x.fullName || x.username) + ' · ' + folder;
                 return `<button type="button" class="ad-link-option" data-username="${esc(x.username)}" onclick="selectAdLinkUser(this.dataset.username)">
                     <span class="ad-link-option-main">${esc(x.username)}</span>
                     <span class="ad-link-option-sub">${esc(label)}</span>
@@ -456,13 +479,75 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     function setAdFilter(f, btn) {
         currentAdFilter = f;
         document.querySelectorAll('#ad-fbar .fb').forEach(e=>e.classList.remove('active'));
-        btn.classList.add('active');
+        btn?.classList.add('active');
         document.getElementById('ad-users-tbl').classList.add('hidden');
         document.getElementById('ad-website-tbl').classList.add('hidden');
         document.getElementById('ad-expired-tbl').classList.add('hidden');
         document.getElementById('ad-groups-tbl').classList.add('hidden');
         document.getElementById('ad-computers-tbl').classList.add('hidden');
         document.getElementById('ad-'+f+'-tbl').classList.remove('hidden');
+        ensureAdSortForFilter();
+        renderAdCollections();
+        updateSortableHeaderState();
+    }
+
+    const AD_SORT_FIELDS = {
+        users:['fullName','username','isActive','expiresAt'],
+        groups:['name','description'],
+        computers:['name','description','operatingSystem','isActive']
+    };
+    function adSortType(){return currentAdFilter==='groups'?'groups':currentAdFilter==='computers'?'computers':'users';}
+    function ensureAdSortForFilter(){
+        const fields=AD_SORT_FIELDS[adSortType()];
+        if(!fields.includes(_adSortField)){
+            _adSortField=fields[0];
+            _adSortDirection='asc';
+        }
+    }
+    function sortAdItems(items,fields,fallback){
+        const field=fields.includes(_adSortField)?_adSortField:fallback;
+        const factor=_adSortDirection==='asc'?1:-1;
+        return [...items].sort((a,b)=>{
+            let av=a?.[field],bv=b?.[field];
+            if(av==null||av==='')return bv==null||bv===''?0:1;
+            if(bv==null||bv==='')return -1;
+            if(typeof av==='boolean'||typeof bv==='boolean')return (Number(av)-Number(bv))*factor;
+            if(field==='expiresAt')return (new Date(av)-new Date(bv))*factor;
+            return String(av).localeCompare(String(bv),'pt-BR',{sensitivity:'base',numeric:true})*factor;
+        });
+    }
+    function renderAdUserRow(u){
+        const computers=Array.isArray(u.computers)?u.computers:[];
+        const computersCsv=computers.join(',');
+        const computerText=u.allowAllComputers
+            ? '<span style="color:#60a5fa">&#127760; Todos os computadores</span>'
+            : (computers.length?computers.map(esc).join(', '):'Nenhum PC');
+        const expiresValue=u.expiresAt?u.expiresAt.substring(0,10):'';
+        return `<tr>
+            <td>${esc(u.username)}</td><td>${esc(u.fullName)}</td>
+            <td>${u.isActive?'<span style="color:#4ade80">Ativo</span>':'<span style="color:red">Desativado</span>'}</td>
+            <td style="max-width:240px"><button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="openAdAccessModal('${u.username}', '${computersCsv}', ${u.allowAllComputers})">&#128187; Gerenciar Acessos</button><div style="font-size:10px;margin-top:4px;color:var(--txt2);white-space:normal">${computerText}</div></td>
+            <td><div class="date-tools"><label class="inline-check"><input type="checkbox" id="never_${u.username}" ${expiresValue?'':'checked'} onchange="toggleAdNever('${u.username}')"> Nunca</label><input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled'}><button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="setAdExpire('${u.username}')">&#10004;</button></div></td>
+            <td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
+                <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#3b82f6;border-color:#3b82f6" onclick="openAdEditModal('${u.username}')">&#9998; Editar</button>
+                <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#60a5fa;border-color:#60a5fa" onclick="openAdPasswordModal('${u.username}')">&#128274; Senha</button>
+                <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#a78bfa;border-color:#a78bfa" onclick="openDuplicateModal('${u.username}', '${esc(u.fullName)}')">&#128203; Duplicar</button>
+                ${u.ouPath==='USUARIOS'?`<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#fbbf24;border-color:#fbbf24" onclick="moveOu('${u.username}', true)">Arquivar</button>`:`<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#4ade80;border-color:#4ade80" onclick="moveOu('${u.username}', false)">${u.ouPath==='USUARIOS_WEBSITE'?'Mover para ativos':'Reativar'}</button>`}
+                <button class="btn btn-outline" style="padding:4px;font-size:10px;color:red;border-color:red" onclick="deleteAdUser('${u.username}')">Excluir</button>
+            </div></details></td>
+        </tr>`;
+    }
+    function renderAdCollections(){
+        if(!document.getElementById('ad-users-body'))return;
+        const userFields=['fullName','username','isActive','expiresAt'];
+        const users=sortAdItems(_adUsers,userFields,'fullName');
+        document.getElementById('ad-users-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário ativo encontrado.</td></tr>';
+        document.getElementById('ad-website-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_WEBSITE').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário de website encontrado.</td></tr>';
+        document.getElementById('ad-expired-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_EXPIRADOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário expirado encontrado.</td></tr>';
+        const computers=sortAdItems(_adComputers,['name','description','operatingSystem','isActive'],'description');
+        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Nenhum computador encontrado.</td></tr>';
+        const groups=sortAdItems(_adGroups,['name','description'],'name');
+        document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Nenhum grupo encontrado.</td></tr>';
     }
 
     async function loadAd() {
@@ -489,6 +574,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         
         // Restore layout if it was overwritten by offline banner
         if(cont.innerHTML.includes('offline-banner')) {
+            currentAdFilter = 'users';
             cont.innerHTML = `
                 <div class="filter-bar" id="ad-fbar">
                     <button class="fb active" onclick="setAdFilter('users',this)">Usu&aacute;rios Ativos</button>
@@ -520,72 +606,19 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         // Load computers first because the access modal uses this list.
         const cres = await apiFetch('/api/admin/ad/computers');
         _adComputers = Array.isArray(cres) ? cres : [];
-        if(cres) {
-            const sortedCres = [...cres].sort((a,b) => String(a.description||a.name||'').localeCompare(String(b.description||b.name||''), 'pt-BR', {sensitivity:'base'}));
-            document.getElementById('ad-computers-body').innerHTML = sortedCres.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td></tr>`).join('');
-        }
 
         // Load users
         const ures = await apiFetch('/api/admin/ad/users');
-        if(ures) {
-            const sortedUsers = [...ures].sort((a,b) =>
-                String(a.fullName || a.username || '').localeCompare(
-                    String(b.fullName || b.username || ''),
-                    'pt-BR',
-                    {sensitivity:'base'}
-                )
-            );
-            const ativos = sortedUsers.filter(x => x.ouPath === 'USUARIOS');
-            const website = sortedUsers.filter(x => x.ouPath === 'USUARIOS_WEBSITE');
-            const expirados = sortedUsers.filter(x => x.ouPath === 'USUARIOS_EXPIRADOS');
-
-            const renderUser = (u) => {
-                const computers = Array.isArray(u.computers) ? u.computers : [];
-                const computersCsv = computers.join(',');
-                // Se allowAllComputers=true, sem restrição (campo vazio no AD) = acesso a todos
-                const computerText = u.allowAllComputers
-                    ? '<span style="color:#60a5fa">&#127760; Todos os computadores</span>'
-                    : (computers.length > 0 ? computers.map(esc).join(', ') : 'Nenhum PC');
-                const expiresValue = u.expiresAt ? u.expiresAt.substring(0,10) : '';
-                return `<tr>
-                    <td>${esc(u.username)}</td><td>${esc(u.fullName)}</td>
-                    <td>${u.isActive?'<span style="color:#4ade80">Ativo</span>':'<span style="color:red">Desativado</span>'}</td>
-                    <td style="max-width:240px">
-                        <button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="openAdAccessModal('${u.username}', '${computersCsv}', ${u.allowAllComputers})">&#128187; Gerenciar Acessos</button>
-                        <div style="font-size:10px;margin-top:4px;color:var(--txt2);white-space:normal">${computerText}</div>
-                    </td>
-                    <td>
-                        <div class="date-tools">
-                            <label class="inline-check"><input type="checkbox" id="never_${u.username}" ${expiresValue?'':'checked'} onchange="toggleAdNever('${u.username}')"> Nunca</label>
-                            <input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled'}>
-                            <button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="setAdExpire('${u.username}')">&#10004;</button>
-                        </div>
-                    </td>
-                    <td>
-                        <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
-                            <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#3b82f6;border-color:#3b82f6" onclick="openAdEditModal('${u.username}')">&#9998; Editar</button>
-                            <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#60a5fa;border-color:#60a5fa" onclick="openAdPasswordModal('${u.username}')">&#128274; Senha</button>
-                            <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#a78bfa;border-color:#a78bfa" onclick="openDuplicateModal('${u.username}', '${esc(u.fullName)}')">&#128203; Duplicar</button>
-                            ${u.ouPath === 'USUARIOS'
-                                ? `<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#fbbf24;border-color:#fbbf24" onclick="moveOu('${u.username}', true)">Arquivar</button>`
-                                : `<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#4ade80;border-color:#4ade80" onclick="moveOu('${u.username}', false)">${u.ouPath === 'USUARIOS_WEBSITE' ? 'Mover para ativos' : 'Reativar'}</button>`}
-                            <button class="btn btn-outline" style="padding:4px;font-size:10px;color:red;border-color:red" onclick="deleteAdUser('${u.username}')">Excluir</button>
-                        </div></details>
-                    </td>
-                </tr>`;
-            };
-
-            document.getElementById('ad-users-body').innerHTML = ativos.map(renderUser).join('');
-            document.getElementById('ad-website-body').innerHTML = website.map(renderUser).join('');
-            document.getElementById('ad-expired-body').innerHTML = expirados.map(renderUser).join('');
-        }
+        _adUsers = Array.isArray(ures) ? ures : [];
+        _adLinkOptionsLoaded = false;
 
         // Load groups
         const gres = await apiFetch('/api/admin/ad/groups');
-        _adGroups = Array.isArray(gres)
-            ? [...gres].sort((a,b) => String(a.name||'').localeCompare(String(b.name||''), 'pt-BR', {sensitivity:'base'}))
-            : [];
-        if(gres) document.getElementById('ad-groups-body').innerHTML = _adGroups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td></tr>`).join('');
+        _adGroups = Array.isArray(gres) ? gres : [];
+        ensureAdSortForFilter();
+        renderAdCollections();
+        enhanceSortableHeaders();
+        updateSortableHeaderState();
 
     }
 
@@ -804,15 +837,93 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     }
 
 const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html'};
-const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,usrPage:1,usrSearch:'',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
+const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
 
 function init(){
   const loginError=document.getElementById('lerr');if(loginError){loginError.setAttribute('role','alert');loginError.setAttribute('aria-live','assertive');}
   document.querySelectorAll('label').forEach(label=>{if(label.htmlFor)return;const control=label.parentElement?.querySelector('input,select,textarea');if(control?.id)label.htmlFor=control.id;});
   document.querySelectorAll('button[title]').forEach(button=>{if(!button.getAttribute('aria-label'))button.setAttribute('aria-label',button.title);});
+  setupResponsiveTables();
   try{const d=JSON.parse(localStorage.getItem('premierAdmin')||'{}');if(d.token){S.token=d.token;S.user=d.user;showApp();return;}}catch(e){}
   showLogin();
+}
+function enhanceResponsiveTables(root=document){
+  root.querySelectorAll?.('.tbl-wrap > table').forEach(table=>{
+    table.classList.add('responsive-table');
+    const wrapper=table.parentElement;
+    if(wrapper&&!wrapper.hasAttribute('tabindex'))wrapper.tabIndex=0;
+    const labels=[...table.querySelectorAll('thead th')].map(th=>th.querySelector('.th-inner > span:first-child')?.textContent.trim()||th.textContent.trim());
+    table.querySelectorAll('tbody tr').forEach(row=>{
+      [...row.children].forEach((cell,index)=>{
+        if(cell.colSpan>1)return;
+        cell.dataset.label=labels[index]||'';
+      });
+    });
+  });
+  enhanceSortableHeaders(root);
+}
+const SORTABLE_TABLES={
+  'orders-body':{type:'orders',fields:['customer','whatsapp','server','period','computers','totalPrice','asaasPaymentId','status','delivered','expiresAt','createdAt','canceledAt',null]},
+  'users-body':{type:'users',fields:['name','whatsapp','isActive','adUsername','totalOrders','totalSpent','activeLicenses','createdAt','emailConfirmed',null]},
+  'ad-users-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
+  'ad-website-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
+  'ad-expired-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
+  'ad-groups-body':{type:'ad',fields:['name','description']},
+  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive']}
+};
+function enhanceSortableHeaders(root=document){
+  Object.entries(SORTABLE_TABLES).forEach(([bodyId,config])=>{
+    const body=(root.getElementById?.(bodyId)||document.getElementById(bodyId));
+    const table=body?.closest('table');if(!table)return;
+    [...table.querySelectorAll('thead th')].forEach((th,index)=>{
+      const field=config.fields[index];if(!field||th.querySelector('.column-sort-button'))return;
+      const label=th.textContent.trim();
+      th.textContent='';th.classList.add('sortable-th');
+      const inner=document.createElement('span');inner.className='th-inner';
+      const text=document.createElement('span');text.textContent=label;inner.appendChild(text);
+      const button=document.createElement('button');button.type='button';button.className='column-sort-button';
+      button.dataset.sortType=config.type;button.dataset.sortField=field;
+      button.title=`Ordenar por ${label}`;button.setAttribute('aria-label',button.title);
+      const indicator=document.createElement('span');indicator.className='sort-indicator';indicator.setAttribute('aria-hidden','true');
+      button.appendChild(indicator);button.addEventListener('click',event=>{event.stopPropagation();applyColumnSort(config.type,field);});
+      th.addEventListener('click',()=>applyColumnSort(config.type,field));
+      inner.appendChild(button);th.appendChild(inner);
+    });
+  });
+  updateSortableHeaderState();
+}
+function currentSortState(type){
+  if(type==='orders')return{field:S.ordSort,direction:S.ordSortDir};
+  if(type==='users')return{field:S.usrSort,direction:S.usrSortDir};
+  return{field:_adSortField,direction:_adSortDirection};
+}
+function updateSortableHeaderState(){
+  document.querySelectorAll('.column-sort-button').forEach(button=>{
+    const state=currentSortState(button.dataset.sortType);
+    const active=state.field===button.dataset.sortField;
+    button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+    const indicator=button.querySelector('.sort-indicator');if(indicator)indicator.textContent=active?(state.direction==='asc'?'↑':'↓'):'';
+    const th=button.closest('th');if(active)th?.setAttribute('aria-sort',state.direction==='asc'?'ascending':'descending');
+    else th?.removeAttribute('aria-sort');
+  });
+}
+function applyColumnSort(type,field){
+  const state=currentSortState(type);const direction=state.field===field&&state.direction==='asc'?'desc':'asc';
+  if(type==='orders'){S.ordSort=field;S.ordSortDir=direction;S.ordPage=1;updateSortableHeaderState();loadOrders();return;}
+  if(type==='users'){S.usrSort=field;S.usrSortDir=direction;S.usrPage=1;updateSortableHeaderState();loadUsers();return;}
+  _adSortField=field;_adSortDirection=direction;renderAdCollections();updateSortableHeaderState();
+}
+function setupResponsiveTables(){
+  enhanceResponsiveTables();
+  if(window._adminResponsiveObserver)return;
+  let scheduled=false;
+  window._adminResponsiveObserver=new MutationObserver(()=>{
+    if(scheduled)return;
+    scheduled=true;
+    requestAnimationFrame(()=>{scheduled=false;enhanceResponsiveTables();});
+  });
+  window._adminResponsiveObserver.observe(document.body,{childList:true,subtree:true});
 }
 function showLogin(){document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';}
 function showApp(){
@@ -1028,32 +1139,35 @@ function fmtPct(v){return (parseFloat(v||0)).toFixed(1).replace('.',',')+'%';}
 function initial(s){return esc((s||'?').trim()[0]||'?').toUpperCase();}
 function statusLabel(s){return({pago:'Pago',pendente:'Pendente',cancelado:'Cancelado',expirado:'Expirado PIX'}[s]||s||'Indefinido');}
 function daysUntil(d){const dt=new Date(d);if(isNaN(dt))return'--';const days=Math.ceil((dt-new Date())/86400000);if(days<0)return'vencida';if(days===0)return'hoje';if(days===1)return'amanha';return days+' dias';}
-function renderPaymentId(value,paidManually){
-  const manual=paidManually?'<span class="payment-manual">Pago manual</span>':'';
+function renderPaymentId(value,paidManually,createdManually){
+  const manual=paidManually?'<span class="payment-manual">Pago manual</span>':createdManually?'<span class="payment-manual">Pedido manual</span>':'';
   if(!value)return'<span class="muted">&#8212;</span>'+manual;
   const safe=esc(value);
   return`<details class="payment-id-details"><summary title="Exibir ID do Asaas">ID...</summary><code title="${safe}">${safe}</code></details>${manual}`;
 }
-
 async function loadOrders(p){
   if(p)S.ordPage=p;
+  updateSortableHeaderState();
   const body=document.getElementById('orders-body');body.innerHTML='<tr><td colspan="13" class="loading"><div class="spinner"></div> Carregando...</td></tr>';
-  const data=await apiFetch(`${API}/orders?status=${S.ordFilter}&page=${S.ordPage}&limit=20`);if(!data)return;
+  const qs=new URLSearchParams({status:S.ordFilter,page:S.ordPage,limit:20,sortBy:S.ordSort,sortDir:S.ordSortDir});
+  const data=await apiFetch(`${API}/orders?${qs}`);if(!data)return;
   if(!data.orders?.length){body.innerHTML='<tr><td colspan="13" class="empty">Nenhum pedido encontrado.</td></tr>';}
-  else{body.innerHTML=data.orders.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div class="cell-shrink"><div class="ucell-name cell-ellipsis" title="${esc(o.userName)}">${esc(o.userName)}</div><div class="ucell-email cell-ellipsis" title="${esc(o.email)}">${esc(o.email)}</div></div></div></td><td class="muted"><span class="cell-ellipsis" title="${esc(o.whatsapp||'Não informado')}">${esc(o.whatsapp||'&#8212;')}</span></td><td><span class="cell-ellipsis" title="${esc(o.wydServerName||'Não informado')}">${esc(o.wydServerName||'&#8212;')}</span></td><td>${esc(o.period)} <span class="muted">(${o.days}d)</span></td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td class="payment-id-cell">${renderPaymentId(o.asaasPaymentId,o.paidManually)}</td><td>${sbadge(o.status,o.isActive)}</td><td><label class="inline-check"><input type="checkbox" ${o.status!=='pago'?'disabled':''} ${o.delivered?'checked':''} onchange="toggleOrderDelivery('${o.id}', this.checked, this)"><span ${o.status!=='pago'?'class="muted"':''}>${o.delivered?'Entregue':'Pendente'}</span></label></td><td>${o.isActive?'<span style="color:var(--ok);font-size:12px">Ativa ate '+fmtDate(o.expiresAt)+'</span>':'<span class="muted">Exp. '+fmtDate(o.expiresAt)+'</span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td><td>${o.canceledAt?'<span class="muted" style="color:var(--err)">'+(o.paidManually||(o.asaasPaymentId||'').startsWith('MANUAL_')?'':(o.refunded?'C/R ':'S/R '))+fmtDate(o.canceledAt)+'</span>':'<span class="muted">&#8212;</span>'}</td><td><div class="action-row">${(o.status==='pendente'||o.status==='expirado')?`<button class="btn btn-outline" style="color:var(--ok);border-color:var(--ok);padding:4px 8px;font-size:11px;margin-right:4px;" onclick="markOrderPaid('${o.id}')">Marcar Pago</button>`:''}${(o.status==='pago'||o.status==='pendente')?`<button class="btn btn-outline" style="color:var(--err);border-color:var(--err);padding:4px 8px;font-size:11px" onclick="openCancelOrderModal('${o.id}', ${o.status==='pago' && !o.paidManually && !(o.asaasPaymentId||'').startsWith('MANUAL_')})">Cancelar</button>`:''}${o.status==='cancelado'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="deleteOrder('${o.id}')" title="Excluir">&#128465;</button>`:''}</div></td></tr>`).join('');}
+  else{body.innerHTML=data.orders.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div class="cell-shrink"><div class="ucell-name cell-ellipsis" title="${esc(o.userName)}">${esc(o.userName)}</div><div class="ucell-email cell-ellipsis" title="${esc(o.email)}">${esc(o.email)}</div></div></div></td><td class="muted"><span class="cell-ellipsis" title="${esc(o.whatsapp||'Não informado')}">${esc(o.whatsapp||'&#8212;')}</span></td><td><span class="cell-ellipsis" title="${esc(o.wydServerName||'Não informado')}">${esc(o.wydServerName||'&#8212;')}</span></td><td>${esc(o.period)} <span class="muted">(${o.days}d)</span></td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td class="payment-id-cell">${renderPaymentId(o.asaasPaymentId,o.paidManually,o.createdManually)}</td><td>${sbadge(o.status,o.isActive)}</td><td><label class="inline-check compact-check" title="${o.delivered?'Marcar como não entregue':'Marcar como entregue'}"><input type="checkbox" aria-label="Pedido entregue" ${o.status!=='pago'?'disabled':''} ${o.delivered?'checked':''} onchange="toggleOrderDelivery('${o.id}', this.checked, this)"></label></td><td>${o.isActive?'<span class="license-state active"><strong>Ativa</strong><small>até '+fmtDate(o.expiresAt)+'</small></span>':'<span class="license-state muted"><strong>Expirada</strong><small>'+fmtDate(o.expiresAt)+'</small></span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td><td>${o.canceledAt?'<span class="muted" style="color:var(--err)">'+(o.paidManually||(o.asaasPaymentId||'').startsWith('MANUAL_')?'':(o.refunded?'C/R ':'S/R '))+fmtDate(o.canceledAt)+'</span>':'<span class="muted">&#8212;</span>'}</td><td><div class="action-row">${(o.status==='pendente'||o.status==='expirado')?`<button class="btn btn-outline" title="Marcar como pago manualmente" style="color:var(--ok);border-color:var(--ok);padding:4px 8px;font-size:11px;margin-right:4px;" onclick="markOrderPaid('${o.id}')">Pago manual</button>`:''}${o.createdManually&&o.status==='pendente'&&!o.asaasPaymentId?`<button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="deleteOrder('${o.id}')" title="Excluir pedido manual">&#128465;</button>`:(o.status==='pago'||o.status==='pendente')?`<button class="btn btn-outline" style="color:var(--err);border-color:var(--err);padding:4px 8px;font-size:11px" onclick="openCancelOrderModal('${o.id}', ${o.status==='pago' && !o.paidManually && !(o.asaasPaymentId||'').startsWith('MANUAL_')})">Cancelar</button>`:''}${o.status==='cancelado'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="deleteOrder('${o.id}')" title="Excluir">&#128465;</button>`:''}</div></td></tr>`).join('');}
   renderPag('orders',data.total,S.ordPage,20);
 }
 function setFilter(f,btn){S.ordFilter=f;S.ordPage=1;document.querySelectorAll('#fbar .fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadOrders();}
 
 async function loadUsers(p){
   if(p)S.usrPage=p;
+  updateSortableHeaderState();
   const body=document.getElementById('users-body');body.innerHTML='<tr><td colspan="10" class="loading"><div class="spinner"></div> Carregando...</td></tr>';
-  const data=await apiFetch(`${API}/users?page=${S.usrPage}&limit=20&search=${encodeURIComponent(S.usrSearch)}`);if(!data)return;
+  const qs=new URLSearchParams({page:S.usrPage,limit:20,search:S.usrSearch,sortBy:S.usrSort,sortDir:S.usrSortDir});
+  const data=await apiFetch(`${API}/users?${qs}`);if(!data)return;
   if(!data.users?.length){body.innerHTML='<tr><td colspan="10" class="empty">Nenhum usuario encontrado.</td></tr>';}
   else {
       _allLocalUsers = data.users;
       body.innerHTML=data.users.map(u=>`<tr>
-          <td><div class="ucell"><div class="avatar avatar-lg">${esc(u.name)[0].toUpperCase()}</div><div><div class="ucell-name">${esc(u.name)}</div><div class="ucell-email">${esc(u.email)}</div></div></div></td>
+          <td><div class="ucell"><div class="avatar avatar-lg">${initial(u.name)}</div><div><div class="ucell-name">${esc(u.name)}</div><div class="ucell-email">${esc(u.email)}</div></div></div></td>
           <td class="muted">${esc(u.whatsapp||'-')}</td>
           <td>${u.isActive?'<span class="badge b-ok">Ativa</span>':'<span class="badge b-err">Inativa</span>'}</td>
           <td><button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="openAdLinkModal('${u.id}')">${u.adUsername?esc(u.adUsername):'Vincular'}</button></td>

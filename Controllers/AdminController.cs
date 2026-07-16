@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace PremierAPI.Controllers
 {
@@ -392,33 +393,64 @@ namespace PremierAPI.Controllers
         }
 
         [HttpGet("orders")]
-        public async Task<IActionResult> GetOrders([FromQuery] string status = "all", [FromQuery] int page = 1, [FromQuery] int limit = 20)
+        public async Task<IActionResult> GetOrders([FromQuery] string status = "all", [FromQuery] int page = 1, [FromQuery] int limit = 20, [FromQuery] string sortBy = "createdAt", [FromQuery] string sortDir = "desc")
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             var allowed = new HashSet<string> { "all", "active_license", "expired_license", "pago", "pendente", "cancelado", "expirado" };
             if (!allowed.Contains(status)) status = "all";
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 20;
+            var orderColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["customer"] = "u.name",
+                ["whatsapp"] = "u.whatsapp",
+                ["server"] = "o.wyd_server_name",
+                ["period"] = "o.period",
+                ["computers"] = "o.computers",
+                ["totalPrice"] = "o.total_price",
+                ["asaasPaymentId"] = "COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id)",
+                ["status"] = "o.status",
+                ["delivered"] = "o.delivered",
+                ["expiresAt"] = "(o.created_at + (o.days || ' days')::INTERVAL)",
+                ["createdAt"] = "o.created_at",
+                ["canceledAt"] = "o.canceled_at"
+            };
+            if (!orderColumns.TryGetValue(sortBy ?? "", out string? orderColumn)) orderColumn = "o.created_at";
+            string direction = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase) ? "ASC" : "DESC";
             string where = status switch { "active_license" => "WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW()", "expired_license" => "WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) <= NOW()", "all" => "", _ => $"WHERE o.status = '{status}'" };
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>($"SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id = u.id {where}");
-            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY o.created_at DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
-            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, wydServerName = o.wyd_server_name as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
+            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.created_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY {orderColumn} {direction} NULLS LAST, o.id DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
+            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, wydServerName = o.wyd_server_name as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, createdManually = o.created_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
         }
 
         [HttpGet("users")]
-        public async Task<IActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int limit = 20, [FromQuery] string search = "")
+        public async Task<IActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int limit = 20, [FromQuery] string search = "", [FromQuery] string sortBy = "createdAt", [FromQuery] string sortDir = "desc")
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 20;
+            var orderColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["name"] = "u.name",
+                ["whatsapp"] = "u.whatsapp",
+                ["isActive"] = "u.is_active",
+                ["adUsername"] = "u.ad_username",
+                ["totalOrders"] = "total_orders",
+                ["totalSpent"] = "total_spent",
+                ["activeLicenses"] = "active_licenses",
+                ["createdAt"] = "u.created_at",
+                ["emailConfirmed"] = "u.email_confirmed"
+            };
+            if (!orderColumns.TryGetValue(sortBy ?? "", out string? orderColumn)) orderColumn = "u.created_at";
+            string direction = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase) ? "ASC" : "DESC";
             bool hasSearch = !string.IsNullOrWhiteSpace(search);
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>(hasSearch ? "SELECT COUNT(*) FROM users WHERE name ILIKE @Search OR email ILIKE @Search" : "SELECT COUNT(*) FROM users", new { Search = $"%{search}%" });
             string sw = hasSearch ? "WHERE u.name ILIKE @Search OR u.email ILIKE @Search" : "";
-            var raw = await db.QueryAsync($@"SELECT u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at AS user_created_at, COUNT(o.id) AS total_orders, COALESCE(SUM(CASE WHEN o.status = 'pago' THEN o.total_price ELSE 0 END), 0) AS total_spent, COUNT(CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN 1 END) AS active_licenses FROM users u LEFT JOIN orders o ON u.id = o.user_id {sw} GROUP BY u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at ORDER BY u.created_at DESC LIMIT @Limit OFFSET @Offset", new { Search = $"%{search}%", Limit = limit, Offset = offset });
+            var raw = await db.QueryAsync($@"SELECT u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at AS user_created_at, COUNT(o.id) AS total_orders, COALESCE(SUM(CASE WHEN o.status = 'pago' THEN o.total_price ELSE 0 END), 0) AS total_spent, COUNT(CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN 1 END) AS active_licenses FROM users u LEFT JOIN orders o ON u.id = o.user_id {sw} GROUP BY u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at ORDER BY {orderColumn} {direction} NULLS LAST, u.id DESC LIMIT @Limit OFFSET @Offset", new { Search = $"%{search}%", Limit = limit, Offset = offset });
             return Ok(new { total, page, limit, users = raw.Select(u => new { id = (Guid)u.id, name = (string)u.name, email = (string)u.email, whatsapp = u.whatsapp as string, isActive = (bool)u.is_active, emailConfirmed = (bool)u.email_confirmed, adUsername = u.ad_username as string, createdAt = (DateTime)u.user_created_at, totalOrders = (long)u.total_orders, totalSpent = (decimal)u.total_spent, activeLicenses = (long)u.active_licenses }) });
         }
 
@@ -717,23 +749,36 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            
-            string paymentId = "MANUAL_" + Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
-            string sqlOrder = @"INSERT INTO orders (user_id, anydesk_id, computers, wyds_per_computer, period, days, total_price, asaas_payment_id, status, paid_manually, manual_paid_at) 
-                                VALUES (@UserId, @Anydesk, @Comps, @Wyds, @Period, @Days, @Total, @PayId, 'pago', true, CURRENT_TIMESTAMP)";
+
+            string period = (req.Period ?? "").Trim().ToLowerInvariant();
+            int days = period == "semanal" ? 7 : period == "mensal" ? 30 : req.Days;
+            string anydesk = Regex.Replace(req.AnyDeskId ?? "", @"\D", "");
+            string server = (req.WydServerName ?? "").Trim();
+            if (period != "diaria" && period != "semanal" && period != "mensal") return BadRequest(new { erro = "Período inválido." });
+            if (days < 1 || req.Computers < 1 || req.Computers > 20 || req.WydsPerComputer < 1 || req.WydsPerComputer > 8) return BadRequest(new { erro = "Revise duração, computadores e slots." });
+            if (period == "diaria" && (days < 3 || req.Computers < 3)) return BadRequest(new { erro = "O plano diário exige no mínimo 3 dias e 3 computadores." });
+            if (!Regex.IsMatch(anydesk, @"^\d{6,15}$")) return BadRequest(new { erro = "O ID do AnyDesk deve conter de 6 a 15 números." });
+            if (string.IsNullOrWhiteSpace(server) || server.Length > 50) return BadRequest(new { erro = "Informe o servidor WYD com até 50 caracteres." });
+            if (server.Equals("wyd2", StringComparison.OrdinalIgnoreCase) || server.Equals("wyd 2", StringComparison.OrdinalIgnoreCase)) return BadRequest(new { erro = "No momento, não atendemos o servidor WYD2." });
+            if (req.TotalPrice <= 0) return BadRequest(new { erro = "O valor do pedido deve ser maior que zero." });
+            int pending = await db.QueryFirstOrDefaultAsync<int>("SELECT COUNT(*) FROM orders WHERE user_id = @UserId AND status = 'pendente'", new { req.UserId });
+            if (pending > 0) return Conflict(new { erro = "Este cliente já possui um pedido pendente." });
+
+            string sqlOrder = @"INSERT INTO orders (user_id, anydesk_id, wyd_server_name, computers, wyds_per_computer, period, days, total_price, status, paid_manually, created_manually)
+                                VALUES (@UserId, @Anydesk, @Server, @Comps, @Wyds, @Period, @Days, @Total, 'pendente', false, true)";
             
             await db.ExecuteAsync(sqlOrder, new { 
                 UserId = req.UserId, 
-                Anydesk = string.IsNullOrWhiteSpace(req.Description) ? "Pedido Manual" : req.Description, 
+                Anydesk = anydesk,
+                Server = server,
                 Comps = req.Computers, 
                 Wyds = req.WydsPerComputer, 
-                Period = req.Period.ToLower(), 
-                Days = req.Days,
-                Total = req.TotalPrice, 
-                PayId = paymentId 
+                Period = period,
+                Days = days,
+                Total = Math.Round(req.TotalPrice, 2)
             });
 
-            return Ok(new { msg = "Pedido manual criado com sucesso." });
+            return Ok(new { msg = "Pedido criado como pendente. O cliente já pode gerar o PIX no painel." });
         }
 
                 [HttpDelete("orders/{id}")]
@@ -741,9 +786,13 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            var order = await db.QueryFirstOrDefaultAsync("SELECT status FROM orders WHERE id = @Id", new { Id = id });
+            var order = await db.QueryFirstOrDefaultAsync("SELECT status, created_manually, asaas_pix_qr_code_id, asaas_payment_id FROM orders WHERE id = @Id", new { Id = id });
             if (order == null) return NotFound(new { erro = "Pedido nao encontrado." });
-            if ((string)order.status != "cancelado") return BadRequest(new { erro = "Apenas pedidos cancelados podem ser excluidos." });
+            bool removableManualDraft = (order.created_manually as bool? ?? false)
+                && (string)order.status == "pendente"
+                && order.asaas_pix_qr_code_id == null
+                && order.asaas_payment_id == null;
+            if ((string)order.status != "cancelado" && !removableManualDraft) return BadRequest(new { erro = "Apenas pedidos cancelados ou pedidos manuais ainda sem PIX podem ser excluídos." });
 
             await db.ExecuteAsync("DELETE FROM orders WHERE id = @Id", new { Id = id });
             return Ok(new { msg = "Pedido excluido permanentemente." });
@@ -1117,10 +1166,7 @@ namespace PremierAPI.Controllers
         public int Computers { get; set; }
         public int WydsPerComputer { get; set; }
         public decimal TotalPrice { get; set; }
-        public string Description { get; set; } = "";
+        public string AnyDeskId { get; set; } = "";
+        public string WydServerName { get; set; } = "";
     }
 }
-
-
-
-
