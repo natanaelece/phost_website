@@ -32,15 +32,21 @@ namespace PremierAPI.Controllers
         private readonly string _evoApikey;
         private readonly bool _dryRun;
         private readonly WhatsAppTemplateService _whatsAppTemplates;
+        private readonly AdAccountProvisioningService _adProvisioning;
 
         // Variáveis para os tokens de segurança da Asaas
         private readonly string _apiToken;
         private readonly string _sandboxApiToken;
 
-        public WebhookController(IConfiguration config, ILogger<WebhookController> logger, WhatsAppTemplateService whatsAppTemplates)
+        public WebhookController(
+            IConfiguration config,
+            ILogger<WebhookController> logger,
+            WhatsAppTemplateService whatsAppTemplates,
+            AdAccountProvisioningService adProvisioning)
         {
             _config = config;
             _whatsAppTemplates = whatsAppTemplates;
+            _adProvisioning = adProvisioning;
             _connectionString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _dryRun = config.GetValue<bool>("Evolution:DryRun");
@@ -132,7 +138,7 @@ namespace PremierAPI.Controllers
 
                     // Busca os dados consolidados do Cliente e do Pedido para os e-mails/whatsapp
                     var orderData = await db.QueryFirstOrDefaultAsync<dynamic>(
-                        @"SELECT u.id AS user_id, u.whatsapp, u.email, u.name, o.period, o.days,
+                        @"SELECT o.id AS order_id, u.id AS user_id, u.whatsapp, u.email, u.name, o.period, o.days,
                                  o.total_price, o.computers, o.wyds_per_computer,
                                  COALESCE(o.asaas_customer_id, @CustomerId) AS asaas_customer_id
                           FROM orders o JOIN users u ON o.user_id = u.id 
@@ -161,6 +167,8 @@ namespace PremierAPI.Controllers
                             orderData.whatsapp as string ?? "",
                             isSandbox);
                     }
+
+                    await _adProvisioning.TryProvisionOrderAsync((Guid)orderData.order_id, HttpContext.RequestAborted);
 
                     if (updatedRows == 0)
                     {

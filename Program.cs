@@ -25,7 +25,12 @@ builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<PremierAPI.Services.ActiveDirectoryService>();
 builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
+builder.Services.AddSingleton<PremierAPI.Services.EmailConfirmationService>();
+builder.Services.AddSingleton<PremierAPI.Services.AdCredentialEmailService>();
+builder.Services.AddSingleton<PremierAPI.Services.AdAccountProvisioningService>();
+builder.Services.AddHostedService<PremierAPI.Services.AdAccountProvisioningWorker>();
 builder.Services.AddHostedService<PremierAPI.Services.AdOrderExpirationWorker>();
+builder.Services.AddHostedService<PremierAPI.Services.EmailConfirmationReminderWorker>();
 
 // SEGURANÇA: CORS — só aceita requisições vindas do domínio oficial
 builder.Services.AddCors(options =>

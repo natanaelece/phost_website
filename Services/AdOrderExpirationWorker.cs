@@ -70,8 +70,6 @@ namespace PremierAPI.Services
                 SELECT
                     o.id AS Id,
                     o.user_id AS UserId,
-                    u.name AS UserName,
-                    u.email AS Email,
                     u.ad_username AS AdUsername,
                     o.created_at AS CreatedAt,
                     o.days AS Days,
@@ -96,7 +94,7 @@ namespace PremierAPI.Services
                     if (await HasAnotherActivePaidOrderAsync(db, order, now))
                     {
                         await MarkExpirationProcessedAsync(db, order.Id, now);
-                        _logger.LogInformation("[AD EXPIRACAO] Pedido {OrderId} expirado ignorado porque o usuario {Email} possui outro pedido ativo.", order.Id, order.Email);
+                        _logger.LogInformation("[AD EXPIRACAO] Pedido {OrderId} expirado ignorado porque o usuario {UserId} possui outro pedido ativo.", order.Id, order.UserId);
                         continue;
                     }
 
@@ -104,7 +102,7 @@ namespace PremierAPI.Services
                     {
                         if (!order.AdMissingLinkAlerted)
                         {
-                            _logger.LogWarning("[AD EXPIRACAO] Pedido {OrderId} venceu em {DueAt:yyyy-MM-dd HH:mm}, mas o usuario {Email} nao possui usuario AD vinculado.", order.Id, dueAt, order.Email);
+                            _logger.LogWarning("[AD EXPIRACAO] Pedido {OrderId} venceu em {DueAt:yyyy-MM-dd HH:mm}, mas o usuario {UserId} nao possui usuario AD vinculado.", order.Id, dueAt, order.UserId);
                             await db.ExecuteAsync("UPDATE orders SET ad_missing_link_alerted = true WHERE id = @Id", new { order.Id });
                         }
                         continue;
@@ -112,11 +110,11 @@ namespace PremierAPI.Services
 
                     await _ad.DisableAndArchiveUserAsync(order.AdUsername);
                     await MarkExpirationProcessedAsync(db, order.Id, now);
-                    _logger.LogWarning("[AD EXPIRACAO] Usuario AD {AdUsername} inativado automaticamente pelo vencimento do pedido {OrderId}.", order.AdUsername, order.Id);
+                    _logger.LogInformation("[AD EXPIRACAO] Usuario AD {AdUsername} inativado e movido para USUARIOS_EXPIRADOS pelo vencimento do pedido {OrderId}.", order.AdUsername, order.Id);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[AD EXPIRACAO] Falha ao processar pedido {OrderId} para {Email}.", order.Id, order.Email);
+                    _logger.LogError(ex, "[AD EXPIRACAO] Falha ao processar pedido {OrderId} do usuario {UserId}.", order.Id, order.UserId);
                 }
             }
         }
@@ -139,7 +137,7 @@ namespace PremierAPI.Services
 
         private static DateTime GetDueAt(DateTime createdAt, int days)
         {
-            return createdAt.Date.AddDays(days).AddHours(23).AddMinutes(59);
+            return createdAt.Date.AddDays(days + 1).AddHours(1);
         }
 
         private static TimeZoneInfo ResolveTimeZone(string timeZoneId)
@@ -152,8 +150,6 @@ namespace PremierAPI.Services
         {
             public Guid Id { get; set; }
             public Guid UserId { get; set; }
-            public string UserName { get; set; } = "";
-            public string Email { get; set; } = "";
             public string? AdUsername { get; set; }
             public DateTime CreatedAt { get; set; }
             public int Days { get; set; }

@@ -28,8 +28,11 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 │
 ├── Controllers/              # Controladores da API (Admin, Auth, Checkout, Webhook, Analytics)
 ├── Services/                 # Regras de Negócio e Background Workers
-│   ├── ActiveDirectoryService.cs    # Manipulação do AD (LDAP) via System.DirectoryServices
-│   ├── AdOrderExpirationWorker.cs   # Background job que verifica e expira licenças não pagas
+│   ├── ActiveDirectoryService.cs    # Fronteira LDAP/LDAPS baseada em Novell.Directory.Ldap
+│   ├── AdAccountProvisioningService.cs # Criação, vínculo e renovação do usuário AD após pagamento
+│   ├── AdAccountProvisioningWorker.cs  # Reconcilia provisionamentos pagos que falharam temporariamente
+│   ├── AdOrderExpirationWorker.cs   # Arquiva no AD licenças vencidas às 01:00 do dia seguinte
+│   ├── EmailConfirmationReminderWorker.cs # Executa até dois reenvios automáticos de confirmação
 │   ├── PricingRules.cs               # Fonte única das regras comerciais e cotações
 │   └── DatabaseInitializer.cs       # Seed e criação de tabelas automáticas no PostgreSQL
 │
@@ -82,13 +85,17 @@ O servidor também possui **Node.js 18** somente para validar a sintaxe dos Java
 
 A aplicação fará a criação e atualização automática da estrutura de tabelas do banco de dados graças ao `DatabaseInitializer.cs`.
 
+As automações usam as seções de configuração `AdProvisioning`, `AdExpiration` e `EmailConfirmationReminders`. Os intervalos definem apenas a frequência de reconciliação; o horário comercial continua autoritativo no fuso configurado. O padrão é tentar provisionamentos a cada 5 minutos, verificar expirações a cada minuto e procurar confirmações pendentes a cada 5 minutos.
+
 ## 💳 Fluxo de Compra e Automação
 
 1. O usuário acessa o Painel e realiza o **Checkout** (compra de pacotes de slots).
 2. O `CheckoutController` recalcula o valor no backend e gera no Asaas um QR Code **PIX** individual, de valor fixo, uso único e validade de 15 minutos. Não é solicitado CPF/CNPJ ao cliente.
 3. Depois do pagamento, o Asaas cria o cliente e a cobrança correspondentes e envia o `pixQrCodeId` pela rota definida em `WebhookController`, que faz a conciliação com o pedido local. O webhook completa nome, e-mail e WhatsApp do cliente usando o cadastro do site, vincula-o ao grupo `PremierHost` e desativa todas as notificações de cobrança do cliente e do provedor para evitar comunicações e taxas desnecessárias.
-4. Ao constatar o pagamento, o sistema automaticamente gera as permissões e aloca as configurações do **Active Directory**, liberando o acesso ao usuário contratante de acordo com o plano adquirido (dias corridos).
-5. O `AdOrderExpirationWorker` roda em segundo plano desativando acessos de licenças expiradas.
+4. Somente após o pedido ficar `pago`, o `AdAccountProvisioningService` cria e vincula o usuário no **Active Directory**. O cadastro inicial no site é exclusivamente local e nunca cria conta AD.
+5. Uma conta nova recebe nome de usuário único, senha temporária criptograficamente forte e vencimento correspondente ao pedido. As credenciais são enviadas apenas ao e-mail do cliente; a senha não é persistida nem registrada em logs e sua troca é recomendada na área de perfil. Renovações reativam a conta existente, movem-na para `USUARIOS` e atualizam o maior vencimento pago.
+6. Se o AD ou o envio de credenciais falhar, o pedido permanece pago e o `AdAccountProvisioningWorker` tenta reconciliar novamente com intervalo progressivo. Cada falha usa `LogError` e segue para o Telegram pela infraestrutura de logging existente.
+7. A licença vale até o fim da data de vencimento exibida. Às 01:00 do dia seguinte, no fuso `America/Sao_Paulo`, o `AdOrderExpirationWorker` desativa a conta e a move de `USUARIOS` para `USUARIOS_EXPIRADOS`, salvo quando existe outro pedido pago ainda ativo.
 
 Esse fluxo requer ao menos uma chave Pix ativa na conta Asaas do ambiente utilizado. O QR Code guarda o valor calculado pelo servidor; o pagador não pode escolher ou alterar esse valor.
 
@@ -124,7 +131,9 @@ O cliente visualiza esse pedido pendente no painel e pode usar **Gerar PIX**. O 
 
 A landing page (`wwwroot/index.html`) apresenta o serviço de aluguel de máquinas físicas para WYD, benefícios, segurança, formas de acesso, planos diário/semanal/mensal e teste gratuito de 30 minutos solicitado pelo WhatsApp. Os valores exibidos são referências do cálculo implementado no painel; a contratação e o total definitivo continuam centralizados no simulador.
 
-O cadastro da landing funciona como uma esteira de seis passos: nome, WhatsApp, e-mail, senha, indicação e aceite de privacidade. Quando preenchido, o código de indicação é validado no backend antes de avançar para o aceite; a validação também permanece no envio final. O Turnstile fica fixo na base do modal; erros só aparecem depois de interação ou tentativa de avanço. Após o cadastro, o formulário fecha e um modal de sucesso orienta a confirmação pelo link enviado por e-mail.
+O cadastro da landing funciona como uma esteira de seis passos: nome, WhatsApp, e-mail, senha, indicação e aceite de privacidade. Quando preenchido, o código de indicação é validado no backend antes de avançar para o aceite; a validação também permanece no envio final. O Turnstile fica fixo na base do modal; erros só aparecem depois de interação ou tentativa de avanço. Após o cadastro, o formulário fecha e um modal de sucesso orienta a confirmação pelo link enviado por e-mail. Esse cadastro permanece apenas no PostgreSQL; nenhuma conta AD é criada antes da confirmação de um pagamento.
+
+Se o e-mail continuar sem confirmação, o `EmailConfirmationReminderWorker` envia no máximo dois lembretes adicionais, sempre em dias diferentes do cadastro: o primeiro às 11:00 do dia seguinte e o segundo às 19:00 do outro dia, no fuso `America/Sao_Paulo`. Falhas SMTP são registradas e tentadas novamente sem consumir uma das duas entregas. Em **Admin > Usuários**, o operador pode reenviar manualmente sem consumir essa cota ou marcar o checkbox para confirmar o endereço manualmente.
 
 O painel (`wwwroot/painel.html`) permite consulta pública do simulador de preços. Links no formato abaixo abrem diretamente a área de cálculo e deixam o período correspondente selecionado:
 
@@ -220,11 +229,13 @@ Principais areas do painel:
 - **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.
 - **Financeiro:** analise de receita paga, total historico, pedidos manuais, conversao, receita por plano, tipo de pedido e status dos pedidos.
 - **CRM:** visao de clientes ativos, licencas vencendo, entregas pendentes, novos usuarios, proximos vencimentos, acoes recomendadas e ranking de clientes.
-- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD. Cabeçalhos clicáveis alternam crescente/decrescente e exibem uma única seta somente na coluna ativa; ao trocar a coluna, a anterior volta ao estado neutro. Pedidos e usuários são ordenados no backend sobre o conjunto completo; dados do AD são ordenados na listagem carregada. No celular, as tabelas viram cartões verticais que preservam todos os dados. O ID do Asaas permanece recolhido até o operador solicitar sua exibição. O vínculo de um cadastro local aceita contas AD das pastas de usuários ativos, expirados e website.
+- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega, reenvio/confirmacao de e-mail e controle de acessos no AD. Cabeçalhos clicáveis alternam crescente/decrescente e exibem uma única seta somente na coluna ativa; ao trocar a coluna, a anterior volta ao estado neutro. Pedidos e usuários são ordenados no backend sobre o conjunto completo; dados do AD são ordenados na listagem carregada. No celular, as tabelas viram cartões verticais que preservam todos os dados. O ID do Asaas permanece recolhido até o operador solicitar sua exibição. O vínculo de um cadastro local aceita contas AD das pastas de usuários ativos, expirados e website.
 
 ### Operações do Active Directory
 
 Toda comunicação LDAP deve permanecer encapsulada em `Services/ActiveDirectoryService.cs` e usar LDAPS. A tela de Active Directory permite criar, editar, duplicar e excluir grupos globais de segurança e objetos de computador usando os mesmos atributos dos registros atuais. Grupos limitam e validam nome e descrição; computadores usam nome compatível com NetBIOS, `sAMAccountName` terminado em `$`, `dNSHostName`, sistema operacional e estado ativo/desativado.
+
+O provisionamento automático é idempotente e usa as colunas `orders.ad_provisioned_at`, `orders.ad_provisioning_attempts`, `orders.ad_provisioning_error` e `orders.ad_provisioning_next_attempt_at`. `users.ad_credentials_delivered_at` impede reenvio ou redefinição indevida de credenciais já entregues. Migrações idempotentes dessas colunas ficam em `DatabaseInitializer.cs`; pedidos pagos anteriores à implantação são marcados como já conciliados para impedir criação retroativa em massa no AD.
 
 Criar o objeto de computador no AD **não ingressa a máquina física no domínio**. O ingresso ainda precisa ser executado no próprio Windows com credenciais autorizadas. Nunca crie, mova ou exclua objetos reais do AD apenas para testar uma alteração sem autorização expressa.
 

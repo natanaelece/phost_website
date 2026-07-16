@@ -330,6 +330,15 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     function confirmEmailFromCheckbox(checkbox) {
         confirmEmail(checkbox.dataset.userId, checkbox);
     }
+
+    async function resendEmailConfirmation(id, button) {
+        if(button) button.disabled = true;
+        const r = await fetch('/api/admin/users/'+id+'/resend-confirmation', { method: 'POST', headers: hdrs() });
+        const msg = await readResponseMessage(r, 'E-mail de confirmação reenviado.');
+        if(r.ok) showAdminMessage('success', msg);
+        else showAdminMessage('error', msg);
+        if(button) button.disabled = false;
+    }
     
     async function deleteOrder(id) {
         if(await askAdminConfirm('Tem certeza que deseja excluir este pedido permanentemente?')) {
@@ -1265,7 +1274,7 @@ async function loadUsers(p){
           <td style="text-align:center;font-weight:500">${u.totalOrders}</td>
           <td style="font-weight:600;color:var(--ok)">${fmtCur(u.totalSpent)}</td>
           <td style="text-align:center">${u.activeLicenses>0?'<span class="badge b-ok">'+u.activeLicenses+' ativa'+(u.activeLicenses>1?'s':'')+'</span>':'<span class="muted">&#8212;</span>'}</td>
-          <td><label class="inline-check"><input type="checkbox" data-user-id="${u.id}" ${u.emailConfirmed?'checked disabled':'onchange="confirmEmailFromCheckbox(this)"'}><span>${u.emailConfirmed?'Confirmado':'Validar'}</span></label></td>
+          <td>${u.emailConfirmed?'<label class="inline-check"><input type="checkbox" checked disabled><span>Confirmado</span></label>':`<div class="email-confirmation-actions"><input type="checkbox" data-user-id="${u.id}" aria-label="Confirmar e-mail manualmente" title="Confirmar e-mail manualmente" onchange="confirmEmailFromCheckbox(this)"><button class="btn btn-outline" onclick="resendEmailConfirmation('${u.id}',this)">Reenviar</button></div>`}</td>
           <td class="muted">${fmtDate(u.createdAt)}</td>
           <td>
               <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">

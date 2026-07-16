@@ -28,7 +28,11 @@ namespace PremierAPI.Services
                     is_active BOOLEAN DEFAULT true,
                     email_confirmed BOOLEAN DEFAULT false,
                     email_confirmation_token VARCHAR(255),
+                    email_confirmation_resend_count INT DEFAULT 0,
+                    email_confirmation_last_sent_at TIMESTAMP,
+                    email_confirmation_next_send_at TIMESTAMP,
                     ad_username VARCHAR(100),
+                    ad_credentials_delivered_at TIMESTAMP,
                     referral_code VARCHAR(20) UNIQUE,
                     referred_by UUID REFERENCES users(id),
                     used_referral_discount BOOLEAN DEFAULT false,
@@ -92,6 +96,10 @@ namespace PremierAPI.Services
                     ad_expiration_processed BOOLEAN DEFAULT false,
                     ad_expiration_processed_at TIMESTAMP,
                     ad_missing_link_alerted BOOLEAN DEFAULT false,
+                    ad_provisioned_at TIMESTAMP,
+                    ad_provisioning_attempts INT DEFAULT 0,
+                    ad_provisioning_error VARCHAR(500),
+                    ad_provisioning_next_attempt_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );",
 
@@ -103,7 +111,20 @@ namespace PremierAPI.Services
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_encoded_image TEXT;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_expires_at TIMESTAMP;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_token VARCHAR(255);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_resend_count INT DEFAULT 0;",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_last_sent_at TIMESTAMP;",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_next_send_at TIMESTAMP;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_username VARCHAR(100);",
+                @"DO $$
+                  BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'ad_credentials_delivered_at'
+                    ) THEN
+                        ALTER TABLE users ADD COLUMN ad_credentials_delivered_at TIMESTAMP;
+                        UPDATE users SET ad_credentials_delivered_at = CURRENT_TIMESTAMP WHERE ad_username IS NOT NULL;
+                    END IF;
+                  END $$;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_manually BOOLEAN DEFAULT false;",
@@ -112,10 +133,25 @@ namespace PremierAPI.Services
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_missing_link_alerted BOOLEAN DEFAULT false;",
+                @"DO $$
+                  BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'ad_provisioned_at'
+                    ) THEN
+                        ALTER TABLE orders ADD COLUMN ad_provisioned_at TIMESTAMP;
+                        UPDATE orders SET ad_provisioned_at = CURRENT_TIMESTAMP WHERE status = 'pago';
+                    END IF;
+                  END $$;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_provisioning_attempts INT DEFAULT 0;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_provisioning_error VARCHAR(500);",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_provisioning_next_attempt_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS wyd_server_name VARCHAR(50);",
 
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_asaas_pix_qr_code_id ON orders(asaas_pix_qr_code_id) WHERE asaas_pix_qr_code_id IS NOT NULL;",
+                "CREATE INDEX IF NOT EXISTS idx_orders_ad_provisioning_pending ON orders(ad_provisioning_next_attempt_at, created_at) WHERE status = 'pago' AND ad_provisioned_at IS NULL;",
+                "CREATE INDEX IF NOT EXISTS idx_users_email_confirmation_pending ON users(email_confirmation_next_send_at) WHERE email_confirmed = false;",
 
                 @"CREATE TABLE IF NOT EXISTS product_analytics_events (
                     id BIGSERIAL PRIMARY KEY,
@@ -134,10 +170,18 @@ namespace PremierAPI.Services
                 "DELETE FROM product_analytics_events WHERE occurred_at < CURRENT_TIMESTAMP - INTERVAL '13 months';",
                 
                 "UPDATE users SET is_active = true WHERE is_active IS NULL;",
+                "UPDATE users SET email_confirmation_resend_count = 0 WHERE email_confirmation_resend_count IS NULL;",
+                @"UPDATE users
+                  SET email_confirmation_next_send_at = created_at::date + INTERVAL '1 day 11 hours'
+                  WHERE email_confirmed = false
+                    AND email_confirmation_token IS NOT NULL
+                    AND COALESCE(email_confirmation_resend_count, 0) < 2
+                    AND email_confirmation_next_send_at IS NULL;",
                 "UPDATE orders SET delivered = false WHERE delivered IS NULL;",
                 "UPDATE orders SET paid_manually = false WHERE paid_manually IS NULL;",
                 "UPDATE orders SET ad_expiration_processed = false WHERE ad_expiration_processed IS NULL;",
                 "UPDATE orders SET ad_missing_link_alerted = false WHERE ad_missing_link_alerted IS NULL;",
+                "UPDATE orders SET ad_provisioning_attempts = 0 WHERE ad_provisioning_attempts IS NULL;",
 
                 @"CREATE TABLE IF NOT EXISTS whatsapp_message_templates (
                     key VARCHAR(80) PRIMARY KEY,

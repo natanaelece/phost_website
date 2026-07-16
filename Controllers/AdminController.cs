@@ -24,14 +24,23 @@ namespace PremierAPI.Controllers
 
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _turnstileSecret;
+        private readonly AdAccountProvisioningService _adProvisioning;
+        private readonly EmailConfirmationService _emailConfirmation;
 
-        public AdminController(IConfiguration config, ILogger<AdminController> logger, IHttpClientFactory httpClientFactory)
+        public AdminController(
+            IConfiguration config,
+            ILogger<AdminController> logger,
+            IHttpClientFactory httpClientFactory,
+            AdAccountProvisioningService adProvisioning,
+            EmailConfirmationService emailConfirmation)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _httpClientFactory = httpClientFactory;
             _turnstileSecret = config.GetValue<string>("Cloudflare:TurnstileSecretKey") ?? "";
+            _adProvisioning = adProvisioning;
+            _emailConfirmation = emailConfirmation;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -198,7 +207,7 @@ namespace PremierAPI.Controllers
                     COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND created_at >= @Start AND created_at < @End), 0) AS Revenue,
                     COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago' AND created_at >= @PriorStart AND created_at < @PriorEnd), 0) AS PriorRevenue,
                     COALESCE((SELECT SUM(total_price) FROM orders WHERE status = 'pago'), 0) AS TotalRevenue,
-                    COALESCE((SELECT SUM((total_price / GREATEST(days, 1)) * 30) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now), 0) AS EstimatedMrr,
+                    COALESCE((SELECT SUM((total_price / GREATEST(days, 1)) * 30) FROM orders WHERE status = 'pago' AND (created_at::date + days + 1) > @Now), 0) AS EstimatedMrr,
                     (SELECT COUNT(*) FROM orders WHERE created_at >= @Start AND created_at < @End) AS OrdersInPeriod,
                     (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND created_at >= @Start AND created_at < @End) AS PaidOrders,
                     (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND created_at >= @PriorStart AND created_at < @PriorEnd) AS PriorPaidOrders,
@@ -208,10 +217,10 @@ namespace PremierAPI.Controllers
                     (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND paid_manually = true AND created_at >= @Start AND created_at < @End) AS ManualPaidOrders,
                     (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND delivered = true AND created_at >= @Start AND created_at < @End) AS DeliveredOrders,
                     (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND delivered = false) AS PendingDeliveryOrders,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now) AS ActiveLicenses,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) <= @Now) AS ExpiredLicenses,
-                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now AND (created_at + (days || ' days')::INTERVAL) <= (@Now + INTERVAL '7 days')) AS ExpiringSoon,
-                    (SELECT COUNT(DISTINCT user_id) FROM orders WHERE status = 'pago' AND (created_at + (days || ' days')::INTERVAL) > @Now) AS ActiveCustomers,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at::date + days + 1) > @Now) AS ActiveLicenses,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at::date + days + 1) <= @Now) AS ExpiredLicenses,
+                    (SELECT COUNT(*) FROM orders WHERE status = 'pago' AND (created_at::date + days + 1) > @Now AND (created_at::date + days + 1) <= (@Now + INTERVAL '7 days')) AS ExpiringSoon,
+                    (SELECT COUNT(DISTINCT user_id) FROM orders WHERE status = 'pago' AND (created_at::date + days + 1) > @Now) AS ActiveCustomers,
                     (SELECT COUNT(*) FROM users) AS TotalUsers,
                     (SELECT COUNT(*) FROM users WHERE created_at >= @Start AND created_at < @End) AS NewUsers
             ", p);
@@ -287,10 +296,10 @@ namespace PremierAPI.Controllers
                     o.computers AS Computers,
                     o.wyds_per_computer AS WydsPerComputer,
                     o.total_price AS TotalPrice,
-                    (o.created_at + (o.days || ' days')::INTERVAL) AS ExpiresAt
+                    (o.created_at::date + o.days) AS ExpiresAt
                 FROM orders o
                 JOIN users u ON o.user_id = u.id
-                WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now
+                WHERE o.status = 'pago' AND (o.created_at::date + o.days + 1) > @Now
                 ORDER BY ExpiresAt ASC
                 LIMIT 8
             ", p);
@@ -306,10 +315,10 @@ namespace PremierAPI.Controllers
                 JOIN users u ON o.user_id = u.id
                 WHERE o.status = 'pago' AND o.delivered = false
                 UNION ALL
-                SELECT 'Licenca vencendo' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, (o.created_at + (o.days || ' days')::INTERVAL) AS EventAt
+                SELECT 'Licenca vencendo' AS Type, u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp, o.total_price AS TotalPrice, (o.created_at::date + o.days) AS EventAt
                 FROM orders o
                 JOIN users u ON o.user_id = u.id
-                WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now AND (o.created_at + (o.days || ' days')::INTERVAL) <= (@Now + INTERVAL '7 days')
+                WHERE o.status = 'pago' AND (o.created_at::date + o.days + 1) > @Now AND (o.created_at::date + o.days + 1) <= (@Now + INTERVAL '7 days')
                 ORDER BY EventAt ASC
                 LIMIT 10
             ", p);
@@ -326,8 +335,8 @@ namespace PremierAPI.Controllers
                     o.total_price AS TotalPrice,
                     o.status AS Status,
                     o.created_at AS CreatedAt,
-                    (o.created_at + (o.days || ' days')::INTERVAL) AS ExpiresAt,
-                    CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > @Now THEN true ELSE false END AS IsActive
+                    (o.created_at::date + o.days) AS ExpiresAt,
+                    CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > @Now THEN true ELSE false END AS IsActive
                 FROM orders o
                 JOIN users u ON o.user_id = u.id
                 ORDER BY o.created_at DESC
@@ -412,17 +421,17 @@ namespace PremierAPI.Controllers
                 ["asaasPaymentId"] = "COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id)",
                 ["status"] = "o.status",
                 ["delivered"] = "o.delivered",
-                ["expiresAt"] = "(o.created_at + (o.days || ' days')::INTERVAL)",
+                ["expiresAt"] = "(o.created_at::date + o.days)",
                 ["createdAt"] = "o.created_at",
                 ["canceledAt"] = "o.canceled_at"
             };
             if (!orderColumns.TryGetValue(sortBy ?? "", out string? orderColumn)) orderColumn = "o.created_at";
             string direction = string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase) ? "ASC" : "DESC";
-            string where = status switch { "active_license" => "WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW()", "expired_license" => "WHERE o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) <= NOW()", "all" => "", _ => $"WHERE o.status = '{status}'" };
+            string where = status switch { "active_license" => "WHERE o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW()", "expired_license" => "WHERE o.status = 'pago' AND (o.created_at::date + o.days + 1) <= NOW()", "all" => "", _ => $"WHERE o.status = '{status}'" };
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>($"SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id = u.id {where}");
-            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.created_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at + (o.days || ' days')::INTERVAL) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY {orderColumn} {direction} NULLS LAST, o.id DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
+            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.created_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at::date + o.days) AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY {orderColumn} {direction} NULLS LAST, o.id DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
             return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, wydServerName = o.wyd_server_name as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, createdManually = o.created_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
         }
 
@@ -451,7 +460,7 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>(hasSearch ? "SELECT COUNT(*) FROM users WHERE name ILIKE @Search OR email ILIKE @Search" : "SELECT COUNT(*) FROM users", new { Search = $"%{search}%" });
             string sw = hasSearch ? "WHERE u.name ILIKE @Search OR u.email ILIKE @Search" : "";
-            var raw = await db.QueryAsync($@"SELECT u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at AS user_created_at, COUNT(o.id) AS total_orders, COALESCE(SUM(CASE WHEN o.status = 'pago' THEN o.total_price ELSE 0 END), 0) AS total_spent, COUNT(CASE WHEN o.status = 'pago' AND (o.created_at + (o.days || ' days')::INTERVAL) > NOW() THEN 1 END) AS active_licenses FROM users u LEFT JOIN orders o ON u.id = o.user_id {sw} GROUP BY u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at ORDER BY {orderColumn} {direction} NULLS LAST, u.id DESC LIMIT @Limit OFFSET @Offset", new { Search = $"%{search}%", Limit = limit, Offset = offset });
+            var raw = await db.QueryAsync($@"SELECT u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at AS user_created_at, COUNT(o.id) AS total_orders, COALESCE(SUM(CASE WHEN o.status = 'pago' THEN o.total_price ELSE 0 END), 0) AS total_spent, COUNT(CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN 1 END) AS active_licenses FROM users u LEFT JOIN orders o ON u.id = o.user_id {sw} GROUP BY u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at ORDER BY {orderColumn} {direction} NULLS LAST, u.id DESC LIMIT @Limit OFFSET @Offset", new { Search = $"%{search}%", Limit = limit, Offset = offset });
             return Ok(new { total, page, limit, users = raw.Select(u => new { id = (Guid)u.id, name = (string)u.name, email = (string)u.email, whatsapp = u.whatsapp as string, isActive = (bool)u.is_active, emailConfirmed = (bool)u.email_confirmed, adUsername = u.ad_username as string, createdAt = (DateTime)u.user_created_at, totalOrders = (long)u.total_orders, totalSpent = (decimal)u.total_spent, activeLicenses = (long)u.active_licenses }) });
         }
 
@@ -554,9 +563,49 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            int rows = await db.ExecuteAsync("UPDATE users SET email_confirmed = true, email_confirmation_token = NULL WHERE id = @Id", new { Id = id });
+            int rows = await db.ExecuteAsync(@"
+                UPDATE users
+                SET email_confirmed = true,
+                    email_confirmation_token = NULL,
+                    email_confirmation_next_send_at = NULL
+                WHERE id = @Id", new { Id = id });
             if (rows == 0) return NotFound(new { erro = "Usuario nao encontrado." });
             return Ok(new { msg = "E-mail confirmado manualmente." });
+        }
+
+        [HttpPost("users/{id}/resend-confirmation")]
+        public async Task<IActionResult> ResendEmailConfirmation(Guid id)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            using var db = new NpgsqlConnection(_connString);
+            var user = await db.QueryFirstOrDefaultAsync(@"
+                SELECT id, name, email, email_confirmed, email_confirmation_token
+                FROM users WHERE id = @Id", new { Id = id });
+            if (user == null) return NotFound(new { erro = "Usuario nao encontrado." });
+            if ((bool)user.email_confirmed) return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
+
+            string token = user.email_confirmation_token as string ?? Guid.NewGuid().ToString();
+            try
+            {
+                if (user.email_confirmation_token == null)
+                {
+                    await db.ExecuteAsync(
+                        "UPDATE users SET email_confirmation_token = @Token WHERE id = @Id AND email_confirmed = false",
+                        new { Id = id, Token = token });
+                }
+                await _emailConfirmation.SendAsync((string)user.email, (string)user.name, token, HttpContext.RequestAborted);
+                await db.ExecuteAsync(@"
+                    UPDATE users
+                    SET email_confirmation_last_sent_at = CURRENT_TIMESTAMP
+                    WHERE id = @Id AND email_confirmed = false",
+                    new { Id = id });
+                return Ok(new { msg = "E-mail de confirmacao reenviado." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[EMAIL CONFIRMACAO] Falha no reenvio manual para o usuario {UserId}.", id);
+                return StatusCode(502, new { erro = "Nao foi possivel reenviar o e-mail de confirmacao." });
+            }
         }
 
         [HttpPut("users/{id}/active")]
@@ -598,7 +647,14 @@ namespace PremierAPI.Controllers
                 }
             }
 
-            int rows = await db.ExecuteAsync("UPDATE users SET ad_username = @AdUsername WHERE id = @Id", new { AdUsername = adUsername, Id = id });
+            int rows = await db.ExecuteAsync(@"
+                UPDATE users
+                SET ad_username = @AdUsername,
+                    ad_credentials_delivered_at = CASE
+                        WHEN @AdUsername IS NULL THEN NULL
+                        ELSE COALESCE(ad_credentials_delivered_at, CURRENT_TIMESTAMP)
+                    END
+                WHERE id = @Id", new { AdUsername = adUsername, Id = id });
             if (rows == 0) return NotFound(new { erro = "Usuario nao encontrado." });
 
             // Sincronizar telephoneNumber no AD com o WhatsApp cadastrado
@@ -739,6 +795,8 @@ namespace PremierAPI.Controllers
                       delivered_at = NULL
                   WHERE id = @Id",
                 new { Id = id });
+
+            await _adProvisioning.TryProvisionOrderAsync(id, HttpContext.RequestAborted);
 
             string msg = asaasCanceled
                 ? "Pedido marcado como pago manualmente. A cobranca pendente na Asaas foi cancelada para evitar pagamento duplicado."

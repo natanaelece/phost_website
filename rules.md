@@ -27,6 +27,9 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 ## Active Directory
 
 - `Services/ActiveDirectoryService.cs` é a única fronteira LDAP e deve usar LDAPS. Buscas partindo do `BaseDn` usam escopo de subárvore.
+- Cadastro no site é somente local. Criação automática de usuário AD ocorre exclusivamente quando um pedido passa para `pago`, por meio de `AdAccountProvisioningService`; falhas são conciliadas pelo worker e reportadas via logging/Telegram.
+- Senha inicial AD é temporária, forte, enviada somente ao e-mail do cliente e nunca persistida ou registrada. Redefinições posteriores devem sincronizar site e AD quando houver vínculo.
+- A data comercial de vencimento é `orders.created_at::date + orders.days`. A conta continua disponível nessa data e, às 01:00 do dia seguinte no fuso configurado, deve ser desativada e movida para `USUARIOS_EXPIRADOS`, exceto se houver outro pedido pago ativo.
 - Renomear CN exige `ModifyDNRequest`; alteração comum de atributos usa `LdapModification`.
 - O vínculo local pode localizar usuários nas pastas ativos, expirados e website.
 - O admin cria grupos globais de segurança e objetos de computador. Valide nomes/atributos no backend. Criar o objeto não ingressa a máquina física no domínio.
@@ -37,6 +40,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - Não exponha segredos de `appsettings`, ambiente, tokens, chaves ou payloads sensíveis.
 - A telemetria é first-party e allowlisted. Nunca envie e-mail, WhatsApp, AnyDesk, senha, conteúdo Pix ou dados bancários. Não há GA4 nem Meta Pixel atualmente.
 - Mantenha no sitemap apenas `/`, `/painel` e `/privacidade`. Rotas internas devem continuar fora do índice. Ao mudar CSP ou Cloudflare, preserve `robots.txt`, `sitemap.xml` e recursos públicos necessários.
+- E-mail não confirmado recebe no máximo dois reenvios automáticos: dia seguinte às 11:00 e outro dia às 19:00. Reenvio manual do admin não consome essa cota; confirmação manual continua explícita pelo checkbox.
 
 ## Validação mínima
 

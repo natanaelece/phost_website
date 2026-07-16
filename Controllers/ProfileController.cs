@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 namespace PremierAPI.Controllers
 {
     [ApiController]
@@ -13,7 +14,12 @@ namespace PremierAPI.Controllers
     public class ProfileController : ControllerBase
     {
         private readonly string _connString;
-        public ProfileController(IConfiguration config) { _connString = config.GetConnectionString("DefaultConnection") ?? ""; }
+        private readonly ILogger<ProfileController> _logger;
+        public ProfileController(IConfiguration config, ILogger<ProfileController> logger)
+        {
+            _connString = config.GetConnectionString("DefaultConnection") ?? "";
+            _logger = logger;
+        }
 
         private async Task<bool> ValidateSession(NpgsqlConnection db, Guid userId)
         {
@@ -63,6 +69,7 @@ namespace PremierAPI.Controllers
             // Pedidos pendentes continuam no bloco próprio do PIX para não aparecerem duplicados.
             var ordersRaw = await db.QueryAsync(
                 @"SELECT created_at AS ""CreatedAt"", period AS ""Period"", days AS ""Days"",
+                         (created_at::date + days) AS ""ExpiresAt"",
                          computers AS ""Computers"", wyds_per_computer AS ""WydsPerComputer"",
                          total_price AS ""TotalPrice"", status AS ""Status"",
                          delivered AS ""Delivered"", delivered_at AS ""DeliveredAt"",
@@ -77,6 +84,7 @@ namespace PremierAPI.Controllers
                 createdAt = (DateTime)order.CreatedAt,
                 period = (string)order.Period,
                 days = (int)order.Days,
+                expiresAt = (DateTime)order.ExpiresAt,
                 computers = (int)order.Computers,
                 wydsPerComputer = (int)order.WydsPerComputer,
                 totalPrice = (decimal)order.TotalPrice,
@@ -176,12 +184,13 @@ namespace PremierAPI.Controllers
             if (!string.IsNullOrWhiteSpace((string)user.ad_username))
             {
                 try {
+                    if (newHash != null && !string.IsNullOrWhiteSpace(req.NewPassword))
+                        await ad.SetUserPasswordAsync((string)user.ad_username, req.NewPassword, forceChangeOnNextLogon: false);
                     if (!string.IsNullOrWhiteSpace(req.Whatsapp)) {
                         await ad.UpdateTelephoneAsync((string)user.ad_username, req.Whatsapp);
                     }
                 } catch (Exception ex) {
-                    // Log error but do not fail the profile update
-                    Console.WriteLine("[AD SYNC] Falha ao sincronizar perfil para o AD: " + ex.Message);
+                    _logger.LogError(ex, "[AD SYNC] Falha ao sincronizar perfil do usuario {UserId} para o AD.", id);
                 }
             }
 

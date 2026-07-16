@@ -449,16 +449,17 @@ namespace PremierAPI.Services
             _logger.LogInformation("[AD] Computador excluído: {ComputerName}.", name);
         }
 
-        public async Task CreateUserAsync(string username, string fullName, string password, string? email = null, string? phone = null, bool fromWebsite = false)
+        public async Task CreateUserAsync(string username, string fullName, string password, string? email = null, string? phone = null, bool fromWebsite = false, bool forcePasswordChange = false, string? commonName = null)
         {
             if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
             EnsureSecurePasswordTransport(password);
             using var conn = GetConnection();
+            commonName = string.IsNullOrWhiteSpace(commonName) ? fullName : commonName.Trim();
             var attributes = new LdapAttributeSet
             {
                 new LdapAttribute("objectClass", "user"),
                 new LdapAttribute("sAMAccountName", username),
-                new LdapAttribute("cn", fullName),
+                new LdapAttribute("cn", commonName),
                 new LdapAttribute("displayName", fullName)
             };
 
@@ -490,7 +491,7 @@ namespace PremierAPI.Services
             }
 
             string targetOu = fromWebsite && !string.IsNullOrEmpty(_websiteUsersOu) ? _websiteUsersOu : _activeUsersOu;
-            var entry = new LdapEntry($"CN={fullName},{targetOu}", attributes);
+            var entry = new LdapEntry($"CN={commonName},{targetOu}", attributes);
             conn.Add(entry);
 
             if (!string.IsNullOrEmpty(password))
@@ -498,7 +499,7 @@ namespace PremierAPI.Services
                 var encodedPass = System.Text.Encoding.Unicode.GetBytes($"\"{password}\"");
                 var passMod = new LdapModification(LdapModification.Replace, new LdapAttribute("unicodePwd", encodedPass));
                 var uacMod = new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", "66048")); // NORMAL_ACCOUNT | DONT_EXPIRE_PASSWORD
-                var pwdLastSetMod = new LdapModification(LdapModification.Replace, new LdapAttribute("pwdLastSet", "-1"));
+                var pwdLastSetMod = new LdapModification(LdapModification.Replace, new LdapAttribute("pwdLastSet", forcePasswordChange ? "0" : "-1"));
                 try
                 {
                     _logger.LogInformation("[AD] Iniciando definição de senha para usuário: {Username}.", username);
@@ -529,6 +530,36 @@ namespace PremierAPI.Services
             if (!string.IsNullOrEmpty(userDn))
             {
                 conn.Delete(userDn);
+            }
+        }
+
+        public async Task<bool> UserExistsAsync(string username)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            using var conn = GetConnection();
+            return !string.IsNullOrEmpty(GetUserDn(conn, username));
+        }
+
+        public async Task ActivateAndRestoreUserAsync(string username)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            using var conn = GetConnection();
+            string userDn = GetUserDn(conn, username) ?? throw new Exception("Usuário AD não encontrado");
+            var entry = ReadEntry(conn, userDn, "userAccountControl");
+            int userAccountControl = GetAttributeAsInt(entry, "userAccountControl");
+            if (userAccountControl == 0) userAccountControl = 512;
+            userAccountControl &= ~2;
+
+            conn.Modify(userDn, new[]
+            {
+                new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", userAccountControl.ToString()))
+            });
+            EnsureRequiredLogonComputers(conn, userDn);
+
+            if (!IsActiveUsersDn(userDn))
+            {
+                string rdn = userDn.Split(',')[0];
+                conn.Rename(userDn, rdn, _activeUsersOu, true);
             }
         }
 

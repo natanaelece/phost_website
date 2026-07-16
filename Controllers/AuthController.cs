@@ -8,15 +8,13 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using MailKit.Net.Smtp;
 using MimeKit;
-using System.Collections.Generic;
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
 using BCrypt.Net;
-using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Linq;
+using PremierAPI.Services;
 
 namespace PremierAPI.Controllers
 {
@@ -31,8 +29,13 @@ namespace PremierAPI.Controllers
         private readonly string _turnstileSecret;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _config;
+        private readonly EmailConfirmationService _emailConfirmation;
 
-        public AuthController(IConfiguration config, ILogger<AuthController> logger, IHttpClientFactory httpClientFactory)
+        public AuthController(
+            IConfiguration config,
+            ILogger<AuthController> logger,
+            IHttpClientFactory httpClientFactory,
+            EmailConfirmationService emailConfirmation)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -40,6 +43,7 @@ namespace PremierAPI.Controllers
             _debugLogs = config.GetValue<bool>("PremierConfig:EnableDebugLogs");
             _turnstileSecret = config.GetValue<string>("Cloudflare:TurnstileSecretKey") ?? "";
             _httpClientFactory = httpClientFactory;
+            _emailConfirmation = emailConfirmation;
         }
 
         // =========================================================================
@@ -193,57 +197,36 @@ namespace PremierAPI.Controllers
             string hash = BCrypt.Net.BCrypt.HashPassword(req.Password, workFactor: 12);
             string emailToken = Guid.NewGuid().ToString();
 
-            string sql = @"INSERT INTO users (name, email, whatsapp, password_hash, referred_by, email_confirmation_token, email_confirmed)
-                           VALUES (@Name, @Email, @Whatsapp, @Hash, @RefId, @EmailToken, false) RETURNING id";
+            DateTime registeredAt = GetConfiguredLocalNow();
+            DateTime firstReminderAt = EmailConfirmationReminderWorker.GetFirstReminderAt(registeredAt);
+            string sql = @"INSERT INTO users
+                              (name, email, whatsapp, password_hash, referred_by,
+                               email_confirmation_token, email_confirmed,
+                               email_confirmation_resend_count, email_confirmation_last_sent_at,
+                               email_confirmation_next_send_at, created_at)
+                           VALUES
+                              (@Name, @Email, @Whatsapp, @Hash, @RefId,
+                               @EmailToken, false, 0, @RegisteredAt, @FirstReminderAt, @RegisteredAt)
+                           RETURNING id";
 
-            var newId = await db.QuerySingleAsync<Guid>(sql, new { req.Name, req.Email, req.Whatsapp, Hash = hash, RefId = referredBy, EmailToken = emailToken });
-            await EnviarEmailConfirmacao(req.Email, req.Name, emailToken);
-
-            // [NEW] Auto-create AD account
+            await db.QuerySingleAsync<Guid>(sql, new
+            {
+                req.Name,
+                req.Email,
+                req.Whatsapp,
+                Hash = hash,
+                RefId = referredBy,
+                EmailToken = emailToken,
+                RegisteredAt = registeredAt,
+                FirstReminderAt = firstReminderAt
+            });
             try
             {
-                var ad = HttpContext.RequestServices.GetService(typeof(PremierAPI.Services.ActiveDirectoryService)) as PremierAPI.Services.ActiveDirectoryService;
-                if (ad != null && !string.IsNullOrWhiteSpace(req.Name))
-                {
-                    // Remove accents
-                    var normalized = req.Name.Normalize(System.Text.NormalizationForm.FormD);
-                    var sb = new System.Text.StringBuilder();
-                    foreach (var c in normalized)
-                    {
-                        if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
-                            sb.Append(c);
-                    }
-                    var cleanName = sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
-
-                    // Remove spaces and invalid AD characters
-                    var invalidChars = new HashSet<char> { '"', '/', '\\', '[', ']', ':', ';', '|', '=', ',', '+', '*', '?', '<', '>', '@' };
-                    string adUsername = new string(cleanName.Where(c => !char.IsWhiteSpace(c) && !invalidChars.Contains(c)).ToArray());
-
-                    // Fallback se o nome ficar vazio
-                    if (string.IsNullOrWhiteSpace(adUsername))
-                    {
-                        adUsername = new string(req.Email.Split('@')[0].Where(c => !invalidChars.Contains(c)).ToArray());
-                    }
-
-                    // Enforce 20 chars limit for sAMAccountName
-                    if (adUsername.Length > 20)
-                    {
-                        adUsername = adUsername.Substring(0, 20);
-                    }
-
-                    await ad.CreateUserAsync(adUsername, req.Name, req.Password, req.Email, req.Whatsapp, fromWebsite: true);
-                    
-                    await db.ExecuteAsync("UPDATE users SET ad_username = @AdUser WHERE id = @Id", new { AdUser = adUsername, Id = newId });
-                    if (_debugLogs) _logger.LogInformation("[REGISTER AD] Conta AD {AdUsername} criada e vinculada com sucesso.", adUsername);
-                }
-            }
-            catch (Novell.Directory.Ldap.LdapException ex) when (ex.ResultCode == 68) // 68 = Entry Already Exists
-            {
-                _logger.LogError(ex, "[REGISTER AD] O usuário '{Name}' ({Email}) tentou se cadastrar, mas a conta já existe no Active Directory. Favor corrigir manualmente.", req.Name, req.Email);
+                await _emailConfirmation.SendAsync(req.Email, req.Name, emailToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[REGISTER AD] Falha ao criar conta AD (offline ou erro). O cadastro no site prossegue localmente.");
+                _logger.LogError(ex, "[SMTP ERROR] Falha ao disparar o e-mail inicial de ativação.");
             }
 
             if (_debugLogs) _logger.LogInformation("[REGISTER SUCESSO] {Email} cadastrado.", req.Email);
@@ -262,7 +245,9 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
 
             string sql = @"UPDATE users
-                           SET email_confirmed = true, email_confirmation_token = NULL
+                           SET email_confirmed = true,
+                               email_confirmation_token = NULL,
+                               email_confirmation_next_send_at = NULL
                            WHERE email_confirmation_token = @Token
                            RETURNING email";
 
@@ -359,9 +344,10 @@ namespace PremierAPI.Controllers
                         try {
                             string? adUsername = (string?)userInfo.ad_username;
                             string? whatsapp = (string?)userInfo.whatsapp;
-                            if (!string.IsNullOrWhiteSpace(whatsapp) && !string.IsNullOrWhiteSpace(adUsername)) {
+                            if (!string.IsNullOrWhiteSpace(adUsername))
+                                await ad.SetUserPasswordAsync(adUsername, req.NewPassword, forceChangeOnNextLogon: false);
+                            if (!string.IsNullOrWhiteSpace(whatsapp) && !string.IsNullOrWhiteSpace(adUsername))
                                 await ad.UpdateTelephoneAsync(adUsername, whatsapp);
-                            }
                         } catch (Exception ex) {
                             _logger.LogError(ex, "[AD SYNC] Falha ao sincronizar nova senha e whatsapp para o AD no reset.");
                         }
@@ -431,51 +417,6 @@ namespace PremierAPI.Controllers
             }
         }
 
-        private async Task EnviarEmailConfirmacao(string email, string name, string token)
-        {
-            try
-            {
-                string smtpServer = _config["Smtp:Server"]!;
-                int smtpPort = _config.GetValue<int>("Smtp:Port");
-                string smtpUser = _config["Smtp:User"]!;
-                string smtpPassword = _config["Smtp:Password"]!;
-
-                var message = new MimeMessage();
-                message.From.Add(new MailboxAddress(
-                    _config["Smtp:FromName"]!,
-                    _config["Smtp:FromEmail"]!));
-                message.To.Add(new MailboxAddress(name, email));
-                message.Subject = "Confirme seu e-mail — Premier Host";
-
-                string baseUrl = _config["PremierConfig:BaseUrlFront"]!;
-                string linkConfirmacao = $"{baseUrl}/confirmar?token={token}";
-
-                message.Body = new TextPart("html")
-                {
-                    Text = $@"
-                    <div style='font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;'>
-                        <h2 style='color: #3b82f6; font-size: 22px; margin-bottom: 20px;'>Confirme seu e-mail — Premier Host</h2>
-                        <p style='font-size: 14px;'>Olá, <strong>{name}</strong>!</p>
-                        <p style='font-size: 14px; line-height: 1.5; margin-bottom: 20px;'>Clique no botão abaixo para confirmar seu e-mail e ativar sua conta:</p>
-                        <a href='{linkConfirmacao}' style='display: inline-block; padding: 12px 28px; background-color: #2563eb; color: #ffffff !important; border-radius: 8px; font-weight: bold; text-decoration: none; margin: 14px 0;'>Confirmar e-mail</a>
-                        <p style='color: #999999; font-size: 13px; margin-top: 20px;'>Este link expira em 24 horas. Se não criou uma conta, ignore este e-mail.</p>
-                        <hr style='border: 0; border-top: 1px solid #eeeeee; margin: 24px 0;'>
-                        <p style='color: #999999; font-size: 12px; margin: 0;'>Premier Host — Não responda este e-mail.</p>
-                    </div>"
-                };
-
-                using var client = new SmtpClient();
-                await client.ConnectAsync(smtpServer, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
-                await client.AuthenticateAsync(smtpUser, smtpPassword);
-                await client.SendAsync(message);
-                await client.DisconnectAsync(true);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError("[SMTP ERROR] Falha ao disparar e-mail de ativação para {Email}: {Msg}", email, ex.Message);
-            }
-        }
-
         private async Task EnviarEmailRecuperacao(string email, string name, string token)
         {
             try
@@ -520,6 +461,19 @@ namespace PremierAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError("[SMTP ERROR] Falha ao enviar e-mail de recuperação para {Email}: {Msg}", email, ex.Message);
+            }
+        }
+
+        private DateTime GetConfiguredLocalNow()
+        {
+            string timeZoneId = _config["EmailConfirmationReminders:TimeZone"] ?? "";
+            try
+            {
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
+            }
+            catch
+            {
+                return DateTime.Now;
             }
         }
     }
