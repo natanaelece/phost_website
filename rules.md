@@ -38,6 +38,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 ## Segurança, SEO e telemetria
 
 - Não exponha segredos de `appsettings`, ambiente, tokens, chaves ou payloads sensíveis.
+- Preserve o key ring persistente do ASP.NET Data Protection e sua proteção por certificado em `DataProtectionConfiguration`; não volte a persistir chaves XML sem encryptor nem registre materiais criptográficos.
 - A telemetria é first-party e allowlisted. Nunca envie e-mail, WhatsApp, AnyDesk, senha, conteúdo Pix ou dados bancários. Não há GA4 nem Meta Pixel atualmente.
 - Mantenha no sitemap apenas `/`, `/painel` e `/privacidade`. Rotas internas devem continuar fora do índice. Ao mudar CSP ou Cloudflare, preserve `robots.txt`, `sitemap.xml` e recursos públicos necessários.
 - E-mail não confirmado recebe no máximo dois reenvios automáticos: dia seguinte às 11:00 e outro dia às 19:00. Reenvio manual do admin não consome essa cota; confirmação manual continua explícita pelo checkbox.

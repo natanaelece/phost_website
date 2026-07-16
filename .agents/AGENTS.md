@@ -30,6 +30,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 ## Segurança operacional
 
 Não faça chamadas com efeitos reais no Asaas nem mutações no AD para testar sem autorização expressa. Não exponha segredos, tokens ou configurações privadas em logs, diffs ou respostas.
+O key ring do Data Protection é persistente e protegido por certificado; preserve `DataProtectionConfiguration` e nunca versione `.data-protection-keys`.
 
 ## Checagens rápidas
 

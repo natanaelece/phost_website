@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using Microsoft.AspNetCore.DataProtection;
 using System.Threading.RateLimiting;
 using System;
 using System.IO;
@@ -24,13 +23,10 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
-string dataProtectionKeyRingPath = builder.Configuration["DataProtection:KeyRingPath"] ?? ".data-protection-keys";
-if (!Path.IsPathRooted(dataProtectionKeyRingPath))
-    dataProtectionKeyRingPath = Path.Combine(builder.Environment.ContentRootPath, dataProtectionKeyRingPath);
-Directory.CreateDirectory(dataProtectionKeyRingPath);
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath))
-    .SetApplicationName("PremierHost.PremierAPI");
+DataProtectionConfiguration.AddPremierDataProtection(
+    builder.Services,
+    builder.Configuration,
+    builder.Environment.ContentRootPath);
 builder.Services.AddSingleton<PremierAPI.Services.ActiveDirectoryService>();
 builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
 builder.Services.AddSingleton<PremierAPI.Services.EmailConfirmationService>();
@@ -225,7 +221,7 @@ app.MapGet("/recuperar-senha", async context =>
 app.MapControllers().RequireRateLimiting("ApiPadrao");
 app.Lifetime.ApplicationStarted.Register(() =>
 {
-    app.Logger.LogWarning("[TG-INFO] 🚀 Serviço da PremierHost foi iniciado!");
+    app.Logger.LogInformation("[INICIALIZACAO] Serviço da PremierHost foi iniciado.");
 });
 
 app.Run("http://0.0.0.0:5000");
