@@ -88,6 +88,9 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
+var adminLogStore = new AdminLogStore();
+builder.Services.AddSingleton(adminLogStore);
+builder.Logging.AddProvider(new AdminLogProvider(adminLogStore));
 
 var tgToken = builder.Configuration["Telegram:BotToken"];
 var tgChatId = builder.Configuration["Telegram:ChatId"];

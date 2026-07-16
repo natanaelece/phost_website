@@ -27,6 +27,7 @@ namespace PremierAPI.Controllers
         private readonly AdAccountProvisioningService _adProvisioning;
         private readonly EmailConfirmationService _emailConfirmation;
         private readonly AdPasswordProtectionService _adPasswordProtection;
+        private readonly AdminLogStore _adminLogStore;
 
         public AdminController(
             IConfiguration config,
@@ -34,7 +35,8 @@ namespace PremierAPI.Controllers
             IHttpClientFactory httpClientFactory,
             AdAccountProvisioningService adProvisioning,
             EmailConfirmationService emailConfirmation,
-            AdPasswordProtectionService adPasswordProtection)
+            AdPasswordProtectionService adPasswordProtection,
+            AdminLogStore adminLogStore)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -44,6 +46,7 @@ namespace PremierAPI.Controllers
             _adProvisioning = adProvisioning;
             _emailConfirmation = emailConfirmation;
             _adPasswordProtection = adPasswordProtection;
+            _adminLogStore = adminLogStore;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -609,26 +612,41 @@ namespace PremierAPI.Controllers
         }
 
         [HttpPost("users/{id}/resend-confirmation")]
-        public async Task<IActionResult> ResendEmailConfirmation(Guid id)
+        public async Task<IActionResult> ResendEmailConfirmation(Guid id, [FromQuery] bool force = false)
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            var user = await db.QueryFirstOrDefaultAsync(@"
-                SELECT id, name, email, email_confirmed, email_confirmation_token
+            var user = await db.QueryFirstOrDefaultAsync<ResendConfirmationUser>(@"
+                SELECT id AS Id,
+                       name AS Name,
+                       email AS Email,
+                       email_confirmed AS EmailConfirmed,
+                       email_confirmation_token AS EmailConfirmationToken,
+                       email_confirmation_last_sent_at AS EmailConfirmationLastSentAt
                 FROM users WHERE id = @Id", new { Id = id });
             if (user == null) return NotFound(new { erro = "Usuario nao encontrado." });
-            if ((bool)user.email_confirmed) return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
+            if (user.EmailConfirmed) return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
 
-            string token = user.email_confirmation_token as string ?? Guid.NewGuid().ToString();
+            if (!force && user.EmailConfirmationLastSentAt?.Date == DateTime.Now.Date)
+            {
+                return Conflict(new
+                {
+                    requiresConfirmation = true,
+                    lastSentAt = user.EmailConfirmationLastSentAt,
+                    erro = "Ja houve um envio de confirmacao para este usuario hoje."
+                });
+            }
+
+            string token = user.EmailConfirmationToken ?? Guid.NewGuid().ToString();
             try
             {
-                if (user.email_confirmation_token == null)
+                if (user.EmailConfirmationToken == null)
                 {
                     await db.ExecuteAsync(
                         "UPDATE users SET email_confirmation_token = @Token WHERE id = @Id AND email_confirmed = false",
                         new { Id = id, Token = token });
                 }
-                await _emailConfirmation.SendAsync((string)user.email, (string)user.name, token, HttpContext.RequestAborted);
+                await _emailConfirmation.SendAsync(user.Email, user.Name, token, HttpContext.RequestAborted);
                 await db.ExecuteAsync(@"
                     UPDATE users
                     SET email_confirmation_last_sent_at = CURRENT_TIMESTAMP
@@ -641,6 +659,17 @@ namespace PremierAPI.Controllers
                 _logger.LogError(ex, "[EMAIL CONFIRMACAO] Falha no reenvio manual para o usuario {UserId}.", id);
                 return StatusCode(502, new { erro = "Nao foi possivel reenviar o e-mail de confirmacao." });
             }
+        }
+
+        [HttpGet("logs")]
+        public async Task<IActionResult> GetLogs([FromQuery] string? level = null, [FromQuery] string? search = null, [FromQuery] int limit = 300)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            return Ok(new
+            {
+                generatedAt = DateTimeOffset.Now,
+                entries = _adminLogStore.Query(level, search, limit)
+            });
         }
 
         [HttpPut("users/{id}/active")]
@@ -1285,9 +1314,9 @@ namespace PremierAPI.Controllers
             }
             catch (PremierAPI.Services.ComputerGroupSelectionRequiredException ex)
             {
-                _logger.LogWarning(
-                    "[ADMIN][AD] Grupo manual solicitado para {Username}, computador {Computer}.",
-                    username, ex.ComputerName);
+                _logger.LogInformation(
+                    "[ADMIN][AD] Selecao manual de grupo para {Username}, computador {Computer}. Grupo sugerido: {SuggestedGroup}. Operacao: {Operation}.",
+                    username, ex.ComputerName, ex.SuggestedGroup ?? "(nenhum)", ex.Operation);
                 return Conflict(new
                 {
                     requiresGroupSelection = true,
@@ -1344,6 +1373,7 @@ namespace PremierAPI.Controllers
 
 
     public class CreateWhatsAppTemplateRequest { public string Title { get; set; } = ""; public string Audience { get; set; } = "Personalizada"; public string TriggerDescription { get; set; } = ""; public string Body { get; set; } = ""; }
+    public class ResendConfirmationUser { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Email { get; set; } = ""; public bool EmailConfirmed { get; set; } public string? EmailConfirmationToken { get; set; } public DateTime? EmailConfirmationLastSentAt { get; set; } }
     public class UpdateWhatsAppTemplateRequest { public string Body { get; set; } = ""; }
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
     public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }

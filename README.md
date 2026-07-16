@@ -46,6 +46,7 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 │   │   ├── pedidos.html
 │   │   ├── usuarios.html
 │   │   ├── active-directory.html
+│   │   ├── logs.html         # Eventos da execução atual, com filtros e atualização automática
 │   │   ├── assets/           # CSS e JavaScript compartilhados do admin
 │   │   └── partials/         # Modais compartilhados
 │   ├── painel.html           # Dashboard do cliente (minha conta, meus pedidos)
@@ -136,7 +137,7 @@ A landing page (`wwwroot/index.html`) apresenta o serviço de aluguel de máquin
 
 O cadastro da landing funciona como uma esteira de seis passos: nome, WhatsApp, e-mail, senha, indicação e aceite de privacidade. Quando preenchido, o código de indicação é validado no backend antes de avançar para o aceite; a validação também permanece no envio final. O Turnstile fica fixo na base do modal; erros só aparecem depois de interação ou tentativa de avanço. Após o cadastro, o formulário fecha e um modal de sucesso orienta a confirmação pelo link enviado por e-mail. Esse cadastro permanece apenas no PostgreSQL; nenhuma conta AD é criada antes da confirmação de um pagamento.
 
-Se o e-mail continuar sem confirmação, o `EmailConfirmationReminderWorker` envia no máximo dois lembretes adicionais, sempre em dias diferentes do cadastro: o primeiro às 11:00 do dia seguinte e o segundo às 19:00 do outro dia, no fuso `America/Sao_Paulo`. Falhas SMTP são registradas e tentadas novamente sem consumir uma das duas entregas. Em **Admin > Usuários**, o operador pode reenviar manualmente sem consumir essa cota ou marcar o checkbox para confirmar o endereço manualmente.
+Se o e-mail continuar sem confirmação, o `EmailConfirmationReminderWorker` envia no máximo dois lembretes adicionais, sempre em dias diferentes do cadastro: o primeiro às 11:00 do dia seguinte e o segundo às 19:00 do outro dia, no fuso `America/Sao_Paulo`. Falhas SMTP são registradas e tentadas novamente sem consumir uma das duas entregas. Em **Admin > Usuários**, o operador pode reenviar manualmente sem consumir essa cota ou marcar o checkbox para confirmar o endereço manualmente. Quando já houve envio na data atual, o backend devolve a data e a interface exige confirmação explícita antes de permitir outro reenvio.
 
 O painel (`wwwroot/painel.html`) permite consulta pública do simulador de preços. Links no formato abaixo abrem diretamente a área de cálculo e deixam o período correspondente selecionado:
 
@@ -154,6 +155,8 @@ O cabeçalho do painel possui dois modais locais:
 
 - **Como usar:** explica simulação, autenticação, pagamento e liberação, além de exibir o vídeo demonstrativo.
 - **Dúvidas frequentes:** responde questões comerciais e operacionais e oferece contato pelo WhatsApp.
+
+Após autenticar e carregar o perfil, o painel exibe uma pequena boas-vindas uma vez por sessão, divulgando o canal oficial da Premier Host no WhatsApp. O usuário pode fechar pelo botão superior, escolher “Agora não” ou abrir o canal em uma nova aba; atualizar a página não repete o modal na mesma sessão.
 
 O vídeo compartilhado por essas duas telas fica em `wwwroot/vid/comofunciona.mp4`. As páginas devem referenciá-lo como `/vid/comofunciona.mp4` para funcionar no domínio principal, em `www` e em ambientes de teste sem conflito com a CSP.
 
@@ -233,6 +236,7 @@ Principais areas do painel:
 - **Financeiro:** analise de receita paga, total historico, pedidos manuais, conversao, receita por plano, tipo de pedido e status dos pedidos.
 - **CRM:** visao de clientes ativos, licencas vencendo, entregas pendentes, novos usuarios, proximos vencimentos, acoes recomendadas e ranking de clientes.
 - **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega, reenvio/confirmacao de e-mail e controle de acessos no AD. Cabeçalhos clicáveis alternam crescente/decrescente e exibem uma única seta somente na coluna ativa; ao trocar a coluna, a anterior volta ao estado neutro. Pedidos e usuários são ordenados no backend sobre o conjunto completo; dados do AD são ordenados na listagem carregada. No celular, as tabelas viram cartões verticais que preservam todos os dados. O ID do Asaas permanece recolhido até o operador solicitar sua exibição. O vínculo de um cadastro local aceita contas AD das pastas de usuários ativos, expirados e website.
+- **Logs:** mostra até 2.000 eventos da execução atual mantidos em memória, com nível, horário, categoria, mensagem, exceção, busca, limite e atualização automática. A API oculta padrões comuns de credenciais antes de armazenar o texto; a lista reinicia junto com o processo e não substitui o histórico persistente do `journal`.
 
 ### Operações do Active Directory
 
@@ -241,6 +245,8 @@ Toda comunicação LDAP deve permanecer encapsulada em `Services/ActiveDirectory
 O provisionamento automático é idempotente e usa as colunas `orders.ad_provisioned_at`, `orders.ad_provisioning_attempts`, `orders.ad_provisioning_error` e `orders.ad_provisioning_next_attempt_at`. `users.ad_credentials_delivered_at` impede reenvio indevido do nome de usuário. A tabela `pending_ad_credentials` guarda exclusivamente a senha reversivelmente protegida enquanto o usuário ainda não possui vínculo AD; o registro é removido após a criação e nunca deve aparecer em logs, APIs ou e-mails. As chaves do ASP.NET Data Protection ficam no diretório persistente e ignorado pelo Git definido em `DataProtection:KeyRingPath` (padrão `.data-protection-keys` no content root) e são protegidas pelo certificado `key-encryption.pfx`. A senha do certificado usa `DataProtection:CertificatePassword` ou, por compatibilidade, deriva de `AdminToken`; mudanças nesses valores exigem preservar a senha anterior ou reemitir as credenciais pendentes por novo login. O diretório deve integrar o backup operacional e sobreviver a reinicializações/deploys. Migrações idempotentes ficam em `DatabaseInitializer.cs`; pedidos pagos anteriores à implantação são marcados como já conciliados para impedir criação retroativa em massa no AD.
 
 Criar o objeto de computador no AD **não ingressa a máquina física no domínio**. O ingresso ainda precisa ser executado no próprio Windows com credenciais autorizadas. Nunca crie, mova ou exclua objetos reais do AD apenas para testar uma alteração sem autorização expressa.
+
+Ao vincular um computador a um usuário, a descrição do computador pode sugerir automaticamente um grupo no padrão `ACESSO_SRV00-00`. Quando não há sugestão válida, a API responde com uma solicitação de seleção e o admin abre o modal para o operador escolher o grupo. Essa etapa esperada é registrada como `Information`, aparece em **Admin > Logs** e não dispara o Telegram configurado para `Warning` ou superior.
 
 ## Validação antes de concluir alterações
 

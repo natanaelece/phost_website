@@ -42,6 +42,8 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - A telemetria é first-party e allowlisted. Nunca envie e-mail, WhatsApp, AnyDesk, senha, conteúdo Pix ou dados bancários. Não há GA4 nem Meta Pixel atualmente.
 - Mantenha no sitemap apenas `/`, `/painel` e `/privacidade`. Rotas internas devem continuar fora do índice. Ao mudar CSP ou Cloudflare, preserve `robots.txt`, `sitemap.xml` e recursos públicos necessários.
 - E-mail não confirmado recebe no máximo dois reenvios automáticos: dia seguinte às 11:00 e outro dia às 19:00. Reenvio manual do admin não consome essa cota; confirmação manual continua explícita pelo checkbox.
+- Se já houve envio de confirmação no dia atual, o reenvio manual exige confirmação explícita no admin; o backend deve preservar essa guarda, permitindo a continuação somente quando informada pelo operador.
+- A seleção manual de grupo de acesso para um computador sem grupo sugerido é fluxo operacional esperado (`Information`), não falha para Telegram. Erros reais de LDAP continuam em `Warning`/`Error` conforme a arquitetura.
 
 ## Validação mínima
 

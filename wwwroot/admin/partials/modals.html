@@ -130,11 +130,11 @@
 
     <div class="modal-overlay" id="modal-confirm">
         <div class="modal-box">
-            <div class="modal-title">Confirmar a&ccedil;&atilde;o</div>
+            <div class="modal-title" id="confirm-title">Confirmar a&ccedil;&atilde;o</div>
             <div class="modal-body"><p class="modal-note" id="confirm-message"></p></div>
             <div class="modal-footer">
-                <button class="btn btn-outline" onclick="resolveAdminConfirm(false)">Cancelar</button>
-                <button class="btn" onclick="resolveAdminConfirm(true)">Confirmar</button>
+                <button class="btn btn-outline" id="confirm-cancel" onclick="resolveAdminConfirm(false)">Cancelar</button>
+                <button class="btn" id="confirm-accept" onclick="resolveAdminConfirm(true)">Confirmar</button>
             </div>
         </div>
     </div>

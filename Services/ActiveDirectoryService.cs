@@ -981,9 +981,6 @@ namespace PremierAPI.Services
 
             if (string.IsNullOrEmpty(groupName) || string.IsNullOrEmpty(groupDn))
             {
-                _logger.LogWarning(
-                    "[AD] Selecao manual necessaria para o computador {Computer}. Grupo sugerido: {SuggestedGroup}. Operacao: {Operation}.",
-                    computerName, suggestedGroup ?? "(nenhum)", operation);
                 throw new ComputerGroupSelectionRequiredException(computerName, suggestedGroup, operation);
             }
 

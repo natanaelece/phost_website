@@ -16,6 +16,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     let adminToastTimer = null;
     let adminConfirmResolver = null;
     let adminLastModalTrigger = null;
+    let adminLogsRefreshTimer = null;
 
     function showAdminMessage(type, message) {
         const toast = document.getElementById('adminToast');
@@ -45,9 +46,12 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         return data?.msg || data?.mensagem || data?.erro || fallback;
     }
 
-    function askAdminConfirm(message) {
+    function askAdminConfirm(message, options = {}) {
         const modal = document.getElementById('modal-confirm');
         const msg = document.getElementById('confirm-message');
+        document.getElementById('confirm-title').textContent = options.title || 'Confirmar ação';
+        document.getElementById('confirm-cancel').textContent = options.cancelText || 'Cancelar';
+        document.getElementById('confirm-accept').textContent = options.confirmText || 'Confirmar';
         msg.textContent = message;
         modal.classList.add('active');
         return new Promise(resolve => { adminConfirmResolver = resolve; });
@@ -331,13 +335,27 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         confirmEmail(checkbox.dataset.userId, checkbox);
     }
 
-    async function resendEmailConfirmation(id, button) {
+    async function resendEmailConfirmation(id, button, force = false) {
         if(button) button.disabled = true;
-        const r = await fetch('/api/admin/users/'+id+'/resend-confirmation', { method: 'POST', headers: hdrs() });
-        const msg = await readResponseMessage(r, 'E-mail de confirmação reenviado.');
-        if(r.ok) showAdminMessage('success', msg);
-        else showAdminMessage('error', msg);
-        if(button) button.disabled = false;
+        try {
+            const url = '/api/admin/users/'+id+'/resend-confirmation'+(force?'?force=true':'');
+            const r = await fetch(url, { method: 'POST', headers: hdrs() });
+            const data = await r.json().catch(() => null);
+            if(r.status === 409 && data?.requiresConfirmation) {
+                const sentAt = data.lastSentAt ? fmtDateTime(data.lastSentAt) : 'hoje';
+                const proceed = await askAdminConfirm(
+                    `Um e-mail de confirmação já foi enviado hoje, em ${sentAt}. Para evitar mensagens duplicadas, recomendamos aguardar. Deseja reenviar mesmo assim?`,
+                    { title: 'E-mail já enviado hoje', confirmText: 'Continuar mesmo assim', cancelText: 'Cancelar' }
+                );
+                if(proceed) return resendEmailConfirmation(id, button, true);
+                return;
+            }
+            const msg = data?.msg || data?.mensagem || data?.erro || 'E-mail de confirmação reenviado.';
+            if(r.ok) showAdminMessage('success', msg);
+            else showAdminMessage('error', msg);
+        } finally {
+            if(button) button.disabled = false;
+        }
     }
     
     async function deleteOrder(id) {
@@ -937,7 +955,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         if(r.ok) showAdminMessage('success', msg); else showAdminMessage('error', msg);
     }
 
-const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html'};
+const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html',logs:'/admin/logs.html'};
 const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
 
@@ -1088,7 +1106,7 @@ async function apiFetch(url){
   return data;
 }
 
-const HDR={dashboard:['Dashboard','Cockpit financeiro e operacional'],financeiro:['Financeiro','Receita, planos e origem dos pedidos'],crm:['CRM','Clientes, renovacoes e fila comercial'],pedidos:['Pedidos','Gerenciar todos os pedidos'],usuarios:['Usuarios','Gerenciar usuarios cadastrados'],ad:['Active Directory','Gerenciar AD Local'],notificacoes:['Notificacoes','Mensagens automaticas do WhatsApp']};
+const HDR={dashboard:['Dashboard','Cockpit financeiro e operacional'],financeiro:['Financeiro','Receita, planos e origem dos pedidos'],crm:['CRM','Clientes, renovacoes e fila comercial'],pedidos:['Pedidos','Gerenciar todos os pedidos'],usuarios:['Usuarios','Gerenciar usuarios cadastrados'],ad:['Active Directory','Gerenciar AD Local'],notificacoes:['Notificacoes','Mensagens automaticas do WhatsApp'],logs:['Logs','Acompanhar eventos e falhas da aplicacao']};
 function setupCurrentView(){
   S.view=document.body?.dataset.view||S.view||'dashboard';
   document.querySelectorAll('.ni').forEach(e=>e.classList.remove('active'));
@@ -1099,7 +1117,7 @@ function setupCurrentView(){
   document.getElementById('hsub').textContent=s;
 }
 function loadCurrentView(){
-  if(S.view==='dashboard')loadDash();else if(S.view==='financeiro')loadFinanceiro();else if(S.view==='crm')loadCrm();else if(S.view==='pedidos')loadOrders();else if(S.view==='usuarios')loadUsers();else if(S.view==='ad')loadAd();else if(S.view==='notificacoes'){wireWhatsAppEditor();loadNotificacoes();}
+  if(S.view==='dashboard')loadDash();else if(S.view==='financeiro')loadFinanceiro();else if(S.view==='crm')loadCrm();else if(S.view==='pedidos')loadOrders();else if(S.view==='usuarios')loadUsers();else if(S.view==='ad')loadAd();else if(S.view==='notificacoes'){wireWhatsAppEditor();loadNotificacoes();}else if(S.view==='logs'){wireAdminLogs();loadAdminLogs();}
 }
 function go(v){
   const target=ADMIN_ROUTES[v];
@@ -1107,6 +1125,48 @@ function go(v){
   S.view=v;setupCurrentView();loadCurrentView();
 }
 async function refresh(){if(hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja atualizar e descarta-las?'))return;S.dashData=null;loadCurrentView();}
+
+function wireAdminLogs(){
+  const controls=document.getElementById('logs-controls');
+  if(!controls||controls.dataset.wired==='true')return;
+  controls.dataset.wired='true';
+  let searchTimer=null;
+  document.getElementById('logs-level')?.addEventListener('change',loadAdminLogs);
+  document.getElementById('logs-limit')?.addEventListener('change',loadAdminLogs);
+  document.getElementById('logs-search')?.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(loadAdminLogs,350);});
+  document.getElementById('logs-auto')?.addEventListener('change',updateAdminLogsTimer);
+  updateAdminLogsTimer();
+}
+function updateAdminLogsTimer(){
+  clearInterval(adminLogsRefreshTimer);adminLogsRefreshTimer=null;
+  if(document.getElementById('logs-auto')?.checked)adminLogsRefreshTimer=setInterval(loadAdminLogs,10000);
+}
+function logLevelBadge(level){
+  const key=(level||'Information').toLowerCase();
+  const cls=key==='critical'||key==='error'?'b-err':key==='warning'?'b-warn':key==='information'?'b-accent':'b-muted';
+  return `<span class="badge ${cls}">${esc(level||'Information')}</span>`;
+}
+async function loadAdminLogs(){
+  const body=document.getElementById('logs-body');if(!body)return;
+  body.innerHTML='<tr><td colspan="5" class="loading"><div class="spinner"></div> Carregando...</td></tr>';
+  const qs=new URLSearchParams({
+    level:document.getElementById('logs-level')?.value||'all',
+    search:document.getElementById('logs-search')?.value||'',
+    limit:document.getElementById('logs-limit')?.value||'300'
+  });
+  const data=await apiFetch(`${API}/logs?${qs}`);if(!data)return;
+  const entries=data.entries||[];
+  setText('logs-count',`${entries.length} registro${entries.length===1?'':'s'} exibido${entries.length===1?'':'s'}`);
+  setText('lupdate',`Atualizado ${new Date(data.generatedAt).toLocaleTimeString('pt-BR')}`);
+  if(!entries.length){body.innerHTML='<tr><td colspan="5" class="empty">Nenhum log encontrado para estes filtros.</td></tr>';return;}
+  body.innerHTML=entries.map(entry=>`<tr>
+    <td class="muted log-time">${fmtDateTime(entry.timestamp)}</td>
+    <td>${logLevelBadge(entry.level)}</td>
+    <td><span class="log-category" title="${esc(entry.category)}">${esc(entry.category)}</span></td>
+    <td><span class="log-message">${esc(entry.message)}</span></td>
+    <td>${entry.exception?`<span class="log-exception">${esc(entry.exception)}</span>`:'<span class="muted">&#8212;</span>'}</td>
+  </tr>`).join('');
+}
 
 function dashUrl(){
   const sel=document.getElementById('dash-period');
