@@ -1,4 +1,6 @@
 let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
+    let _pricingRules = null;
+    let _manualPriceRequest = 0;
     let _adComputers = [];
     let _adAccessUser = '';
     let _adSelectedComputers = new Set();
@@ -211,25 +213,45 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     }
 
     async function openManualOrderModal() {
-        await loadLocalUsersSnapshot();
+        await Promise.all([loadLocalUsersSnapshot(),loadPricingRules()]);
         const sel = document.getElementById('m-order-user');
         sel.innerHTML = '<option value="">-- Selecione o Cliente --</option>' + 
             (_allLocalUsers || []).map(u => `<option value="${u.id}">${esc(u.name)} (${esc(u.email)})</option>`).join('');
         
-        document.getElementById('m-order-pcs').value = 1;
-        document.getElementById('m-order-slots').value = 4;
-        document.getElementById('m-order-price').value = "0.00";
+        document.getElementById('m-order-period').value = 'semanal';
+        document.getElementById('m-order-days').value = _pricingRules.weeklyDays;
+        document.getElementById('m-order-pcs').value = _pricingRules.minComputers;
+        document.getElementById('m-order-slots').value = _pricingRules.minSlots;
+        document.getElementById('m-order-price').value = Number(_pricingRules.minimumPrices.semanal).toFixed(2);
         document.getElementById('m-order-anydesk').value = "";
         document.getElementById('m-order-server').value = "";
         
         document.getElementById('manualOrderModal').classList.add('active');
     }
 
-    function syncManualOrderPeriod(){
+    async function loadPricingRules(){
+        if(_pricingRules)return _pricingRules;
+        const response=await fetch('/api/checkout/pricing-rules');
+        if(!response.ok)throw new Error('Não foi possível carregar as regras de preço.');
+        _pricingRules=await response.json();return _pricingRules;
+    }
+
+    async function syncManualOrderPeriod(){
+        await loadPricingRules();
         const period=document.getElementById('m-order-period').value,days=document.getElementById('m-order-days'),pcs=document.getElementById('m-order-pcs');
-        if(period==='semanal')days.value=7;
-        else if(period==='mensal')days.value=30;
-        else{if(parseInt(days.value)<3)days.value=3;if(parseInt(pcs.value)<3)pcs.value=3;}
+        if(period==='semanal')days.value=_pricingRules.weeklyDays;
+        else if(period==='mensal')days.value=_pricingRules.monthlyDays;
+        else{days.value=_pricingRules.minDailyDays;if(parseInt(pcs.value)<_pricingRules.minDailyComputers)pcs.value=_pricingRules.minDailyComputers;}
+        updateManualOrderSuggestedPrice();
+    }
+
+    async function updateManualOrderSuggestedPrice(){
+        const requestId=++_manualPriceRequest;
+        const payload={period:document.getElementById('m-order-period').value,days:parseInt(document.getElementById('m-order-days').value),computers:parseInt(document.getElementById('m-order-pcs').value),slots:parseInt(document.getElementById('m-order-slots').value)};
+        const response=await fetch('/api/checkout/pricing-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const data=await response.json().catch(()=>({}));if(requestId!==_manualPriceRequest)return;
+        if(response.ok)document.getElementById('m-order-price').value=Number(data.total).toFixed(2);
+        else showAdminMessage('error',data.erro||'Não foi possível calcular o valor sugerido.');
     }
 
     async function saveManualOrder() {
@@ -247,7 +269,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             period: document.getElementById('m-order-period').value,
             days: parseInt(document.getElementById('m-order-days').value) || 7,
             computers: parseInt(document.getElementById('m-order-pcs').value) || 1,
-            wydsPerComputer: parseInt(document.getElementById('m-order-slots').value) || 4,
+            wydsPerComputer: parseInt(document.getElementById('m-order-slots').value) || 1,
             totalPrice: parseFloat(document.getElementById('m-order-price').value) || 0
         };
 

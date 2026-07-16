@@ -517,6 +517,15 @@
         let cupomAtivo = null;
         let pendingPixData = null;
         let isLoggedIn = false;
+        let pricingRulesPromise = null;
+
+        function getPricingRules() {
+            if (!pricingRulesPromise) pricingRulesPromise = fetch('/api/checkout/pricing-rules').then(response => {
+                if (!response.ok) throw new Error('Não foi possível carregar as regras de preço.');
+                return response.json();
+            });
+            return pricingRulesPromise;
+        }
 
         function fecharMenuMobile() {
             document.getElementById('mobileMenu')?.classList.add('hidden');
@@ -1248,53 +1257,60 @@
 
         let lastPeriodo = 'semanal';
 
-        function calcular() {
+        async function calcular() {
+            const rules = await getPricingRules();
             let periodo = document.querySelector('input[name="periodo"]:checked').value;
             let pcsInput = document.getElementById('qtdPcs');
             let wydsInput = document.getElementById('qtdWyds');
-            pcsInput.min = periodo === 'diaria' ? '3' : '1';
+            pcsInput.min = String(periodo === 'diaria' ? rules.minDailyComputers : rules.minComputers);
+            pcsInput.max = String(rules.maxComputers);
+            wydsInput.min = String(rules.minSlots);
+            wydsInput.max = String(rules.maxSlots);
             
             let pcs = parseInt(pcsInput.value);
-            if (isNaN(pcs) || pcs < 1) { pcsInput.value = 1; pcs = 1; }
-            if (pcs > 20) { pcsInput.value = 20; pcs = 20; }
+            if (isNaN(pcs) || pcs < rules.minComputers) { pcsInput.value = rules.minComputers; pcs = rules.minComputers; }
+            if (pcs > rules.maxComputers) { pcsInput.value = rules.maxComputers; pcs = rules.maxComputers; }
             let wyds = parseInt(wydsInput.value);
-            if (isNaN(wyds) || wyds < 1) { wydsInput.value = 1; wyds = 1; }
+            if (isNaN(wyds) || wyds < rules.minSlots) { wydsInput.value = rules.minSlots; wyds = rules.minSlots; }
 
-            if (wyds > 8) { wydsInput.value = 8; wyds = 8; }
+            if (wyds > rules.maxSlots) { wydsInput.value = rules.maxSlots; wyds = rules.maxSlots; }
             
             // Regra da Máquina de Estados
             if (lastPeriodo === 'diaria' && (periodo === 'semanal' || periodo === 'mensal')) {
-                pcsInput.value = 1; pcs = 1; 
+                pcsInput.value = rules.minComputers; pcs = rules.minComputers;
                 limparErro('qtdPcs', 'msgPcsAlert');
                 limparErro('qtdDias', 'msgDiasAlert');
             }
             lastPeriodo = periodo;
 
             const contDias = document.getElementById('containerDias'), msgDiasAlert = document.getElementById('msgDiasAlert'), msgPcsAlert = document.getElementById('msgPcsAlert'), msgDesc = document.getElementById('msgDescPc');
-            let bruto = 0, descPeriodo = 0, descHardware = 0, descIndicacao = 0, descCupom = 0, basePadrao = 35 + ((Math.max(wyds, 1) - 1) * 10);
+            let bruto = 0, descPeriodo = 0, descHardware = 0, descIndicacao = 0, descCupom = 0;
+            const slotIncrement = (Math.max(wyds, rules.minSlots) - 1) * rules.additionalSlotPrice;
+            const basePadrao = rules.weeklyBasePrice + slotIncrement;
             
             if (periodo === 'diaria') {
                 contDias.classList.remove('hidden'); msgDesc.classList.add('hidden'); 
                 
                 // CORREÇÃO: Se estiver na diária, a reescrita agressiva joga pra 3 e remove a classe de erro nativa.
-                if (pcs < 3) { 
-                    pcsInput.value = 3; pcs = 3; 
+                if (pcs < rules.minDailyComputers) {
+                    pcsInput.value = rules.minDailyComputers; pcs = rules.minDailyComputers;
                 }
                 msgPcsAlert.classList.add('hidden');
                 limparErro('qtdPcs', 'msgPcsAlert');
 
                 let diasInput = document.getElementById('qtdDias');
                 let dias = parseInt(diasInput.value);
-                if (isNaN(dias) || dias < 3) { diasInput.value = 3; dias = 3; }
+                diasInput.min = String(rules.minDailyDays); diasInput.max = String(rules.maxDailyDays);
+                if (isNaN(dias) || dias < rules.minDailyDays) { diasInput.value = rules.minDailyDays; dias = rules.minDailyDays; }
                 
-                if (dias > 6) { 
+                if (dias > rules.maxDailyDays) {
                     msgDiasAlert.classList.remove('hidden');
                 } else {
                     msgDiasAlert.classList.add('hidden');
                     limparErro('qtdDias', 'msgDiasAlert');
                 }
                 
-                bruto = ((40 + ((Math.max(wyds, 1) - 1) * 10)) / 7) * dias * pcs;
+                bruto = ((rules.dailyWeeklyBasePrice + slotIncrement) / rules.weeklyDays) * dias * pcs;
                 
             } else {
                 contDias.classList.add('hidden'); msgPcsAlert.classList.add('hidden'); msgDesc.classList.remove('hidden');
@@ -1303,8 +1319,8 @@
                 limparErro('qtdDias');
 
                 if (periodo === 'semanal') { bruto = basePadrao * pcs; }
-                else if (periodo === 'mensal') { bruto = basePadrao * 4 * pcs; descPeriodo = bruto * 0.25; }
-                descHardware = (pcs - 1) * 5; if (descHardware < 0) descHardware = 0;
+                else if (periodo === 'mensal') { bruto = basePadrao * rules.monthlyWeeks * pcs; descPeriodo = bruto * rules.monthlyDiscountRate; }
+                descHardware = (pcs - 1) * rules.additionalComputerDiscount; if (descHardware < 0) descHardware = 0;
             }
 
             atualizarSlider(pcsInput);
@@ -1313,7 +1329,7 @@
 
             // Aplicar 5% de desconto de Indicação
             if (eligibleForDiscount && bruto > 0) {
-                descIndicacao = bruto * 0.05;
+                descIndicacao = bruto * rules.referralDiscountRate;
                 document.getElementById('rowIndicacao').classList.remove('hidden');
                 document.getElementById('resDescIndicacao').innerText = `- R$ ${descIndicacao.toFixed(2).replace('.', ',')}`;
             }
@@ -1335,7 +1351,7 @@
             let descArredonda = 0;
             const rowArredonda = document.getElementById('rowArredondamento');
 
-            if (totalLiq > 50) {
+            if (totalLiq > rules.commercialRoundingThreshold) {
                 let vInt = Math.floor(totalLiq);
                 descArredonda = totalLiq - vInt;
                 totalLiq = vInt;

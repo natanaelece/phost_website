@@ -164,10 +164,10 @@
                 <div class="form-group"><label>ID do AnyDesk</label><input type="text" id="m-order-anydesk" inputmode="numeric" maxlength="15" placeholder="6 a 15 números"></div>
                 <div class="form-group"><label>Servidor WYD</label><input type="text" id="m-order-server" maxlength="50" placeholder="Nome do servidor"></div>
                 <div class="form-group"><label>Plano</label><select id="m-order-period" class="mini-select" style="width:100%" onchange="syncManualOrderPeriod()"><option value="diaria">Diária</option><option value="semanal" selected>Semanal</option><option value="mensal">Mensal</option></select></div>
-                <div class="form-group"><label>Dias (Duração)</label><input type="number" id="m-order-days" min="1" value="7"></div>
-                <div class="form-group"><label>Computadores</label><input type="number" id="m-order-pcs" min="1" value="1"></div>
-                <div class="form-group"><label>Slots por computador</label><input type="number" id="m-order-slots" min="1" value="4"></div>
-                <div class="form-group"><label>Valor total</label><input type="number" id="m-order-price" min="0" step="0.01" value="0.00"></div>
+                <div class="form-group"><label>Dias (Duração)</label><input type="number" id="m-order-days" min="1" value="7" onchange="updateManualOrderSuggestedPrice()"></div>
+                <div class="form-group"><label>Computadores</label><input type="number" id="m-order-pcs" min="1" value="1" onchange="updateManualOrderSuggestedPrice()"></div>
+                <div class="form-group"><label>Slots por computador</label><input type="number" id="m-order-slots" min="1" value="1" onchange="updateManualOrderSuggestedPrice()"></div>
+                <div class="form-group"><label>Valor total</label><input type="number" id="m-order-price" min="0.01" step="0.01" value="35.00"></div>
                 <p class="muted" style="font-size:12px;line-height:1.5">O pedido será criado como pendente. O cliente poderá gerar o PIX no painel ou você poderá marcá-lo como pago manualmente.</p>
             </div>
             <div class="modal-footer">

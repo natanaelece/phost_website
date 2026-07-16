@@ -12,6 +12,7 @@ using Dapper;
 using System;
 using System.Linq;
 using Microsoft.AspNetCore.RateLimiting;
+using PremierAPI.Services;
 
 namespace PremierAPI.Controllers
 {
@@ -88,6 +89,44 @@ namespace PremierAPI.Controllers
             return valid == 1;
         }
 
+        [HttpGet("pricing-rules")]
+        public IActionResult GetPricingRules()
+        {
+            return Ok(new
+            {
+                minComputers = PricingRules.MinComputers,
+                maxComputers = PricingRules.MaxComputers,
+                minSlots = PricingRules.MinSlots,
+                maxSlots = PricingRules.MaxSlots,
+                minDailyComputers = PricingRules.MinDailyComputers,
+                minDailyDays = PricingRules.MinDailyDays,
+                maxDailyDays = PricingRules.MaxDailyDays,
+                weeklyDays = PricingRules.WeeklyDays,
+                monthlyDays = PricingRules.MonthlyDays,
+                weeklyBasePrice = PricingRules.WeeklyBasePrice,
+                dailyWeeklyBasePrice = PricingRules.DailyWeeklyBasePrice,
+                additionalSlotPrice = PricingRules.AdditionalSlotPrice,
+                additionalComputerDiscount = PricingRules.AdditionalComputerDiscount,
+                monthlyWeeks = PricingRules.MonthlyWeeks,
+                monthlyDiscountRate = PricingRules.MonthlyDiscountRate,
+                referralDiscountRate = PricingRules.ReferralDiscountRate,
+                commercialRoundingThreshold = PricingRules.CommercialRoundingThreshold,
+                minimumPrices = new
+                {
+                    diaria = PricingRules.Calculate("diaria", PricingRules.MinDailyComputers, PricingRules.MinSlots, PricingRules.MinDailyDays).Total,
+                    semanal = PricingRules.Calculate("semanal", PricingRules.MinComputers, PricingRules.MinSlots, PricingRules.WeeklyDays).Total,
+                    mensal = PricingRules.Calculate("mensal", PricingRules.MinComputers, PricingRules.MinSlots, PricingRules.MonthlyDays).Total
+                }
+            });
+        }
+
+        [HttpPost("pricing-quote")]
+        public IActionResult GetPricingQuote([FromBody] PricingQuoteRequest request)
+        {
+            try { return Ok(PricingRules.Calculate(request.Period, request.Computers, request.Slots, request.Days)); }
+            catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
+        }
+
         [HttpPost("gerarpix")]
         public async Task<IActionResult> GerarPix([FromBody] PedidoRequest pedido)
         {
@@ -100,12 +139,13 @@ namespace PremierAPI.Controllers
             if (!await ValidateSession(db, pedido.UserId)) 
                 return Unauthorized(new { erro = "Sessão expirada ou inválida." });
 
-            // 2. Validar limites básicos
-            if (pedido.Pcs < 1 || pedido.Pcs > 20 || pedido.Wyds < 1 || pedido.Wyds > 8)
-                return BadRequest(new { erro = "Valores inválidos." });
-
-            if (pedido.Periodo != "diaria" && pedido.Periodo != "semanal" && pedido.Periodo != "mensal")
-                return BadRequest(new { erro = "Período inválido." });
+            PricingQuote baseQuote;
+            try { baseQuote = PricingRules.Calculate(pedido.Periodo, pedido.Pcs, pedido.Wyds, pedido.Dias); }
+            catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
+            pedido.Pcs = baseQuote.Computers;
+            pedido.Wyds = baseQuote.Slots;
+            pedido.Dias = baseQuote.Days;
+            pedido.Periodo = baseQuote.Period;
 
             if (!Regex.IsMatch(pedido.AnydeskId ?? "", @"^\d{6,15}$"))
                 return BadRequest(new { erro = "O ID do AnyDesk deve conter de 6 a 15 números." });
@@ -116,38 +156,13 @@ namespace PremierAPI.Controllers
             if (IsUnsupportedWydServer(pedido.WydServerName))
                 return BadRequest(new { erro = "No momento, não atendemos o servidor WYD2.", campo = "wydServerName", codigo = "unsupported_wyd_server" });
 
-            if (pedido.Periodo == "diaria" && pedido.Pcs < 3) 
-                pedido.Pcs = 3;
-                
-            if (pedido.Periodo == "diaria" && pedido.Dias < 3)
-                pedido.Dias = 3;
-            else if (pedido.Periodo == "semanal")
-                pedido.Dias = 7;
-            else if (pedido.Periodo == "mensal")
-                pedido.Dias = 30;
-
             // 3. Recalcular Preço no Backend
-            decimal bruto = 0;
-            decimal descPeriodo = 0;
-            decimal descHardware = 0;
+            decimal bruto = baseQuote.Gross;
+            decimal descPeriodo = baseQuote.PeriodDiscount;
+            decimal descHardware = baseQuote.HardwareDiscount;
             decimal descIndicacao = 0;
             decimal descCupom = 0;
             CouponDiscountData? coupon = null;
-            decimal basePadrao = 35 + ((Math.Max(pedido.Wyds, 1) - 1) * 10);
-
-            if (pedido.Periodo == "diaria")
-            {
-                bruto = ((40M + ((Math.Max(pedido.Wyds, 1) - 1) * 10M)) / 7M) * pedido.Dias * pedido.Pcs;
-            }
-            else
-            {
-                if (pedido.Periodo == "semanal") { bruto = basePadrao * pedido.Pcs; }
-                else if (pedido.Periodo == "mensal") { bruto = basePadrao * 4 * pedido.Pcs; descPeriodo = bruto * 0.25M; }
-                
-                descHardware = (pedido.Pcs - 1) * 5; 
-                if (descHardware < 0) descHardware = 0;
-            }
-
             if (pedido.UsouDescontoIndicacao && bruto > 0)
             {
                 // Verifica se usuário realmente tem direito ao desconto
@@ -163,7 +178,7 @@ namespace PremierAPI.Controllers
                 {
                     if (user.CreatedAt.AddHours(12) > DateTime.Now)
                     {
-                        descIndicacao = bruto * 0.05M;
+                        descIndicacao = bruto * PricingRules.ReferralDiscountRate;
                     }
                     else
                     {
@@ -196,15 +211,7 @@ namespace PremierAPI.Controllers
                     : coupon.DiscountValue;
             }
 
-            decimal totalCalculado = bruto - descPeriodo - descHardware - descIndicacao - descCupom;
-            if (totalCalculado <= 0) totalCalculado = 0.01M; // Prevenção de bug
-
-            // Mantém o mesmo arredondamento comercial exibido pelo painel.
-            if (totalCalculado > 50M)
-                totalCalculado = Math.Floor(totalCalculado);
-
-            // Forçar o total calculado
-            pedido.Total = Math.Round(totalCalculado, 2);
+            pedido.Total = PricingRules.ApplyCommercialRounding(bruto - descPeriodo - descHardware - descIndicacao - descCupom);
 
             string pixAddressKey = await GetActivePixAddressKeyAsync();
             if (string.IsNullOrWhiteSpace(pixAddressKey))
@@ -344,9 +351,9 @@ namespace PremierAPI.Controllers
             decimal total = (decimal)order.total_price;
             if (!Regex.IsMatch(anydesk, @"^\d{6,15}$")) return BadRequest(new { erro = "O pedido possui um ID do AnyDesk inválido. Fale com o suporte." });
             if (string.IsNullOrWhiteSpace(server) || server.Length > 50 || IsUnsupportedWydServer(server)) return BadRequest(new { erro = "O servidor WYD do pedido precisa ser corrigido pelo suporte." });
-            if (period != "diaria" && period != "semanal" && period != "mensal") return BadRequest(new { erro = "O período do pedido é inválido." });
-            if (computers < 1 || computers > 20 || wyds < 1 || wyds > 8 || days < 1 || total <= 0) return BadRequest(new { erro = "A configuração do pedido precisa ser corrigida pelo suporte." });
-            if ((period == "diaria" && (days < 3 || computers < 3)) || (period == "semanal" && days != 7) || (period == "mensal" && days != 30)) return BadRequest(new { erro = "A duração do pedido precisa ser corrigida pelo suporte." });
+            try { PricingRules.Calculate(period, computers, wyds, days); }
+            catch (ArgumentException ex) { return BadRequest(new { erro = $"A configuração do pedido precisa ser corrigida pelo suporte: {ex.Message}" }); }
+            if (total <= 0) return BadRequest(new { erro = "O valor do pedido precisa ser corrigido pelo suporte." });
 
             string pixAddressKey = await GetActivePixAddressKeyAsync();
             if (string.IsNullOrWhiteSpace(pixAddressKey)) return BadRequest(new { erro = "Nenhuma chave Pix ativa foi encontrada na conta Asaas." });
@@ -640,5 +647,13 @@ namespace PremierAPI.Controllers
     public class ValidateWydServerRequest
     {
         public string ServerName { get; set; } = "";
+    }
+
+    public class PricingQuoteRequest
+    {
+        public string Period { get; set; } = "";
+        public int Computers { get; set; }
+        public int Slots { get; set; }
+        public int Days { get; set; }
     }
 }

@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using PremierAPI.Services;
 
 namespace PremierAPI.Controllers
 {
@@ -751,12 +752,12 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
 
             string period = (req.Period ?? "").Trim().ToLowerInvariant();
-            int days = period == "semanal" ? 7 : period == "mensal" ? 30 : req.Days;
+            PricingQuote pricingQuote;
+            try { pricingQuote = PricingRules.Calculate(period, req.Computers, req.WydsPerComputer, req.Days); }
+            catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
+            int days = pricingQuote.Days;
             string anydesk = Regex.Replace(req.AnyDeskId ?? "", @"\D", "");
             string server = (req.WydServerName ?? "").Trim();
-            if (period != "diaria" && period != "semanal" && period != "mensal") return BadRequest(new { erro = "Período inválido." });
-            if (days < 1 || req.Computers < 1 || req.Computers > 20 || req.WydsPerComputer < 1 || req.WydsPerComputer > 8) return BadRequest(new { erro = "Revise duração, computadores e slots." });
-            if (period == "diaria" && (days < 3 || req.Computers < 3)) return BadRequest(new { erro = "O plano diário exige no mínimo 3 dias e 3 computadores." });
             if (!Regex.IsMatch(anydesk, @"^\d{6,15}$")) return BadRequest(new { erro = "O ID do AnyDesk deve conter de 6 a 15 números." });
             if (string.IsNullOrWhiteSpace(server) || server.Length > 50) return BadRequest(new { erro = "Informe o servidor WYD com até 50 caracteres." });
             if (server.Equals("wyd2", StringComparison.OrdinalIgnoreCase) || server.Equals("wyd 2", StringComparison.OrdinalIgnoreCase)) return BadRequest(new { erro = "No momento, não atendemos o servidor WYD2." });
