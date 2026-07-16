@@ -520,29 +520,65 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-new-computer')?.classList.toggle('hidden',currentAdFilter!=='computers');
     }
 
-    function openAdGroupModal(){
-        document.getElementById('m-ad-group-name').value='';document.getElementById('m-ad-group-description').value='';
+    function suggestedAdCopyName(name,maxLength,items){
+        const existing=new Set(items.map(item=>String(item.name||'').toLocaleUpperCase('pt-BR')));
+        const base=String(name||'').slice(0,Math.max(1,maxLength-6));
+        let candidate=(base+'-COPIA').slice(0,maxLength),index=2;
+        while(existing.has(candidate.toLocaleUpperCase('pt-BR'))){
+            const suffix='-'+index++;
+            candidate=(base.slice(0,maxLength-suffix.length)+suffix).slice(0,maxLength);
+        }
+        return candidate;
+    }
+    function openAdGroupModal(group=null,duplicate=false){
+        const editing=group&&!duplicate;
+        document.getElementById('m-ad-group-original').value=editing?group.name:'';
+        document.getElementById('m-ad-group-title').textContent=editing?'Editar Grupo do Active Directory':duplicate?'Duplicar Grupo do Active Directory':'Novo Grupo do Active Directory';
+        document.getElementById('m-ad-group-name').value=group?(duplicate?suggestedAdCopyName(group.name,20,_adGroups):group.name):'';
+        document.getElementById('m-ad-group-description').value=group?.description||'';
+        document.getElementById('btn-create-ad-group').textContent=editing?'Salvar alterações':duplicate?'Duplicar grupo':'Criar grupo';
+        document.getElementById('m-ad-group-note').textContent=editing?'Nome, descrição e vínculo do grupo serão atualizados no Active Directory.':'Será criado como grupo global de segurança na pasta de grupos configurada.';
         document.getElementById('modal-ad-create-group').classList.add('active');requestAnimationFrame(()=>document.getElementById('m-ad-group-name').focus());
     }
+    function editAdGroup(name){const group=_adGroups.find(g=>g.name.toLocaleUpperCase('pt-BR')===name.toLocaleUpperCase('pt-BR'));if(group)openAdGroupModal(group);}
+    function duplicateAdGroup(name){const group=_adGroups.find(g=>g.name.toLocaleUpperCase('pt-BR')===name.toLocaleUpperCase('pt-BR'));if(group)openAdGroupModal(group,true);}
     async function submitAdGroup(){
-        const name=document.getElementById('m-ad-group-name').value.trim(),description=document.getElementById('m-ad-group-description').value.trim();
+        const original=document.getElementById('m-ad-group-original').value,name=document.getElementById('m-ad-group-name').value.trim(),description=document.getElementById('m-ad-group-description').value.trim();
         if(!name)return showAdminMessage('error','Informe o nome do grupo.');
         const button=document.getElementById('btn-create-ad-group');button.disabled=true;
-        try{const response=await fetch('/api/admin/ad/groups',{method:'POST',headers:hdrs(),body:JSON.stringify({name,description})});const msg=await readResponseMessage(response,'Grupo criado.');if(!response.ok)return showAdminMessage('error',msg);closeModals();showAdminMessage('success',msg);await loadAd();}
-        catch{showAdminMessage('error','Falha de conexão ao criar o grupo.');}
+        try{const response=await fetch(original?'/api/admin/ad/groups/'+encodeURIComponent(original):'/api/admin/ad/groups',{method:original?'PUT':'POST',headers:hdrs(),body:JSON.stringify({name,description})});const msg=await readResponseMessage(response,original?'Grupo atualizado.':'Grupo criado.');if(!response.ok)return showAdminMessage('error',msg);closeModals();showAdminMessage('success',msg);await loadAd();}
+        catch{showAdminMessage('error','Falha de conexão ao salvar o grupo.');}
         finally{button.disabled=false;}
     }
-    function openAdComputerModal(){
-        document.getElementById('m-ad-computer-name').value='';document.getElementById('m-ad-computer-description').value='';document.getElementById('m-ad-computer-os').value='Windows 11 Pro';document.getElementById('m-ad-computer-active').checked=true;
+    async function deleteAdGroup(name){
+        if(!await askAdminConfirm(`Excluir o grupo ${name} do Active Directory? Esta ação não pode ser desfeita.`))return;
+        try{const response=await fetch('/api/admin/ad/groups/'+encodeURIComponent(name),{method:'DELETE',headers:hdrs()});const msg=await readResponseMessage(response,'Grupo excluído.');if(!response.ok)return showAdminMessage('error',msg);showAdminMessage('success',msg);await loadAd();}
+        catch{showAdminMessage('error','Falha de conexão ao excluir o grupo.');}
+    }
+    function openAdComputerModal(computer=null,duplicate=false){
+        const editing=computer&&!duplicate;
+        document.getElementById('m-ad-computer-original').value=editing?computer.name:'';
+        document.getElementById('m-ad-computer-title').textContent=editing?'Editar Computador do Active Directory':duplicate?'Duplicar Computador do Active Directory':'Novo Computador do Active Directory';
+        document.getElementById('m-ad-computer-name').value=computer?(duplicate?suggestedAdCopyName(computer.name,15,_adComputers):computer.name):'';
+        document.getElementById('m-ad-computer-description').value=computer?.description||'';document.getElementById('m-ad-computer-os').value=computer?.operatingSystem||'Windows 11 Pro';document.getElementById('m-ad-computer-active').checked=computer?computer.isActive!==false:true;
+        document.getElementById('btn-create-ad-computer').textContent=editing?'Salvar alterações':duplicate?'Duplicar computador':'Criar computador';
+        document.getElementById('m-ad-computer-note').textContent=editing?'Nome, atributos e estado da conta serão atualizados no Active Directory.':'Cria o objeto na pasta de computadores configurada. Uma máquina nova ainda precisa ingressar no domínio pelo próprio Windows.';
         document.getElementById('modal-ad-create-computer').classList.add('active');requestAnimationFrame(()=>document.getElementById('m-ad-computer-name').focus());
     }
+    function editAdComputer(name){const computer=_adComputers.find(c=>c.name.toUpperCase()===name.toUpperCase());if(computer)openAdComputerModal(computer);}
+    function duplicateAdComputer(name){const computer=_adComputers.find(c=>c.name.toUpperCase()===name.toUpperCase());if(computer)openAdComputerModal(computer,true);}
     async function submitAdComputer(){
-        const name=document.getElementById('m-ad-computer-name').value.trim(),description=document.getElementById('m-ad-computer-description').value.trim(),operatingSystem=document.getElementById('m-ad-computer-os').value.trim(),isActive=document.getElementById('m-ad-computer-active').checked;
+        const original=document.getElementById('m-ad-computer-original').value,name=document.getElementById('m-ad-computer-name').value.trim(),description=document.getElementById('m-ad-computer-description').value.trim(),operatingSystem=document.getElementById('m-ad-computer-os').value.trim(),isActive=document.getElementById('m-ad-computer-active').checked;
         if(!name)return showAdminMessage('error','Informe o nome do computador.');
         const button=document.getElementById('btn-create-ad-computer');button.disabled=true;
-        try{const response=await fetch('/api/admin/ad/computers',{method:'POST',headers:hdrs(),body:JSON.stringify({name,description,operatingSystem,isActive})});const msg=await readResponseMessage(response,'Computador criado.');if(!response.ok)return showAdminMessage('error',msg);closeModals();showAdminMessage('success',msg);await loadAd();}
-        catch{showAdminMessage('error','Falha de conexão ao criar o computador.');}
+        try{const response=await fetch(original?'/api/admin/ad/computers/'+encodeURIComponent(original):'/api/admin/ad/computers',{method:original?'PUT':'POST',headers:hdrs(),body:JSON.stringify({name,description,operatingSystem,isActive})});const msg=await readResponseMessage(response,original?'Computador atualizado.':'Computador criado.');if(!response.ok)return showAdminMessage('error',msg);closeModals();showAdminMessage('success',msg);await loadAd();}
+        catch{showAdminMessage('error','Falha de conexão ao salvar o computador.');}
         finally{button.disabled=false;}
+    }
+    async function deleteAdComputer(name){
+        if(!await askAdminConfirm(`Excluir o computador ${name} do Active Directory? Esta ação não pode ser desfeita.`))return;
+        try{const response=await fetch('/api/admin/ad/computers/'+encodeURIComponent(name),{method:'DELETE',headers:hdrs()});const msg=await readResponseMessage(response,'Computador excluído.');if(!response.ok)return showAdminMessage('error',msg);showAdminMessage('success',msg);await loadAd();}
+        catch{showAdminMessage('error','Falha de conexão ao excluir o computador.');}
     }
 
     const AD_SORT_FIELDS = {
@@ -599,9 +635,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-website-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_WEBSITE').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário de website encontrado.</td></tr>';
         document.getElementById('ad-expired-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_EXPIRADOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário expirado encontrado.</td></tr>';
         const computers=sortAdItems(_adComputers,['name','description','operatingSystem','isActive'],'description');
-        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Nenhum computador encontrado.</td></tr>';
+        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel"><button class="btn btn-outline" onclick="editAdComputer('${c.name}')">Editar</button><button class="btn btn-outline" onclick="duplicateAdComputer('${c.name}')">Duplicar</button><button class="btn btn-outline danger-action" onclick="deleteAdComputer('${c.name}')">Excluir</button></div></details></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum computador encontrado.</td></tr>';
         const groups=sortAdItems(_adGroups,['name','description'],'name');
-        document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Nenhum grupo encontrado.</td></tr>';
+        document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel"><button class="btn btn-outline" onclick="editAdGroup('${g.name}')">Editar</button><button class="btn btn-outline" onclick="duplicateAdGroup('${g.name}')">Duplicar</button><button class="btn btn-outline danger-action" onclick="deleteAdGroup('${g.name}')">Excluir</button></div></details></td></tr>`).join('')||'<tr><td colspan="3" class="empty">Nenhum grupo encontrado.</td></tr>';
     }
 
     async function loadAd() {
@@ -648,10 +684,10 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                     <div class="tbl-wrap"><table><thead><tr><th>Usu&aacute;rio</th><th>Nome Completo</th><th>Status</th><th>Acessos (Computadores e Grupos)</th><th>Vencimento</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="ad-expired-body"></tbody></table></div>
                 </div>
                 <div class="tbl-card hidden" id="ad-groups-tbl">
-                    <div class="tbl-wrap"><table><thead><tr><th>Grupo</th><th>Descri&ccedil;&atilde;o</th></tr></thead><tbody id="ad-groups-body"></tbody></table></div>
+                    <div class="tbl-wrap"><table><thead><tr><th>Grupo</th><th>Descri&ccedil;&atilde;o</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="ad-groups-body"></tbody></table></div>
                 </div>
                 <div class="tbl-card hidden" id="ad-computers-tbl">
-                    <div class="tbl-wrap"><table><thead><tr><th>Computador</th><th>Descri&ccedil;&atilde;o</th><th>Sistema Operacional</th><th>Status</th></tr></thead><tbody id="ad-computers-body"></tbody></table></div>
+                    <div class="tbl-wrap"><table><thead><tr><th>Computador</th><th>Descri&ccedil;&atilde;o</th><th>Sistema Operacional</th><th>Status</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="ad-computers-body"></tbody></table></div>
                 </div>
             `;
         }
@@ -920,12 +956,12 @@ function enhanceResponsiveTables(root=document){
 }
 const SORTABLE_TABLES={
   'orders-body':{type:'orders',fields:['customer','whatsapp','server','period','computers','totalPrice','asaasPaymentId','status','delivered','expiresAt','createdAt','canceledAt',null]},
-  'users-body':{type:'users',fields:['name','whatsapp','isActive','adUsername','totalOrders','totalSpent','activeLicenses','createdAt','emailConfirmed',null]},
+  'users-body':{type:'users',fields:['name','whatsapp','isActive','adUsername','totalOrders','totalSpent','activeLicenses','emailConfirmed','createdAt',null]},
   'ad-users-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-website-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-expired-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
-  'ad-groups-body':{type:'ad',fields:['name','description']},
-  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive']}
+  'ad-groups-body':{type:'ad',fields:['name','description',null]},
+  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive',null]}
 };
 function enhanceSortableHeaders(root=document){
   Object.entries(SORTABLE_TABLES).forEach(([bodyId,config])=>{
@@ -1229,8 +1265,8 @@ async function loadUsers(p){
           <td style="text-align:center;font-weight:500">${u.totalOrders}</td>
           <td style="font-weight:600;color:var(--ok)">${fmtCur(u.totalSpent)}</td>
           <td style="text-align:center">${u.activeLicenses>0?'<span class="badge b-ok">'+u.activeLicenses+' ativa'+(u.activeLicenses>1?'s':'')+'</span>':'<span class="muted">&#8212;</span>'}</td>
-          <td class="muted">${fmtDate(u.createdAt)}</td>
           <td><label class="inline-check"><input type="checkbox" data-user-id="${u.id}" ${u.emailConfirmed?'checked disabled':'onchange="confirmEmailFromCheckbox(this)"'}><span>${u.emailConfirmed?'Confirmado':'Validar'}</span></label></td>
+          <td class="muted">${fmtDate(u.createdAt)}</td>
           <td>
               <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
                   <button class="btn btn-outline" style="padding:4px 8px;font-size:12px" title="Editar" onclick="openUserModal('${u.id}')">Editar</button>

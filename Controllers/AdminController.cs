@@ -954,6 +954,38 @@ namespace PremierAPI.Controllers
             }
         }
 
+        [HttpPut("ad/groups/{name}")]
+        public async Task<IActionResult> UpdateAdGroup(string name, [FromBody] CreateAdGroupRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.UpdateGroupAsync(name, req.Name, req.Description);
+                return Ok(new { msg = "Grupo atualizado no AD." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao atualizar grupo {GroupName}.", name);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
+
+        [HttpDelete("ad/groups/{name}")]
+        public async Task<IActionResult> DeleteAdGroup(string name, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.DeleteGroupAsync(name);
+                return Ok(new { msg = "Grupo excluído do AD." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao excluir grupo {GroupName}.", name);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
+
         [HttpPost("ad/computers")]
         public async Task<IActionResult> CreateAdComputer([FromBody] CreateAdComputerRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
         {
@@ -966,6 +998,38 @@ namespace PremierAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[ADMIN][AD] Falha ao criar computador {ComputerName}.", req.Name);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
+
+        [HttpPut("ad/computers/{name}")]
+        public async Task<IActionResult> UpdateAdComputer(string name, [FromBody] CreateAdComputerRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.UpdateComputerAsync(name, req.Name, req.Description, req.OperatingSystem, req.IsActive);
+                return Ok(new { msg = "Computador atualizado no AD." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao atualizar computador {ComputerName}.", name);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
+
+        [HttpDelete("ad/computers/{name}")]
+        public async Task<IActionResult> DeleteAdComputer(string name, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.DeleteComputerAsync(name);
+                return Ok(new { msg = "Computador excluído do AD." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao excluir computador {ComputerName}.", name);
                 return BadRequest(new { erro = ex.Message });
             }
         }

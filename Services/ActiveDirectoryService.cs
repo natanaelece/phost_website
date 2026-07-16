@@ -339,13 +339,7 @@ namespace PremierAPI.Services
         public async Task CreateGroupAsync(string name, string? description)
         {
             if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
-            name = (name ?? "").Trim();
-            if (!Regex.IsMatch(name, @"^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$"))
-                throw new Exception("O nome do grupo deve ter de 1 a 64 caracteres e usar apenas letras, números, espaço, ponto, hífen ou sublinhado.");
-            if (name.Length > 20)
-                throw new Exception("O nome do grupo deve ter no máximo 20 caracteres para compatibilidade com sAMAccountName.");
-            description = (description ?? "").Trim();
-            if (description.Length > 256) throw new Exception("A descrição deve ter no máximo 256 caracteres.");
+            (name, description) = ValidateGroup(name, description);
 
             using var conn = GetConnection();
             if (!string.IsNullOrEmpty(GetGroupDn(conn, name))) throw new Exception("Já existe um grupo com este nome.");
@@ -362,21 +356,45 @@ namespace PremierAPI.Services
             _logger.LogInformation("[AD] Grupo global de segurança criado: {GroupName}.", name);
         }
 
+        public async Task UpdateGroupAsync(string currentName, string name, string? description)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            currentName = (currentName ?? "").Trim();
+            (name, description) = ValidateGroup(name, description);
+
+            using var conn = GetConnection();
+            string groupDn = GetGroupDn(conn, currentName) ?? throw new Exception("Grupo não encontrado no AD.");
+            if (!name.Equals(currentName, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(GetGroupDn(conn, name)))
+                throw new Exception("Já existe um grupo com este nome.");
+
+            var entry = ReadEntry(conn, groupDn, "description");
+            var modifications = BuildOptionalAttributeModification("description", GetAttribute(entry, "description"), description);
+            modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("sAMAccountName", name)));
+            conn.Modify(groupDn, modifications.ToArray());
+
+            if (!name.Equals(currentName, StringComparison.Ordinal))
+                conn.Rename(groupDn, $"CN={name}", true);
+
+            _logger.LogInformation("[AD] Grupo atualizado: {OldGroupName} -> {GroupName}.", currentName, name);
+        }
+
+        public async Task DeleteGroupAsync(string name)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            using var conn = GetConnection();
+            string groupDn = GetGroupDn(conn, (name ?? "").Trim()) ?? throw new Exception("Grupo não encontrado no AD.");
+            conn.Delete(groupDn);
+            _logger.LogInformation("[AD] Grupo excluído: {GroupName}.", name);
+        }
+
         public async Task CreateComputerAsync(string name, string? description, string? operatingSystem, bool isActive)
         {
             if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
-            name = (name ?? "").Trim().ToUpperInvariant();
-            if (!Regex.IsMatch(name, @"^(?!\d+$)[A-Z0-9][A-Z0-9-]{0,14}$"))
-                throw new Exception("O nome do computador deve ter de 1 a 15 caracteres, usar letras, números ou hífen e não pode conter apenas números.");
-            description = (description ?? "").Trim();
-            operatingSystem = (operatingSystem ?? "").Trim();
-            if (description.Length > 256) throw new Exception("A descrição deve ter no máximo 256 caracteres.");
-            if (operatingSystem.Length > 128) throw new Exception("O sistema operacional deve ter no máximo 128 caracteres.");
+            (name, description, operatingSystem) = ValidateComputer(name, description, operatingSystem);
 
             using var conn = GetConnection();
-            var existing = conn.Search(_computersOu, LdapConnection.ScopeSub,
-                $"(&(objectCategory=computer)(cn={EscapeLdapFilterValue(name)}))", new[] { "distinguishedName" }, false);
-            if (existing.HasMore()) throw new Exception("Já existe um computador com este nome.");
+            if (!string.IsNullOrEmpty(GetComputerDn(conn, name))) throw new Exception("Já existe um computador com este nome.");
             var attributes = new LdapAttributeSet
             {
                 new LdapAttribute("objectClass", "computer"),
@@ -389,6 +407,46 @@ namespace PremierAPI.Services
             if (!string.IsNullOrWhiteSpace(operatingSystem)) attributes.Add(new LdapAttribute("operatingSystem", operatingSystem));
             conn.Add(new LdapEntry($"CN={name},{_computersOu}", attributes));
             _logger.LogInformation("[AD] Objeto de computador criado: {ComputerName}.", name);
+        }
+
+        public async Task UpdateComputerAsync(string currentName, string name, string? description, string? operatingSystem, bool isActive)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            currentName = (currentName ?? "").Trim().ToUpperInvariant();
+            (name, description, operatingSystem) = ValidateComputer(name, description, operatingSystem);
+
+            using var conn = GetConnection();
+            string computerDn = GetComputerDn(conn, currentName) ?? throw new Exception("Computador não encontrado no AD.");
+            if (!name.Equals(currentName, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(GetComputerDn(conn, name)))
+                throw new Exception("Já existe um computador com este nome.");
+
+            var entry = ReadEntry(conn, computerDn, "description", "operatingSystem", "userAccountControl");
+            int userAccountControl = GetAttributeAsInt(entry, "userAccountControl");
+            if (userAccountControl == 0) userAccountControl = 4096;
+            userAccountControl = isActive ? userAccountControl & ~2 : userAccountControl | 2;
+
+            var modifications = BuildOptionalAttributeModification("description", GetAttribute(entry, "description"), description);
+            modifications.AddRange(BuildOptionalAttributeModification("operatingSystem", GetAttribute(entry, "operatingSystem"), operatingSystem));
+            modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("sAMAccountName", name + "$")));
+            modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("userAccountControl", userAccountControl.ToString())));
+            if (!string.IsNullOrWhiteSpace(_upnSuffix))
+                modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("dNSHostName", $"{name.ToLowerInvariant()}.{_upnSuffix}")));
+            conn.Modify(computerDn, modifications.ToArray());
+
+            if (!name.Equals(currentName, StringComparison.Ordinal))
+                conn.Rename(computerDn, $"CN={name}", true);
+
+            _logger.LogInformation("[AD] Computador atualizado: {OldComputerName} -> {ComputerName}.", currentName, name);
+        }
+
+        public async Task DeleteComputerAsync(string name)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            using var conn = GetConnection();
+            string computerDn = GetComputerDn(conn, (name ?? "").Trim()) ?? throw new Exception("Computador não encontrado no AD.");
+            conn.Delete(computerDn);
+            _logger.LogInformation("[AD] Computador excluído: {ComputerName}.", name);
         }
 
         public async Task CreateUserAsync(string username, string fullName, string password, string? email = null, string? phone = null, bool fromWebsite = false)
@@ -1009,9 +1067,69 @@ namespace PremierAPI.Services
 
         private string? GetGroupDn(LdapConnection conn, string groupName)
         {
-            var res = conn.Search(_groupsOu, LdapConnection.ScopeSub, $"(&(objectCategory=group)(cn={groupName}))", new[] { "distinguishedName" }, false);
+            var res = conn.Search(_groupsOu, LdapConnection.ScopeSub, $"(&(objectCategory=group)(cn={EscapeLdapFilterValue(groupName)}))", new[] { "distinguishedName" }, false);
             if (res.HasMore()) return res.Next().Dn;
             return null;
+        }
+
+        private string? GetComputerDn(LdapConnection conn, string computerName)
+        {
+            var res = conn.Search(
+                _computersOu,
+                LdapConnection.ScopeSub,
+                $"(&(objectCategory=computer)(cn={EscapeLdapFilterValue(computerName)}))",
+                new[] { "distinguishedName" },
+                false);
+            if (res.HasMore()) return res.Next().Dn;
+            return null;
+        }
+
+        private static (string Name, string Description) ValidateGroup(string? name, string? description)
+        {
+            name = (name ?? "").Trim();
+            if (!Regex.IsMatch(name, @"^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$"))
+                throw new Exception("O nome do grupo deve ter de 1 a 64 caracteres e usar apenas letras, números, espaço, ponto, hífen ou sublinhado.");
+            if (name.Length > 20)
+                throw new Exception("O nome do grupo deve ter no máximo 20 caracteres para compatibilidade com sAMAccountName.");
+
+            description = (description ?? "").Trim();
+            if (description.Length > 256) throw new Exception("A descrição deve ter no máximo 256 caracteres.");
+            return (name, description);
+        }
+
+        private static (string Name, string Description, string OperatingSystem) ValidateComputer(string? name, string? description, string? operatingSystem)
+        {
+            name = (name ?? "").Trim().ToUpperInvariant();
+            if (!Regex.IsMatch(name, @"^(?!\d+$)[A-Z0-9][A-Z0-9-]{0,14}$"))
+                throw new Exception("O nome do computador deve ter de 1 a 15 caracteres, usar letras, números ou hífen e não pode conter apenas números.");
+
+            description = (description ?? "").Trim();
+            operatingSystem = (operatingSystem ?? "").Trim();
+            if (description.Length > 256) throw new Exception("A descrição deve ter no máximo 256 caracteres.");
+            if (operatingSystem.Length > 128) throw new Exception("O sistema operacional deve ter no máximo 128 caracteres.");
+            return (name, description, operatingSystem);
+        }
+
+        private static LdapEntry ReadEntry(LdapConnection conn, string dn, params string[] attributes)
+        {
+            var result = conn.Search(dn, LdapConnection.ScopeBase, "(objectClass=*)", attributes, false);
+            if (!result.HasMore()) throw new Exception("Objeto não encontrado no AD.");
+            return result.Next();
+        }
+
+        private static List<LdapModification> BuildOptionalAttributeModification(string attributeName, string currentValue, string newValue)
+        {
+            if (string.IsNullOrWhiteSpace(newValue))
+            {
+                return string.IsNullOrWhiteSpace(currentValue)
+                    ? new List<LdapModification>()
+                    : new List<LdapModification> { new(LdapModification.Delete, new LdapAttribute(attributeName)) };
+            }
+
+            return new List<LdapModification>
+            {
+                new(LdapModification.Replace, new LdapAttribute(attributeName, newValue))
+            };
         }
 
         private string GetAttribute(LdapEntry entry, string attrName)
