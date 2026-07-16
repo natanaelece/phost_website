@@ -938,6 +938,38 @@ namespace PremierAPI.Controllers
             }
         }
 
+        [HttpPost("ad/groups")]
+        public async Task<IActionResult> CreateAdGroup([FromBody] CreateAdGroupRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.CreateGroupAsync(req.Name, req.Description);
+                return Ok(new { msg = "Grupo global de segurança criado no AD." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao criar grupo {GroupName}.", req.Name);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
+
+        [HttpPost("ad/computers")]
+        public async Task<IActionResult> CreateAdComputer([FromBody] CreateAdComputerRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
+        {
+            if (!await ValidateAdmin()) return Unauthorized();
+            try
+            {
+                await ad.CreateComputerAsync(req.Name, req.Description, req.OperatingSystem, req.IsActive);
+                return Ok(new { msg = "Objeto de computador criado no AD." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao criar computador {ComputerName}.", req.Name);
+                return BadRequest(new { erro = ex.Message });
+            }
+        }
+
         [HttpPost("ad/users")]
         public async Task<IActionResult> CreateAdUser([FromBody] CreateAdUserRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
         {
@@ -1147,6 +1179,8 @@ namespace PremierAPI.Controllers
     public class UpdateAdLinkRequest { public string? AdUsername { get; set; } }
     public class UpdateOrderDeliveryRequest { public bool Delivered { get; set; } }
     public class CreateAdUserRequest { public string Username { get; set; } = ""; public string FullName { get; set; } = ""; public string Password { get; set; } = ""; public string? Whatsapp { get; set; } }
+    public class CreateAdGroupRequest { public string Name { get; set; } = ""; public string? Description { get; set; } }
+    public class CreateAdComputerRequest { public string Name { get; set; } = ""; public string? Description { get; set; } public string? OperatingSystem { get; set; } public bool IsActive { get; set; } = true; }
     public class SetAdPasswordRequest { public string Password { get; set; } = ""; public bool ForceChangeOnNextLogon { get; set; } }
     public class SetExpirationRequest { public DateTime? ExpiresAt { get; set; } }
     public class ManageGroupRequest { public string GroupName { get; set; } = ""; public bool Add { get; set; } }

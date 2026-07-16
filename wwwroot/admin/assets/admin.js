@@ -508,9 +508,41 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-groups-tbl').classList.add('hidden');
         document.getElementById('ad-computers-tbl').classList.add('hidden');
         document.getElementById('ad-'+f+'-tbl').classList.remove('hidden');
+        syncAdCreationActions();
         ensureAdSortForFilter();
         renderAdCollections();
         updateSortableHeaderState();
+    }
+
+    function syncAdCreationActions(){
+        document.getElementById('ad-new-user')?.classList.toggle('hidden',currentAdFilter==='groups'||currentAdFilter==='computers');
+        document.getElementById('ad-new-group')?.classList.toggle('hidden',currentAdFilter!=='groups');
+        document.getElementById('ad-new-computer')?.classList.toggle('hidden',currentAdFilter!=='computers');
+    }
+
+    function openAdGroupModal(){
+        document.getElementById('m-ad-group-name').value='';document.getElementById('m-ad-group-description').value='';
+        document.getElementById('modal-ad-create-group').classList.add('active');requestAnimationFrame(()=>document.getElementById('m-ad-group-name').focus());
+    }
+    async function submitAdGroup(){
+        const name=document.getElementById('m-ad-group-name').value.trim(),description=document.getElementById('m-ad-group-description').value.trim();
+        if(!name)return showAdminMessage('error','Informe o nome do grupo.');
+        const button=document.getElementById('btn-create-ad-group');button.disabled=true;
+        try{const response=await fetch('/api/admin/ad/groups',{method:'POST',headers:hdrs(),body:JSON.stringify({name,description})});const msg=await readResponseMessage(response,'Grupo criado.');if(!response.ok)return showAdminMessage('error',msg);closeModals();showAdminMessage('success',msg);await loadAd();}
+        catch{showAdminMessage('error','Falha de conexão ao criar o grupo.');}
+        finally{button.disabled=false;}
+    }
+    function openAdComputerModal(){
+        document.getElementById('m-ad-computer-name').value='';document.getElementById('m-ad-computer-description').value='';document.getElementById('m-ad-computer-os').value='Windows 11 Pro';document.getElementById('m-ad-computer-active').checked=true;
+        document.getElementById('modal-ad-create-computer').classList.add('active');requestAnimationFrame(()=>document.getElementById('m-ad-computer-name').focus());
+    }
+    async function submitAdComputer(){
+        const name=document.getElementById('m-ad-computer-name').value.trim(),description=document.getElementById('m-ad-computer-description').value.trim(),operatingSystem=document.getElementById('m-ad-computer-os').value.trim(),isActive=document.getElementById('m-ad-computer-active').checked;
+        if(!name)return showAdminMessage('error','Informe o nome do computador.');
+        const button=document.getElementById('btn-create-ad-computer');button.disabled=true;
+        try{const response=await fetch('/api/admin/ad/computers',{method:'POST',headers:hdrs(),body:JSON.stringify({name,description,operatingSystem,isActive})});const msg=await readResponseMessage(response,'Computador criado.');if(!response.ok)return showAdminMessage('error',msg);closeModals();showAdminMessage('success',msg);await loadAd();}
+        catch{showAdminMessage('error','Falha de conexão ao criar o computador.');}
+        finally{button.disabled=false;}
     }
 
     const AD_SORT_FIELDS = {
@@ -593,6 +625,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
 
         sts.innerHTML = '<span style="color:#4ade80">Online (172.31.2.3)</span>';
         document.getElementById('ad-actions').classList.remove('hidden');
+        syncAdCreationActions();
         
         // Restore layout if it was overwritten by offline banner
         if(cont.innerHTML.includes('offline-banner')) {

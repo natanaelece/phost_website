@@ -336,6 +336,61 @@ namespace PremierAPI.Services
                 .ToList();
         }
 
+        public async Task CreateGroupAsync(string name, string? description)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            name = (name ?? "").Trim();
+            if (!Regex.IsMatch(name, @"^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$"))
+                throw new Exception("O nome do grupo deve ter de 1 a 64 caracteres e usar apenas letras, números, espaço, ponto, hífen ou sublinhado.");
+            if (name.Length > 20)
+                throw new Exception("O nome do grupo deve ter no máximo 20 caracteres para compatibilidade com sAMAccountName.");
+            description = (description ?? "").Trim();
+            if (description.Length > 256) throw new Exception("A descrição deve ter no máximo 256 caracteres.");
+
+            using var conn = GetConnection();
+            if (!string.IsNullOrEmpty(GetGroupDn(conn, name))) throw new Exception("Já existe um grupo com este nome.");
+            var attributes = new LdapAttributeSet
+            {
+                new LdapAttribute("objectClass", "group"),
+                new LdapAttribute("cn", name),
+                new LdapAttribute("sAMAccountName", name),
+                // GROUP_TYPE_ACCOUNT_GROUP | GROUP_TYPE_SECURITY_ENABLED
+                new LdapAttribute("groupType", "-2147483646")
+            };
+            if (!string.IsNullOrWhiteSpace(description)) attributes.Add(new LdapAttribute("description", description));
+            conn.Add(new LdapEntry($"CN={name},{_groupsOu}", attributes));
+            _logger.LogInformation("[AD] Grupo global de segurança criado: {GroupName}.", name);
+        }
+
+        public async Task CreateComputerAsync(string name, string? description, string? operatingSystem, bool isActive)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+            name = (name ?? "").Trim().ToUpperInvariant();
+            if (!Regex.IsMatch(name, @"^(?!\d+$)[A-Z0-9][A-Z0-9-]{0,14}$"))
+                throw new Exception("O nome do computador deve ter de 1 a 15 caracteres, usar letras, números ou hífen e não pode conter apenas números.");
+            description = (description ?? "").Trim();
+            operatingSystem = (operatingSystem ?? "").Trim();
+            if (description.Length > 256) throw new Exception("A descrição deve ter no máximo 256 caracteres.");
+            if (operatingSystem.Length > 128) throw new Exception("O sistema operacional deve ter no máximo 128 caracteres.");
+
+            using var conn = GetConnection();
+            var existing = conn.Search(_computersOu, LdapConnection.ScopeSub,
+                $"(&(objectCategory=computer)(cn={EscapeLdapFilterValue(name)}))", new[] { "distinguishedName" }, false);
+            if (existing.HasMore()) throw new Exception("Já existe um computador com este nome.");
+            var attributes = new LdapAttributeSet
+            {
+                new LdapAttribute("objectClass", "computer"),
+                new LdapAttribute("cn", name),
+                new LdapAttribute("sAMAccountName", name + "$"),
+                new LdapAttribute("userAccountControl", isActive ? "4096" : "4098")
+            };
+            if (!string.IsNullOrWhiteSpace(_upnSuffix)) attributes.Add(new LdapAttribute("dNSHostName", $"{name.ToLowerInvariant()}.{_upnSuffix}"));
+            if (!string.IsNullOrWhiteSpace(description)) attributes.Add(new LdapAttribute("description", description));
+            if (!string.IsNullOrWhiteSpace(operatingSystem)) attributes.Add(new LdapAttribute("operatingSystem", operatingSystem));
+            conn.Add(new LdapEntry($"CN={name},{_computersOu}", attributes));
+            _logger.LogInformation("[AD] Objeto de computador criado: {ComputerName}.", name);
+        }
+
         public async Task CreateUserAsync(string username, string fullName, string password, string? email = null, string? phone = null, bool fromWebsite = false)
         {
             if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");

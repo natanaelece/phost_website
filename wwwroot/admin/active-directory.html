@@ -6,7 +6,9 @@
     <div class="page-heading">
         <div><h1 style="font-size:20px;font-weight:700;margin-bottom:3px">Active Directory</h1><p class="muted" id="ad-status">Verificando status...</p></div>
         <div id="ad-actions" class="page-actions hidden" style="position:relative; z-index:9000; pointer-events:auto;">
-            <button class="btn" onclick="openAdUserModal()">+ Novo Usu&aacute;rio AD</button>
+            <button class="btn" id="ad-new-user" onclick="openAdUserModal()">+ Novo Usu&aacute;rio AD</button>
+            <button class="btn hidden" id="ad-new-group" onclick="openAdGroupModal()">+ Novo Grupo</button>
+            <button class="btn hidden" id="ad-new-computer" onclick="openAdComputerModal()">+ Novo Computador</button>
             <button class="btn btn-outline" onclick="loadAd()">&#128260; Recarregar</button>
         </div>
     </div>
