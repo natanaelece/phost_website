@@ -971,7 +971,7 @@
             clearInterval(pixPollingInterval);
             document.getElementById('pendingPixBlock').classList.add('hidden');
             document.getElementById('pendingPixBlock').classList.remove('flex');
-            document.getElementById('pixModal').classList.add('hidden');
+            fecharPixModal();
             
             const btn = document.getElementById('btnPagar');
             btn.disabled = false;
