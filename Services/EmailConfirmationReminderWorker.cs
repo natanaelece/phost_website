@@ -111,7 +111,21 @@ namespace PremierAPI.Services
                           AND COALESCE(email_confirmation_resend_count, 0) = @PreviousCount",
                         new { user.Id, NextCount = nextCount, PreviousCount = user.ResendCount, Now = now, NextSendAt = nextSendAt });
 
-                    _logger.LogInformation("[EMAIL CONFIRMACAO] Reenvio {Count}/2 concluido para o usuario {UserId}.", nextCount, user.Id);
+                    if (nextSendAt.HasValue)
+                    {
+                        _logger.LogInformation(
+                            "[EMAIL CONFIRMACAO] Reenvio {Count}/2 concluido para o usuario {UserId}. Proximo reenvio agendado para {NextSendAt:dd/MM/yyyy HH:mm}.",
+                            nextCount,
+                            user.Id,
+                            nextSendAt.Value);
+                    }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "[EMAIL CONFIRMACAO] Reenvio {Count}/2 concluido para o usuario {UserId}. Limite de reenvios automaticos atingido.",
+                            nextCount,
+                            user.Id);
+                    }
                 }
                 catch (Exception ex)
                 {
