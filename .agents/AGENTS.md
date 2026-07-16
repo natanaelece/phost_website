@@ -1,9 +1,37 @@
-Você está trabalhando no projeto PremierAPI. ANTES de começar qualquer tarefa, alterar arquiteturas ou sugerir bibliotecas, você DEVE LER OBRIGATORIAMENTE o arquivo `README.md` para o contexto geral, e logo em seguida o arquivo `rules.md` na raiz do projeto. Eles documentam as regras rígidas sobre Dapper, Tailwind, Active Directory e frontend estático, além do simulador público, modais de ajuda e mídia local do frontend, e não podem ser ignorados.
+# PremierAPI — início rápido para agentes
 
-## Contexto financeiro atual (leia antes de investigar o Asaas)
+Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este arquivo é um índice curto; em caso de dúvida, as decisões detalhadas estão no README.
 
-- O checkout usa `/v3/pix/qrCodes/static` para gerar Pix individual, de valor fixo, uso unico e 15 minutos. Essa foi uma decisao consciente para nao pedir CPF/CNPJ ao cliente; nao volte para cobranca dinamica sem autorizacao expressa.
-- A descricao historica enviada ao QR e `Licença ({periodo}) - AnyDesk: {id}`. Contudo, no QR estatico o Asaas cria a cobranca apenas depois que recebe o Pix e pode usar uma descricao automatica na cobranca e no webhook.
-- A identidade confiavel das compras atuais e `payment.pixQrCodeId` relacionado a `orders.asaas_pix_qr_code_id`. `description.StartsWith("Licença")` e apenas o fallback para cobrancas dinamicas antigas. Nao remova nenhum dos dois caminhos.
-- Outra aplicacao recebe webhooks da mesma conta Asaas. Ela tambem precisa aceitar `pixQrCodeId`; nao e possivel garantir o prefixo da descricao na cobranca automatica sem abandonar o fluxo estatico, e editar depois do pagamento nao corrige o evento ja entregue.
-- Depois do pagamento, o webhook local salva o cliente Asaas, sincroniza nome/e-mail/WhatsApp, define o grupo `PremierHost` e desativa todas as notificacoes. Nao faca chamadas reais nem altere clientes/cobrancas em producao sem pedido expresso do usuario.
+## Mapa rápido
+
+- `Controllers/`: APIs administrativas, autenticação, checkout, perfil, webhook e analytics.
+- `Services/PricingRules.cs`: autoridade única de preços, limites, descontos e arredondamentos.
+- `Services/ActiveDirectoryService.cs`: única fronteira LDAP/LDAPS.
+- `Services/DatabaseInitializer.cs`: evolução idempotente do schema PostgreSQL.
+- `wwwroot/index.html` e `wwwroot/painel.html`: cliente em HTML/Vanilla JS com Tailwind CDN.
+- `wwwroot/admin/`: telas administrativas separadas, CSS nativo e JS compartilhado.
+
+## Não redescubra nem reverta
+
+- Sem NPM ou framework frontend. Node 18 é ferramenta de validação, não dependência do projeto.
+- QR Pix é estático para evitar CPF/CNPJ. Concilie compras atuais por `pixQrCodeId`; mantenha o fallback legado pela descrição `Licença`.
+- Pedido administrativo nasce pendente com `created_manually`, não pago. O cliente pode gerar ou renovar o QR depois.
+- Regras comerciais não podem ser copiadas para JS/controladores: use `PricingRules` e os endpoints de regras/cotação.
+- Ordenação das tabelas mostra somente uma seta na coluna ativa; mobile deve preservar todas as informações em cartões.
+- Usuário local pode ser vinculado às OUs/pastas de ativos, expirados e website.
+- Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
+- Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
+- Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
+
+## Segurança operacional
+
+Não faça chamadas com efeitos reais no Asaas nem mutações no AD para testar sem autorização expressa. Não exponha segredos, tokens ou configurações privadas em logs, diffs ou respostas.
+
+## Checagens rápidas
+
+```bash
+dotnet build --no-restore
+for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
+node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')
+git diff --check
+```

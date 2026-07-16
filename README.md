@@ -30,6 +30,7 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 ├── Services/                 # Regras de Negócio e Background Workers
 │   ├── ActiveDirectoryService.cs    # Manipulação do AD (LDAP) via System.DirectoryServices
 │   ├── AdOrderExpirationWorker.cs   # Background job que verifica e expira licenças não pagas
+│   ├── PricingRules.cs               # Fonte única das regras comerciais e cotações
 │   └── DatabaseInitializer.cs       # Seed e criação de tabelas automáticas no PostgreSQL
 │
 ├── wwwroot/                  # Aplicação Frontend
@@ -60,6 +61,8 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 3. Servidor Windows (ou permissão de delegação LDAP) para acesso ao **Active Directory**.
 4. Chaves da API do **Asaas** (Produção e Sandbox).
 
+O servidor também possui **Node.js 18** somente para validar a sintaxe dos JavaScripts estáticos. O projeto não usa NPM, `package.json`, bundler ou framework frontend.
+
 ### Passo a Passo
 
 1. **Clonar o Repositório** e navegar até a pasta do projeto.
@@ -89,6 +92,18 @@ A aplicação fará a criação e atualização automática da estrutura de tabe
 
 Esse fluxo requer ao menos uma chave Pix ativa na conta Asaas do ambiente utilizado. O QR Code guarda o valor calculado pelo servidor; o pagador não pode escolher ou alterar esse valor.
 
+### Regras comerciais centralizadas
+
+`Services/PricingRules.cs` é a única fonte das quantidades, preços, descontos e arredondamentos comerciais. O backend expõe `GET /api/checkout/pricing-rules` para montar os controles e `POST /api/checkout/pricing-quote` para calcular o total autoritativo. Não replique valores em controladores ou JavaScript.
+
+O simulador e o pedido manual usam as mesmas regras: o padrão é 1 slot; diária começa no menor pacote permitido (3 computadores por 3 dias, atualmente R$ 51 após a regra de arredondamento), semanal no menor valor (R$ 35) e mensal no menor valor com desconto (R$ 105). O total do pedido manual continua editável pelo operador, mas seu preenchimento e recálculo partem sempre da cotação do servidor.
+
+### Pedido criado manualmente
+
+Um pedido criado no admin é identificado por `orders.created_manually` e nasce como `pendente`, separado do conceito `paid_manually`. Ele exige os mesmos dados operacionais do checkout e respeita a regra de um pedido pendente por cliente, mas não cria pagamento fictício nem marca o pedido como pago.
+
+O cliente visualiza esse pedido pendente no painel e pode usar **Gerar PIX**. O endpoint anexa ao próprio pedido um QR estático calculado pelas regras atuais; quando o QR de um pedido manual expira, ele pode ser gerado novamente. No admin, o operador pode marcar o pagamento manualmente ou excluir o rascunho enquanto ainda não existe QR. Depois que o QR existe, cancelamentos seguem o fluxo seguro de conciliação com o Asaas. A coluna e seus ajustes de schema são mantidos pelo `DatabaseInitializer.cs`.
+
 ### Compatibilidade dos webhooks Asaas
 
 - O texto historico enviado ao criar uma cobranca dinamica era `Licença ({periodo}) - AnyDesk: {id}`. Preserve esse formato em qualquer fluxo dinamico legado.
@@ -108,6 +123,8 @@ Esse fluxo requer ao menos uma chave Pix ativa na conta Asaas do ambiente utiliz
 ## 🌐 Landing page e Painel do Cliente
 
 A landing page (`wwwroot/index.html`) apresenta o serviço de aluguel de máquinas físicas para WYD, benefícios, segurança, formas de acesso, planos diário/semanal/mensal e teste gratuito de 30 minutos solicitado pelo WhatsApp. Os valores exibidos são referências do cálculo implementado no painel; a contratação e o total definitivo continuam centralizados no simulador.
+
+O cadastro da landing funciona como uma esteira de seis passos: nome, WhatsApp, e-mail, senha, indicação e aceite de privacidade. O Turnstile permanece fixo na base do modal; erros só aparecem depois de interação ou tentativa de avanço. Após o cadastro, o formulário fecha e um modal de sucesso orienta a confirmação pelo link enviado por e-mail.
 
 O painel (`wwwroot/painel.html`) permite consulta pública do simulador de preços. Links no formato abaixo abrem diretamente a área de cálculo e deixam o período correspondente selecionado:
 
@@ -137,6 +154,8 @@ O arquivo `wwwroot/sitemap.xml` anuncia ao Google somente as URLs públicas can�
 O frontend utiliza `wwwroot/analytics.js` e o endpoint `POST /api/analytics/events` para medir o funil de contratação sem depender de cookies ou plataformas externas. A tabela `product_analytics_events` é criada de forma idempotente pelo `DatabaseInitializer.cs`, recebe somente eventos e propriedades permitidos e remove registros com mais de 13 meses na inicialização.
 
 O funil acompanha landing, simulador, autenticação, cadastro, tentativa de checkout, Pix gerado, pagamento recebido e acesso entregue. Eventos de pagamento e entrega são confirmados pelo backend. E-mail, WhatsApp, AnyDesk, senha, payload Pix e dados bancários não devem ser enviados como propriedades de analytics.
+
+Não há Google Analytics, Meta Pixel ou outro rastreador de terceiros instalado. Atualmente é registrada apenas a telemetria first-party permitida, incluindo a origem/referrer quando disponível; UTMs e identificadores de clique do Facebook/Google não são persistidos. Qualquer integração futura precisa de avaliação de privacidade, consentimento e CSP antes de ser adicionada.
 
 As contagens por evento e por sessão aparecem no bloco **Funil de produto** do Dashboard administrativo e respeitam o filtro de período já existente.
 
@@ -201,7 +220,26 @@ Principais areas do painel:
 - **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.
 - **Financeiro:** analise de receita paga, total historico, pedidos manuais, conversao, receita por plano, tipo de pedido e status dos pedidos.
 - **CRM:** visao de clientes ativos, licencas vencendo, entregas pendentes, novos usuarios, proximos vencimentos, acoes recomendadas e ranking de clientes.
-- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD. As listagens permitem ordenar os resultados por campo; no celular, as tabelas viram cartões verticais que preservam todos os dados. O ID do Asaas permanece recolhido até o operador solicitar sua exibição. O vínculo de um cadastro local aceita contas AD das pastas de usuários ativos, expirados e website.
+- **Pedidos, Usuarios e Active Directory:** gestao operacional existente, incluindo pedidos manuais, cancelamentos, marcacao de pagamento, entrega e controle de acessos no AD. Cabeçalhos clicáveis alternam crescente/decrescente e exibem uma única seta somente na coluna ativa; ao trocar a coluna, a anterior volta ao estado neutro. Pedidos e usuários são ordenados no backend sobre o conjunto completo; dados do AD são ordenados na listagem carregada. No celular, as tabelas viram cartões verticais que preservam todos os dados. O ID do Asaas permanece recolhido até o operador solicitar sua exibição. O vínculo de um cadastro local aceita contas AD das pastas de usuários ativos, expirados e website.
+
+### Operações do Active Directory
+
+Toda comunicação LDAP deve permanecer encapsulada em `Services/ActiveDirectoryService.cs` e usar LDAPS. A tela de Active Directory permite criar grupos globais de segurança e objetos de computador usando os mesmos atributos dos registros atuais. Grupos limitam e validam nome e descrição; computadores usam nome compatível com NetBIOS, `sAMAccountName` terminado em `$`, `dNSHostName`, sistema operacional e estado ativo/desativado.
+
+Criar o objeto de computador no AD **não ingressa a máquina física no domínio**. O ingresso ainda precisa ser executado no próprio Windows com credenciais autorizadas. Nunca crie, mova ou exclua objetos reais do AD apenas para testar uma alteração sem autorização expressa.
+
+## Validação antes de concluir alterações
+
+Não existe atualmente um projeto de testes automatizados. Execute verificações proporcionais à mudança e, antes de commits de código, prefira o conjunto abaixo:
+
+```bash
+dotnet build --no-restore
+for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
+node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')
+git diff --check
+```
+
+Essas verificações são locais. Não gere cobranças reais no Asaas e não altere objetos de produção no AD para validar código sem autorização explícita.
 
 ### Dashboard por periodo
 

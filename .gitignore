@@ -31,7 +31,6 @@ backup_db.sh
 *.bak
 *.sql
 fix.cs
-EOF
 
 ## --- SVE / SISTEMA OPERACIONAL ---
 .DS_Store
