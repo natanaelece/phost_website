@@ -26,13 +26,15 @@ namespace PremierAPI.Controllers
         private readonly string _turnstileSecret;
         private readonly AdAccountProvisioningService _adProvisioning;
         private readonly EmailConfirmationService _emailConfirmation;
+        private readonly AdPasswordProtectionService _adPasswordProtection;
 
         public AdminController(
             IConfiguration config,
             ILogger<AdminController> logger,
             IHttpClientFactory httpClientFactory,
             AdAccountProvisioningService adProvisioning,
-            EmailConfirmationService emailConfirmation)
+            EmailConfirmationService emailConfirmation,
+            AdPasswordProtectionService adPasswordProtection)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -41,6 +43,7 @@ namespace PremierAPI.Controllers
             _turnstileSecret = config.GetValue<string>("Cloudflare:TurnstileSecretKey") ?? "";
             _adProvisioning = adProvisioning;
             _emailConfirmation = emailConfirmation;
+            _adPasswordProtection = adPasswordProtection;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -523,7 +526,19 @@ namespace PremierAPI.Controllers
             if (exists == 1) return BadRequest(new { erro = "E-mail ja cadastrado." });
 
             string hash = BCrypt.Net.BCrypt.HashPassword(req.Password, 12);
-            await db.ExecuteAsync("INSERT INTO users (name, email, whatsapp, password_hash, is_active, email_confirmed) VALUES (@Name, @Email, @Whatsapp, @Hash, true, true)", new { Name = req.Name ?? "", Email = req.Email, Whatsapp = req.Whatsapp ?? "", Hash = hash });
+            string protectedPassword = _adPasswordProtection.Protect(req.Password);
+            await db.OpenAsync();
+            await using var transaction = await db.BeginTransactionAsync();
+            Guid userId = await db.QuerySingleAsync<Guid>(@"
+                INSERT INTO users (name, email, whatsapp, password_hash, is_active, email_confirmed)
+                VALUES (@Name, @Email, @Whatsapp, @Hash, true, true)
+                RETURNING id",
+                new { Name = req.Name ?? "", Email = req.Email, Whatsapp = req.Whatsapp ?? "", Hash = hash }, transaction);
+            await db.ExecuteAsync(@"
+                INSERT INTO pending_ad_credentials (user_id, protected_password)
+                VALUES (@UserId, @ProtectedPassword)",
+                new { UserId = userId, ProtectedPassword = protectedPassword }, transaction);
+            await transaction.CommitAsync();
             return Ok(new { msg = "Usuario criado com sucesso." });
         }
         [HttpPut("users/{id}")]
@@ -531,23 +546,43 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            
+            var adUsername = await db.QueryFirstOrDefaultAsync<string>("SELECT ad_username FROM users WHERE id=@Id", new { Id = id });
+
             if (!string.IsNullOrWhiteSpace(req.Password)) {
                 string hash = BCrypt.Net.BCrypt.HashPassword(req.Password, 12);
-                await db.ExecuteAsync("UPDATE users SET name=@Name, email=@Email, whatsapp=@Whatsapp, password_hash=@Hash WHERE id=@Id", 
-                    new { Name = req.Name, Email = req.Email, Whatsapp = req.Whatsapp, Hash = hash, Id = id });
+                await db.OpenAsync();
+                await using var transaction = await db.BeginTransactionAsync();
+                await db.ExecuteAsync("UPDATE users SET name=@Name, email=@Email, whatsapp=@Whatsapp, password_hash=@Hash WHERE id=@Id",
+                    new { Name = req.Name, Email = req.Email, Whatsapp = req.Whatsapp, Hash = hash, Id = id }, transaction);
+                if (string.IsNullOrWhiteSpace(adUsername))
+                {
+                    string protectedPassword = _adPasswordProtection.Protect(req.Password);
+                    await db.ExecuteAsync(@"
+                        INSERT INTO pending_ad_credentials (user_id, protected_password, updated_at)
+                        VALUES (@UserId, @ProtectedPassword, CURRENT_TIMESTAMP)
+                        ON CONFLICT (user_id) DO UPDATE
+                        SET protected_password = EXCLUDED.protected_password,
+                            updated_at = CURRENT_TIMESTAMP",
+                        new { UserId = id, ProtectedPassword = protectedPassword }, transaction);
+                }
+                await transaction.CommitAsync();
             } else {
                 await db.ExecuteAsync("UPDATE users SET name=@Name, email=@Email, whatsapp=@Whatsapp WHERE id=@Id", 
                     new { Name = req.Name, Email = req.Email, Whatsapp = req.Whatsapp, Id = id });
             }
-            
-            var adUsername = await db.QueryFirstOrDefaultAsync<string>("SELECT ad_username FROM users WHERE id=@Id", new { Id = id });
+
+            adUsername = await db.QueryFirstOrDefaultAsync<string>("SELECT ad_username FROM users WHERE id=@Id", new { Id = id });
             if (!string.IsNullOrWhiteSpace(adUsername))
             {
                 var ad = HttpContext.RequestServices.GetService(typeof(PremierAPI.Services.ActiveDirectoryService)) as PremierAPI.Services.ActiveDirectoryService;
                 if (ad != null)
                 {
                     try {
+                        if (!string.IsNullOrWhiteSpace(req.Password))
+                        {
+                            await ad.SetUserPasswordAsync(adUsername, req.Password, forceChangeOnNextLogon: false);
+                            await db.ExecuteAsync("DELETE FROM pending_ad_credentials WHERE user_id = @Id", new { Id = id });
+                        }
                         if (!string.IsNullOrWhiteSpace(req.Whatsapp)) await ad.UpdateTelephoneAsync(adUsername, req.Whatsapp);
                     } catch (Exception ex) {
                         _logger.LogWarning(ex, "[ADMIN][AD] Falha ao sincronizar UpdateUser para o AD.");
@@ -656,6 +691,8 @@ namespace PremierAPI.Controllers
                     END
                 WHERE id = @Id", new { AdUsername = adUsername, Id = id });
             if (rows == 0) return NotFound(new { erro = "Usuario nao encontrado." });
+            if (!string.IsNullOrWhiteSpace(adUsername))
+                await db.ExecuteAsync("DELETE FROM pending_ad_credentials WHERE user_id = @Id", new { Id = id });
 
             // Sincronizar telephoneNumber no AD com o WhatsApp cadastrado
             if (!string.IsNullOrWhiteSpace(adUsername))

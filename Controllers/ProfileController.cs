@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using PremierAPI.Services;
 namespace PremierAPI.Controllers
 {
     [ApiController]
@@ -15,10 +16,15 @@ namespace PremierAPI.Controllers
     {
         private readonly string _connString;
         private readonly ILogger<ProfileController> _logger;
-        public ProfileController(IConfiguration config, ILogger<ProfileController> logger)
+        private readonly AdPasswordProtectionService _adPasswordProtection;
+        public ProfileController(
+            IConfiguration config,
+            ILogger<ProfileController> logger,
+            AdPasswordProtectionService adPasswordProtection)
         {
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
+            _adPasswordProtection = adPasswordProtection;
         }
 
         private async Task<bool> ValidateSession(NpgsqlConnection db, Guid userId)
@@ -171,8 +177,22 @@ namespace PremierAPI.Controllers
 
             if (newHash != null)
             {
-                await db.ExecuteAsync("UPDATE users SET whatsapp = @Whatsapp, password_hash = @Hash WHERE id = @Id", 
-                    new { Whatsapp = req.Whatsapp, Hash = newHash, Id = id });
+                await db.OpenAsync();
+                await using var transaction = await db.BeginTransactionAsync();
+                await db.ExecuteAsync("UPDATE users SET whatsapp = @Whatsapp, password_hash = @Hash WHERE id = @Id",
+                    new { Whatsapp = req.Whatsapp, Hash = newHash, Id = id }, transaction);
+                if (string.IsNullOrWhiteSpace((string?)user.ad_username))
+                {
+                    string protectedPassword = _adPasswordProtection.Protect(req.NewPassword!);
+                    await db.ExecuteAsync(@"
+                        INSERT INTO pending_ad_credentials (user_id, protected_password, updated_at)
+                        VALUES (@UserId, @ProtectedPassword, CURRENT_TIMESTAMP)
+                        ON CONFLICT (user_id) DO UPDATE
+                        SET protected_password = EXCLUDED.protected_password,
+                            updated_at = CURRENT_TIMESTAMP",
+                        new { UserId = id, ProtectedPassword = protectedPassword }, transaction);
+                }
+                await transaction.CommitAsync();
             }
             else
             {
@@ -180,14 +200,19 @@ namespace PremierAPI.Controllers
                     new { Whatsapp = req.Whatsapp, Id = id });
             }
 
-            // Sync to AD
-            if (!string.IsNullOrWhiteSpace((string)user.ad_username))
+            // Reconsulta o vínculo após a gravação para cobrir provisionamento concorrente.
+            string? adUsername = await db.QueryFirstOrDefaultAsync<string>(
+                "SELECT ad_username FROM users WHERE id = @Id", new { Id = id });
+            if (!string.IsNullOrWhiteSpace(adUsername))
             {
                 try {
                     if (newHash != null && !string.IsNullOrWhiteSpace(req.NewPassword))
-                        await ad.SetUserPasswordAsync((string)user.ad_username, req.NewPassword, forceChangeOnNextLogon: false);
+                    {
+                        await ad.SetUserPasswordAsync(adUsername, req.NewPassword, forceChangeOnNextLogon: false);
+                        await db.ExecuteAsync("DELETE FROM pending_ad_credentials WHERE user_id = @Id", new { Id = id });
+                    }
                     if (!string.IsNullOrWhiteSpace(req.Whatsapp)) {
-                        await ad.UpdateTelephoneAsync((string)user.ad_username, req.Whatsapp);
+                        await ad.UpdateTelephoneAsync(adUsername, req.Whatsapp);
                     }
                 } catch (Exception ex) {
                     _logger.LogError(ex, "[AD SYNC] Falha ao sincronizar perfil do usuario {UserId} para o AD.", id);

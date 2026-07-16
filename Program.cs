@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.DataProtection;
 using System.Threading.RateLimiting;
 using System;
 using System.IO;
@@ -23,10 +24,18 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+string dataProtectionKeyRingPath = builder.Configuration["DataProtection:KeyRingPath"] ?? ".data-protection-keys";
+if (!Path.IsPathRooted(dataProtectionKeyRingPath))
+    dataProtectionKeyRingPath = Path.Combine(builder.Environment.ContentRootPath, dataProtectionKeyRingPath);
+Directory.CreateDirectory(dataProtectionKeyRingPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath))
+    .SetApplicationName("PremierHost.PremierAPI");
 builder.Services.AddSingleton<PremierAPI.Services.ActiveDirectoryService>();
 builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
 builder.Services.AddSingleton<PremierAPI.Services.EmailConfirmationService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdCredentialEmailService>();
+builder.Services.AddSingleton<PremierAPI.Services.AdPasswordProtectionService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdAccountProvisioningService>();
 builder.Services.AddHostedService<PremierAPI.Services.AdAccountProvisioningWorker>();
 builder.Services.AddHostedService<PremierAPI.Services.AdOrderExpirationWorker>();

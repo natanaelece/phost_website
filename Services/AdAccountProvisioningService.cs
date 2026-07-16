@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +15,7 @@ namespace PremierAPI.Services
         private readonly string _connectionString;
         private readonly ActiveDirectoryService _ad;
         private readonly AdCredentialEmailService _credentialEmail;
+        private readonly AdPasswordProtectionService _adPasswordProtection;
         private readonly ILogger<AdAccountProvisioningService> _logger;
         private readonly SemaphoreSlim _provisioningLock = new(1, 1);
 
@@ -23,11 +23,13 @@ namespace PremierAPI.Services
             IConfiguration config,
             ActiveDirectoryService ad,
             AdCredentialEmailService credentialEmail,
+            AdPasswordProtectionService adPasswordProtection,
             ILogger<AdAccountProvisioningService> logger)
         {
             _connectionString = config.GetConnectionString("DefaultConnection") ?? "";
             _ad = ad;
             _credentialEmail = credentialEmail;
+            _adPasswordProtection = adPasswordProtection;
             _logger = logger;
         }
 
@@ -62,9 +64,11 @@ namespace PremierAPI.Services
                            o.ad_provisioned_at AS AdProvisionedAt,
                            u.name AS UserName, u.email AS Email, u.whatsapp AS Whatsapp,
                            u.ad_username AS AdUsername,
-                           u.ad_credentials_delivered_at AS AdCredentialsDeliveredAt
+                           u.ad_credentials_delivered_at AS AdCredentialsDeliveredAt,
+                           p.protected_password AS ProtectedPassword
                     FROM orders o
                     JOIN users u ON u.id = o.user_id
+                    LEFT JOIN pending_ad_credentials p ON p.user_id = u.id
                     WHERE o.id = @OrderId", new { OrderId = orderId });
 
                 if (order == null) throw new InvalidOperationException("Pedido não encontrado para provisionamento.");
@@ -77,32 +81,53 @@ namespace PremierAPI.Services
                     WHERE o.user_id = @UserId AND o.status = 'pago'",
                     new { order.UserId });
 
-                string? temporaryPassword = null;
                 string username = order.AdUsername?.Trim() ?? "";
                 if (string.IsNullOrWhiteSpace(username))
                 {
+                    if (string.IsNullOrWhiteSpace(order.ProtectedPassword))
+                        throw new InvalidOperationException("Senha protegida ausente. O usuário precisa entrar novamente no site antes do provisionamento AD.");
+
+                    string accountPassword = _adPasswordProtection.Unprotect(order.ProtectedPassword);
                     username = await GenerateAvailableUsernameAsync(db, order.UserName, order.Email);
-                    temporaryPassword = GenerateTemporaryPassword();
                     await _ad.CreateUserAsync(
                         username,
                         order.UserName,
-                        temporaryPassword,
+                        accountPassword,
                         order.Email,
                         order.Whatsapp,
                         fromWebsite: false,
                         forcePasswordChange: false,
                         commonName: BuildCommonName(order.UserName, username));
 
+                    await db.OpenAsync(cancellationToken);
+                    await using var transaction = await db.BeginTransactionAsync(cancellationToken);
+                    string latestProtectedPassword = await db.QuerySingleAsync<string>(@"
+                        SELECT protected_password
+                        FROM pending_ad_credentials
+                        WHERE user_id = @UserId
+                        FOR UPDATE",
+                        new { order.UserId }, transaction);
+                    if (!string.Equals(latestProtectedPassword, order.ProtectedPassword, StringComparison.Ordinal))
+                    {
+                        string latestPassword = _adPasswordProtection.Unprotect(latestProtectedPassword);
+                        await _ad.SetUserPasswordAsync(username, latestPassword, forceChangeOnNextLogon: false);
+                    }
+
                     int linked = await db.ExecuteAsync(@"
-                        UPDATE users
-                        SET ad_username = @Username, ad_credentials_delivered_at = NULL
-                        WHERE id = @UserId AND ad_username IS NULL",
-                        new { Username = username, order.UserId });
+                            UPDATE users
+                            SET ad_username = @Username, ad_credentials_delivered_at = NULL
+                            WHERE id = @UserId AND ad_username IS NULL",
+                        new { Username = username, order.UserId }, transaction);
                     if (linked == 0)
                     {
+                        await transaction.RollbackAsync(cancellationToken);
                         await _ad.DeleteUserAsync(username);
                         throw new InvalidOperationException("O cadastro foi vinculado por outro processo durante o provisionamento.");
                     }
+                    await db.ExecuteAsync(
+                        "DELETE FROM pending_ad_credentials WHERE user_id = @UserId",
+                        new { order.UserId }, transaction);
+                    await transaction.CommitAsync(cancellationToken);
                 }
                 else
                 {
@@ -116,11 +141,7 @@ namespace PremierAPI.Services
                 DateTime? credentialsDeliveredAt = order.AdCredentialsDeliveredAt;
                 if (!credentialsDeliveredAt.HasValue)
                 {
-                    temporaryPassword ??= GenerateTemporaryPassword();
-                    if (order.AdUsername != null)
-                        await _ad.SetUserPasswordAsync(username, temporaryPassword, forceChangeOnNextLogon: false);
-
-                    await _credentialEmail.SendAsync(order.Email, order.UserName, username, temporaryPassword, cancellationToken);
+                    await _credentialEmail.SendAsync(order.Email, order.UserName, username, cancellationToken);
                     DateTime sentAt = DateTime.Now;
                     await db.ExecuteAsync(
                         "UPDATE users SET ad_credentials_delivered_at = @SentAt WHERE id = @UserId",
@@ -171,11 +192,6 @@ namespace PremierAPI.Services
                 if (char.IsLetterOrDigit(character) || character is '.' or '_' or '-') builder.Append(character);
             }
             return builder.ToString().Normalize(NormalizationForm.FormC)[..Math.Min(builder.Length, 20)];
-        }
-
-        private static string GenerateTemporaryPassword()
-        {
-            return "Ph!" + Convert.ToHexString(RandomNumberGenerator.GetBytes(7)) + "a9";
         }
 
         private static string BuildCommonName(string fullName, string username)
@@ -229,6 +245,7 @@ namespace PremierAPI.Services
             public string? Whatsapp { get; set; }
             public string? AdUsername { get; set; }
             public DateTime? AdCredentialsDeliveredAt { get; set; }
+            public string? ProtectedPassword { get; set; }
         }
     }
 }

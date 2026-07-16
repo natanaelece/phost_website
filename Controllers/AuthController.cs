@@ -30,12 +30,14 @@ namespace PremierAPI.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _config;
         private readonly EmailConfirmationService _emailConfirmation;
+        private readonly AdPasswordProtectionService _adPasswordProtection;
 
         public AuthController(
             IConfiguration config,
             ILogger<AuthController> logger,
             IHttpClientFactory httpClientFactory,
-            EmailConfirmationService emailConfirmation)
+            EmailConfirmationService emailConfirmation,
+            AdPasswordProtectionService adPasswordProtection)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -44,6 +46,7 @@ namespace PremierAPI.Controllers
             _turnstileSecret = config.GetValue<string>("Cloudflare:TurnstileSecretKey") ?? "";
             _httpClientFactory = httpClientFactory;
             _emailConfirmation = emailConfirmation;
+            _adPasswordProtection = adPasswordProtection;
         }
 
         // =========================================================================
@@ -71,7 +74,7 @@ namespace PremierAPI.Controllers
 
             // Busca usuário pelo e-mail apenas (não pelo hash — necessário para BCrypt.Verify)
             var user = await db.QueryFirstOrDefaultAsync<UserAuthDto>(
-                "SELECT id, name, email, whatsapp, email_confirmed, password_hash, is_active FROM users WHERE email = @Email",
+                "SELECT id, name, email, whatsapp, email_confirmed, password_hash, is_active, ad_username FROM users WHERE email = @Email",
                 new { Email = req.Email });
 
             if (user == null || !BCrypt.Net.BCrypt.Verify(req.Password, user.Password_Hash))
@@ -91,6 +94,18 @@ namespace PremierAPI.Controllers
             {
                 _logger.LogInformation("[LOGIN NEGADO] Conta inativa: {Email}", req.Email);
                 return Unauthorized(new { erro = "Conta inativa. Entre em contato com o suporte." });
+            }
+
+            if (string.IsNullOrWhiteSpace(user.Ad_Username))
+            {
+                string protectedPassword = _adPasswordProtection.Protect(req.Password);
+                await db.ExecuteAsync(@"
+                    INSERT INTO pending_ad_credentials (user_id, protected_password, updated_at)
+                    VALUES (@UserId, @ProtectedPassword, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id) DO UPDATE
+                    SET protected_password = EXCLUDED.protected_password,
+                        updated_at = CURRENT_TIMESTAMP",
+                    new { UserId = user.Id, ProtectedPassword = protectedPassword });
             }
 
             string sessionToken = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
@@ -195,6 +210,7 @@ namespace PremierAPI.Controllers
 
             // BCrypt com work factor 12 (≈250ms por hash — resistente a brute force)
             string hash = BCrypt.Net.BCrypt.HashPassword(req.Password, workFactor: 12);
+            string protectedPassword = _adPasswordProtection.Protect(req.Password);
             string emailToken = Guid.NewGuid().ToString();
 
             DateTime registeredAt = GetConfiguredLocalNow();
@@ -209,7 +225,9 @@ namespace PremierAPI.Controllers
                                @EmailToken, false, 0, @RegisteredAt, @FirstReminderAt, @RegisteredAt)
                            RETURNING id";
 
-            await db.QuerySingleAsync<Guid>(sql, new
+            await db.OpenAsync();
+            await using var transaction = await db.BeginTransactionAsync();
+            Guid userId = await db.QuerySingleAsync<Guid>(sql, new
             {
                 req.Name,
                 req.Email,
@@ -219,7 +237,12 @@ namespace PremierAPI.Controllers
                 EmailToken = emailToken,
                 RegisteredAt = registeredAt,
                 FirstReminderAt = firstReminderAt
-            });
+            }, transaction);
+            await db.ExecuteAsync(@"
+                INSERT INTO pending_ad_credentials (user_id, protected_password)
+                VALUES (@UserId, @ProtectedPassword)",
+                new { UserId = userId, ProtectedPassword = protectedPassword }, transaction);
+            await transaction.CommitAsync();
             try
             {
                 await _emailConfirmation.SendAsync(req.Email, req.Name, emailToken);
@@ -318,7 +341,7 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
 
             var user = await db.QueryFirstOrDefaultAsync(
-                "SELECT id, email FROM users WHERE password_reset_token = @Token AND password_reset_expires > @Now",
+                "SELECT id, email, ad_username FROM users WHERE password_reset_token = @Token AND password_reset_expires > @Now",
                 new { Token = req.Token, Now = DateTime.UtcNow });
 
             if (user == null)
@@ -327,9 +350,27 @@ namespace PremierAPI.Controllers
             // BCrypt com work factor 12
             string hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword, workFactor: 12);
 
-            await db.ExecuteAsync(
-                "UPDATE users SET password_hash = @Hash, password_reset_token = NULL, password_reset_expires = NULL WHERE id = @Id",
-                new { Hash = hash, Id = user.id });
+            await db.OpenAsync();
+            await using (var transaction = await db.BeginTransactionAsync())
+            {
+                await db.ExecuteAsync(
+                    "UPDATE users SET password_hash = @Hash, password_reset_token = NULL, password_reset_expires = NULL WHERE id = @Id",
+                    new { Hash = hash, Id = user.id }, transaction);
+
+                if (string.IsNullOrWhiteSpace((string?)user.ad_username))
+                {
+                    string protectedPassword = _adPasswordProtection.Protect(req.NewPassword);
+                    await db.ExecuteAsync(@"
+                        INSERT INTO pending_ad_credentials (user_id, protected_password, updated_at)
+                        VALUES (@UserId, @ProtectedPassword, CURRENT_TIMESTAMP)
+                        ON CONFLICT (user_id) DO UPDATE
+                        SET protected_password = EXCLUDED.protected_password,
+                            updated_at = CURRENT_TIMESTAMP",
+                        new { UserId = (Guid)user.id, ProtectedPassword = protectedPassword }, transaction);
+                }
+
+                await transaction.CommitAsync();
+            }
                 
             // [NEW] Sync whatsapp/password to AD
             var userInfo = await db.QueryFirstOrDefaultAsync<dynamic>("SELECT ad_username, whatsapp FROM users WHERE id = @Id", new { Id = user.id });
@@ -345,7 +386,10 @@ namespace PremierAPI.Controllers
                             string? adUsername = (string?)userInfo.ad_username;
                             string? whatsapp = (string?)userInfo.whatsapp;
                             if (!string.IsNullOrWhiteSpace(adUsername))
+                            {
                                 await ad.SetUserPasswordAsync(adUsername, req.NewPassword, forceChangeOnNextLogon: false);
+                                await db.ExecuteAsync("DELETE FROM pending_ad_credentials WHERE user_id = @UserId", new { UserId = (Guid)user.id });
+                            }
                             if (!string.IsNullOrWhiteSpace(whatsapp) && !string.IsNullOrWhiteSpace(adUsername))
                                 await ad.UpdateTelephoneAsync(adUsername, whatsapp);
                         } catch (Exception ex) {
@@ -524,6 +568,7 @@ namespace PremierAPI.Controllers
         public string Whatsapp { get; set; } = "";
         public bool Email_Confirmed { get; set; }
         public bool Is_Active { get; set; } = true;
+        public string? Ad_Username { get; set; }
         [JsonIgnore] public string Password_Hash { get; set; } = "";
     }
 

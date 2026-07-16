@@ -53,6 +53,13 @@ namespace PremierAPI.Services
 
                 @"CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token);",
 
+                @"CREATE TABLE IF NOT EXISTS pending_ad_credentials (
+                    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    protected_password TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );",
+
                 @"CREATE TABLE IF NOT EXISTS coupons (
                     id SERIAL PRIMARY KEY,
                     code VARCHAR(20) UNIQUE NOT NULL,

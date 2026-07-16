@@ -28,8 +28,8 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 
 - `Services/ActiveDirectoryService.cs` é a única fronteira LDAP e deve usar LDAPS. Buscas partindo do `BaseDn` usam escopo de subárvore.
 - Cadastro no site é somente local. Criação automática de usuário AD ocorre exclusivamente quando um pedido passa para `pago`, por meio de `AdAccountProvisioningService`; falhas são conciliadas pelo worker e reportadas via logging/Telegram.
-- Senha inicial AD é temporária, forte, enviada somente ao e-mail do cliente e nunca persistida ou registrada. Redefinições posteriores devem sincronizar site e AD quando houver vínculo.
-- A data comercial de vencimento é `orders.created_at::date + orders.days`. A conta continua disponível nessa data e, às 01:00 do dia seguinte no fuso configurado, deve ser desativada e movida para `USUARIOS_EXPIRADOS`, exceto se houver outro pedido pago ativo.
+- A senha inicial AD é a mesma senha vigente do cadastro local. Como BCrypt não é reversível, a senha em texto claro existe somente durante a requisição e fica transitoriamente protegida pelo ASP.NET Data Protection em `pending_ad_credentials` até a criação no AD; nunca registre ou envie essa senha por e-mail. Após vincular o usuário AD, apague obrigatoriamente a credencial transitória. Login e redefinições anteriores ao provisionamento devem atualizá-la.
+- A data comercial de vencimento é `orders.created_at::date + orders.days`. O `accountExpires` do AD deve expirar à meia-noite imediatamente posterior a essa data. Somente às 01:00, no fuso configurado, a automação desativa a conta e a move para a OU de inativos definida em `ActiveDirectory:ExpiredUsersOu`, exceto se houver outro pedido pago ativo.
 - Renomear CN exige `ModifyDNRequest`; alteração comum de atributos usa `LdapModification`.
 - O vínculo local pode localizar usuários nas pastas ativos, expirados e website.
 - O admin cria grupos globais de segurança e objetos de computador. Valide nomes/atributos no backend. Criar o objeto não ingressa a máquina física no domínio.

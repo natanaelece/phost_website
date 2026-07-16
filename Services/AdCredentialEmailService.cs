@@ -18,7 +18,7 @@ namespace PremierAPI.Services
             _config = config;
         }
 
-        public async Task SendAsync(string email, string name, string username, string temporaryPassword, CancellationToken cancellationToken = default)
+        public async Task SendAsync(string email, string name, string username, CancellationToken cancellationToken = default)
         {
             string smtpServer = _config["Smtp:Server"] ?? throw new InvalidOperationException("Servidor SMTP não configurado.");
             int smtpPort = _config.GetValue<int>("Smtp:Port");
@@ -40,9 +40,9 @@ namespace PremierAPI.Services
                         <p style='font-size: 14px; line-height: 1.5;'>O pagamento foi confirmado e sua conta de acesso já está vinculada ao cadastro da Premier Host.</p>
                         <div style='padding: 14px; border: 1px solid #e5e7eb; border-radius: 8px; margin: 24px 0;'>
                             <p style='margin: 0 0 8px; font-size: 13px;'><strong>Usuário:</strong> {WebUtility.HtmlEncode(username)}</p>
-                            <p style='margin: 0; font-size: 13px;'><strong>Senha temporária:</strong> {WebUtility.HtmlEncode(temporaryPassword)}</p>
+                            <p style='margin: 0; font-size: 13px;'><strong>Senha:</strong> use a mesma senha do seu cadastro no site.</p>
                         </div>
-                        <p style='font-size: 13px; line-height: 1.5;'>Não compartilhe estas credenciais. Recomendamos alterar a senha na área de perfil após o primeiro acesso.</p>
+                        <p style='font-size: 13px; line-height: 1.5;'>Não compartilhe suas credenciais. Alterações de senha feitas na área de perfil também são sincronizadas com o acesso.</p>
                         <hr style='border: 0; border-top: 1px solid #eeeeee; margin: 24px 0;'>
                         <p style='color: #999999; font-size: 12px; margin: 0;'>Premier Host — Não responda este e-mail.</p>
                     </div>"

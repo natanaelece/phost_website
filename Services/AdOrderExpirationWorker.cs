@@ -110,7 +110,7 @@ namespace PremierAPI.Services
 
                     await _ad.DisableAndArchiveUserAsync(order.AdUsername);
                     await MarkExpirationProcessedAsync(db, order.Id, now);
-                    _logger.LogInformation("[AD EXPIRACAO] Usuario AD {AdUsername} inativado e movido para USUARIOS_EXPIRADOS pelo vencimento do pedido {OrderId}.", order.AdUsername, order.Id);
+                    _logger.LogInformation("[AD EXPIRACAO] Usuario AD {AdUsername} inativado e movido para a OU de inativos configurada pelo vencimento do pedido {OrderId}.", order.AdUsername, order.Id);
                 }
                 catch (Exception ex)
                 {
