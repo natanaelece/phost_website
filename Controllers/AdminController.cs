@@ -434,8 +434,8 @@ namespace PremierAPI.Controllers
             int offset = (page - 1) * limit;
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>($"SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id = u.id {where}");
-            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.created_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at::date + o.days)::timestamp AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY {orderColumn} {direction} NULLS LAST, o.id DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
-            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, wydServerName = o.wyd_server_name as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, createdManually = o.created_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
+            var raw = await db.QueryAsync($@"SELECT o.id, u.name AS user_name, u.email, u.whatsapp, o.wyd_server_name, o.period, o.days, o.computers, o.wyds_per_computer, o.total_price, o.status, o.created_at, o.canceled_at, o.refunded, COALESCE(o.canceled_was_paid, false) AS canceled_was_paid, COALESCE(o.asaas_payment_id, o.asaas_pix_qr_code_id) AS asaas_payment_id, o.paid_manually, o.created_manually, o.manual_paid_at, o.delivered, o.delivered_at, (o.created_at::date + o.days)::timestamp AS expires_at, CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN true ELSE false END AS is_active FROM orders o JOIN users u ON o.user_id = u.id {where} ORDER BY {orderColumn} {direction} NULLS LAST, o.id DESC LIMIT @Limit OFFSET @Offset", new { Limit = limit, Offset = offset });
+            return Ok(new { total, page, limit, orders = raw.Select(o => new { id = (Guid)o.id, userName = (string)o.user_name, email = (string)o.email, whatsapp = o.whatsapp as string, wydServerName = o.wyd_server_name as string, period = (string)o.period, days = (int)o.days, computers = (int)o.computers, wydsPerComputer = (int)o.wyds_per_computer, totalPrice = (decimal)o.total_price, status = (string)o.status, createdAt = (DateTime)o.created_at, canceledAt = o.canceled_at as DateTime?, refunded = o.refunded as bool? ?? false, canceledWasPaid = o.canceled_was_paid as bool? ?? false, paidManually = o.paid_manually as bool? ?? false, createdManually = o.created_manually as bool? ?? false, manualPaidAt = o.manual_paid_at as DateTime?, expiresAt = (DateTime)o.expires_at, isActive = (bool)o.is_active, asaasPaymentId = o.asaas_payment_id as string, delivered = (bool)o.delivered, deliveredAt = o.delivered_at as DateTime? }) });
         }
 
         [HttpGet("users")]
@@ -909,6 +909,7 @@ namespace PremierAPI.Controllers
             string? qrCodeId = order.asaas_pix_qr_code_id as string;
             string status = (string)order.status;
             bool paidManually = order.paid_manually as bool? ?? false;
+            bool wasPaid = string.Equals(status, "pago", StringComparison.OrdinalIgnoreCase);
 
             if (refund && paidManually)
                 return BadRequest(new { erro = "Este pedido foi pago manualmente e nao possui reembolso pela Asaas." });
@@ -963,9 +964,20 @@ namespace PremierAPI.Controllers
                 }
             }
 
-            await db.ExecuteAsync("UPDATE orders SET status = 'cancelado', canceled_at = CURRENT_TIMESTAMP, refunded = @Refund WHERE id = @Id", new { Id = id, Refund = refund });
+            await db.ExecuteAsync(@"
+                UPDATE orders
+                SET status = 'cancelado',
+                    canceled_at = CURRENT_TIMESTAMP,
+                    refunded = @Refund,
+                    canceled_was_paid = @WasPaid
+                WHERE id = @Id",
+                new { Id = id, Refund = refund, WasPaid = wasPaid });
             
-            string finalMessage = refund ? "Pedido cancelado e reembolsado na Asaas com sucesso." : "Pedido cancelado localmente com sucesso (sem reembolso).";
+            string finalMessage = refund
+                ? "Pedido cancelado e reembolsado na Asaas com sucesso."
+                : wasPaid
+                    ? "Pedido pago cancelado localmente sem reembolso."
+                    : "Pedido cancelado com sucesso.";
             return Ok(new { msg = finalMessage });
         }
 

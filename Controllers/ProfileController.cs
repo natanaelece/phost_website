@@ -79,7 +79,8 @@ namespace PremierAPI.Controllers
                          computers AS ""Computers"", wyds_per_computer AS ""WydsPerComputer"",
                          total_price AS ""TotalPrice"", status AS ""Status"",
                          delivered AS ""Delivered"", delivered_at AS ""DeliveredAt"",
-                         canceled_at AS ""CanceledAt"", COALESCE(refunded, false) AS ""Refunded""
+                         canceled_at AS ""CanceledAt"", COALESCE(refunded, false) AS ""Refunded"",
+                         COALESCE(canceled_was_paid, false) AS ""CanceledWasPaid""
                   FROM orders
                   WHERE user_id = @Id AND status IN ('pago', 'cancelado')
                   ORDER BY created_at DESC",
@@ -98,7 +99,8 @@ namespace PremierAPI.Controllers
                 delivered = (bool)order.Delivered,
                 deliveredAt = order.DeliveredAt as DateTime?,
                 canceledAt = order.CanceledAt as DateTime?,
-                refunded = (bool)order.Refunded
+                refunded = (bool)order.Refunded,
+                canceledWasPaid = (bool)order.CanceledWasPaid
             });
 
             return Ok(new { 

@@ -100,6 +100,7 @@ namespace PremierAPI.Services
                     paid_manually BOOLEAN DEFAULT false,
                     created_manually BOOLEAN DEFAULT false,
                     manual_paid_at TIMESTAMP,
+                    canceled_was_paid BOOLEAN DEFAULT false,
                     ad_expiration_processed BOOLEAN DEFAULT false,
                     ad_expiration_processed_at TIMESTAMP,
                     ad_missing_link_alerted BOOLEAN DEFAULT false,
@@ -137,6 +138,7 @@ namespace PremierAPI.Services
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_manually BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_manually BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS manual_paid_at TIMESTAMP;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS canceled_was_paid BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_expiration_processed_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_missing_link_alerted BOOLEAN DEFAULT false;",
@@ -186,6 +188,17 @@ namespace PremierAPI.Services
                     AND email_confirmation_next_send_at IS NULL;",
                 "UPDATE orders SET delivered = false WHERE delivered IS NULL;",
                 "UPDATE orders SET paid_manually = false WHERE paid_manually IS NULL;",
+                @"UPDATE orders
+                  SET canceled_was_paid = true
+                  WHERE status = 'cancelado'
+                    AND COALESCE(canceled_was_paid, false) = false
+                    AND (
+                        COALESCE(refunded, false) = true
+                        OR COALESCE(paid_manually, false) = true
+                        OR manual_paid_at IS NOT NULL
+                        OR ad_provisioned_at IS NOT NULL
+                        OR (asaas_pix_qr_code_id IS NOT NULL AND asaas_payment_id IS NOT NULL)
+                    );",
                 "UPDATE orders SET ad_expiration_processed = false WHERE ad_expiration_processed IS NULL;",
                 "UPDATE orders SET ad_missing_link_alerted = false WHERE ad_missing_link_alerted IS NULL;",
                 "UPDATE orders SET ad_provisioning_attempts = 0 WHERE ad_provisioning_attempts IS NULL;",

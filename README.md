@@ -112,6 +112,8 @@ Um pedido criado no admin é identificado por `orders.created_manually` e nasce 
 
 O cliente visualiza esse pedido pendente no painel e pode usar **Gerar PIX**. O endpoint anexa ao próprio pedido um QR estático calculado pelas regras atuais; quando o QR de um pedido manual expira, ele pode ser gerado novamente. No admin, o operador pode marcar o pagamento manualmente ou excluir o rascunho enquanto ainda não existe QR. Depois que o QR existe, cancelamentos seguem o fluxo seguro de conciliação com o Asaas. A coluna e seus ajustes de schema são mantidos pelo `DatabaseInitializer.cs`.
 
+Ao cancelar, `orders.canceled_was_paid` registra se o pedido estava efetivamente pago antes da mudança de status. Pedidos pendentes cancelados aparecem apenas como **Cancelado**; os indicadores **Reembolsado** e **Sem reembolso** são exclusivos de pedidos que estavam pagos.
+
 ### Compatibilidade dos webhooks Asaas
 
 - O texto historico enviado ao criar uma cobranca dinamica era `Licença ({periodo}) - AnyDesk: {id}`. Preserve esse formato em qualquer fluxo dinamico legado.

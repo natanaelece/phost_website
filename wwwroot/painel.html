@@ -860,10 +860,10 @@
                                         <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Plano:</p>
                                         ${statusBadge}
                                     </div>
-                                    <div class="text-center">
+                                    ${!isCanceled || o.canceledWasPaid ? `<div class="text-center">
                                         <p class="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">${isCanceled ? 'Pagamento:' : 'Entrega:'}</p>
                                         ${deliveryBadge}
-                                    </div>
+                                    </div>` : ''}
                                 </div>
                                 <p class="text-xs text-slate-500">${dateSummary}</p>
                             </div>
