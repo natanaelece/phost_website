@@ -570,8 +570,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('m-ad-computer-title').textContent=editing?'Editar Computador do Active Directory':duplicate?'Duplicar Computador do Active Directory':'Novo Computador do Active Directory';
         document.getElementById('m-ad-computer-name').value=computer?(duplicate?suggestedAdCopyName(computer.name,15,_adComputers):computer.name):'';
         document.getElementById('m-ad-computer-description').value=computer?.description||'';document.getElementById('m-ad-computer-os').value=computer?.operatingSystem||'Windows 11 Pro';document.getElementById('m-ad-computer-active').checked=computer?computer.isActive!==false:true;
+        document.getElementById('m-ad-computer-active-row').classList.toggle('hidden',editing);
         document.getElementById('btn-create-ad-computer').textContent=editing?'Salvar alterações':duplicate?'Duplicar computador':'Criar computador';
-        document.getElementById('m-ad-computer-note').textContent=editing?'Nome, atributos e estado da conta serão atualizados no Active Directory.':'Cria o objeto na pasta de computadores configurada. Uma máquina nova ainda precisa ingressar no domínio pelo próprio Windows.';
+        document.getElementById('m-ad-computer-note').textContent=editing?'Nome e atributos serão atualizados no Active Directory. O estado atual da conta será preservado.':'Cria o objeto na pasta de computadores configurada. Uma máquina nova ainda precisa ingressar no domínio pelo próprio Windows.';
         document.getElementById('modal-ad-create-computer').classList.add('active');requestAnimationFrame(()=>document.getElementById('m-ad-computer-name').focus());
     }
     function editAdComputer(name){const computer=_adComputers.find(c=>c.name.toUpperCase()===name.toUpperCase());if(computer)openAdComputerModal(computer);}

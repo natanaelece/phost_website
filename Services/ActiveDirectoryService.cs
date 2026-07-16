@@ -718,6 +718,7 @@ namespace PremierAPI.Services
                 ExpiresAt = (expires > 0 && expires != long.MaxValue)
                     ? AccountExpiresToDisplayDate(expires)
                     : null,
+                IsActive = (uac & 2) == 0,
                 UserAccountControl = uac > 0 ? uac : null,
                 TelephoneNumber = GetAttribute(entry, "telephoneNumber")
             };

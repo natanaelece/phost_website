@@ -177,7 +177,7 @@
                 <div class="form-group"><label>Nome do computador</label><input type="text" id="m-ad-computer-name" maxlength="15" autocomplete="off" placeholder="Ex: PHOST-PC01" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9-]/g,'')"></div>
                 <div class="form-group"><label>Descri&ccedil;&atilde;o</label><input type="text" id="m-ad-computer-description" maxlength="256" placeholder="Nome amig&aacute;vel ou finalidade"></div>
                 <div class="form-group"><label>Sistema operacional</label><input type="text" id="m-ad-computer-os" maxlength="128" list="ad-os-options" placeholder="Ex: Windows 11 Pro"><datalist id="ad-os-options"><option value="Windows 10 Pro"><option value="Windows 11 Pro"><option value="Windows Server 2022 Standard"></datalist></div>
-                <label class="inline-check"><input type="checkbox" id="m-ad-computer-active" checked> Criar conta de computador ativa</label>
+                <label class="inline-check" id="m-ad-computer-active-row"><input type="checkbox" id="m-ad-computer-active" checked> Criar conta de computador ativa</label>
                 <p class="modal-note" id="m-ad-computer-note">Cria o objeto na pasta de computadores configurada. Uma m&aacute;quina nova ainda precisa ingressar no dom&iacute;nio pelo pr&oacute;prio Windows.</p>
             </div>
             <div class="modal-footer"><button class="btn btn-outline" onclick="closeModals()">Cancelar</button><button class="btn" id="btn-create-ad-computer" onclick="submitAdComputer()">Criar computador</button></div>
