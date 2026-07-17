@@ -332,27 +332,6 @@ namespace PremierAPI.Services
                         IsActive = (GetAttributeAsInt(entry, "userAccountControl") & 2) == 0
                     };
                     computer.Groups.AddRange(GetManagedGroupNames(entry));
-                    string? conventionGroup = GetConventionComputerGroupName(computer.Description);
-                    if (!string.IsNullOrWhiteSpace(conventionGroup)
-                        && !computer.Groups.Contains(conventionGroup, StringComparer.OrdinalIgnoreCase))
-                    {
-                        string? conventionGroupDn = GetGroupDn(conn, conventionGroup);
-                        if (string.IsNullOrWhiteSpace(conventionGroupDn))
-                        {
-                            _logger.LogWarning(
-                                "[AD] Computador {Computer} segue a convencao {Description}, mas o grupo {GroupName} nao foi encontrado.",
-                                computer.Name, computer.Description, conventionGroup);
-                        }
-                        else
-                        {
-                            AddComputerToGroup(conn, entry.Dn, computer.Name, conventionGroup, conventionGroupDn);
-                            computer.Groups.Add(conventionGroup);
-                            computer.Groups = computer.Groups
-                                .Distinct(StringComparer.OrdinalIgnoreCase)
-                                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-                                .ToList();
-                        }
-                    }
                     computers.Add(computer);
                 }
                 catch (LdapException ex)
