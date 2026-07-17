@@ -328,6 +328,96 @@ namespace PremierAPI.Services
             return new FreeTrialAdminTransitionResult(true, "Situação atualizada.", ToStatus(updated!));
         }
 
+        public async Task<FreeTrialAdminTransitionResult?> ReleaseManuallyAsync(Guid userId, string actor)
+        {
+            await using var db = new NpgsqlConnection(_connectionString);
+            await db.OpenAsync();
+            await using var transaction = await db.BeginTransactionAsync();
+
+            var identity = await db.QueryFirstOrDefaultAsync<FreeTrialManualIdentityRow>(@"
+                SELECT
+                    u.id AS ""UserId"",
+                    f.id AS ""RequestId"",
+                    EXISTS (
+                        SELECT 1 FROM orders o
+                        WHERE o.user_id = u.id
+                          AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
+                    ) AS ""HasPaidOrder""
+                FROM users u
+                LEFT JOIN free_trial_requests f ON f.user_id = u.id
+                WHERE u.id = @UserId
+                FOR UPDATE OF u;",
+                new { UserId = userId }, transaction);
+
+            if (identity == null)
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+            if (identity.RequestId.HasValue)
+            {
+                await transaction.RollbackAsync();
+                return new FreeTrialAdminTransitionResult(false, "Este usuário já possui uma solicitação de teste grátis.", null);
+            }
+            if (identity.HasPaidOrder)
+            {
+                await transaction.RollbackAsync();
+                return new FreeTrialAdminTransitionResult(false, "Cliente com pedido pago não é elegível para teste grátis.", null);
+            }
+
+            Guid? requestId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
+                INSERT INTO free_trial_requests
+                    (user_id, status, released_at, released_by)
+                VALUES
+                    (@UserId, 'liberado', CURRENT_TIMESTAMP, @Actor)
+                ON CONFLICT (user_id) DO NOTHING
+                RETURNING id;",
+                new { UserId = userId, Actor = actor }, transaction);
+
+            if (!requestId.HasValue)
+            {
+                await transaction.RollbackAsync();
+                return new FreeTrialAdminTransitionResult(false, "Este usuário já possui uma solicitação de teste grátis.", null);
+            }
+
+            await InsertEventAsync(db, transaction, requestId.Value, "liberado", "admin", actor);
+            var created = await GetUserStatusRowAsync(db, transaction, userId);
+            await transaction.CommitAsync();
+            return new FreeTrialAdminTransitionResult(true, "Teste grátis liberado manualmente.", ToStatus(created!));
+        }
+
+        public async Task<FreeTrialAdminDeleteResult?> DeleteRejectedAsync(Guid requestId)
+        {
+            await using var db = new NpgsqlConnection(_connectionString);
+            await db.OpenAsync();
+            await using var transaction = await db.BeginTransactionAsync();
+
+            string? status = await db.QueryFirstOrDefaultAsync<string>(@"
+                SELECT status
+                FROM free_trial_requests
+                WHERE id = @Id
+                FOR UPDATE;",
+                new { Id = requestId }, transaction);
+
+            if (status == null)
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+            if (!string.Equals(status, "recusado", StringComparison.Ordinal))
+            {
+                await transaction.RollbackAsync();
+                return new FreeTrialAdminDeleteResult(false, "Somente solicitações recusadas podem ser excluídas.");
+            }
+
+            await db.ExecuteAsync(@"
+                DELETE FROM free_trial_requests
+                WHERE id = @Id;",
+                new { Id = requestId }, transaction);
+            await transaction.CommitAsync();
+            return new FreeTrialAdminDeleteResult(true, "Solicitação recusada excluída.");
+        }
+
         private static async Task InsertEventAsync(
             NpgsqlConnection db, NpgsqlTransaction transaction, Guid requestId,
             string eventType, string actorType, string actorIdentifier)
@@ -392,6 +482,13 @@ namespace PremierAPI.Services
             public Guid UserId { get; set; }
             public bool HasPaidOrder { get; set; }
         }
+
+        private sealed class FreeTrialManualIdentityRow
+        {
+            public Guid UserId { get; set; }
+            public Guid? RequestId { get; set; }
+            public bool HasPaidOrder { get; set; }
+        }
     }
 
     public sealed record FreeTrialStatusDto(
@@ -413,4 +510,5 @@ namespace PremierAPI.Services
     public sealed record FreeTrialAdminStatsDto(long NeverRequested, long NotUsed, long Requested, long Released, long Used);
     public sealed record FreeTrialAdminListDto(long Total, int Page, int Limit, FreeTrialAdminUserDto[] Users, FreeTrialAdminStatsDto Stats);
     public sealed record FreeTrialAdminTransitionResult(bool Success, string Message, FreeTrialStatusDto? Status);
+    public sealed record FreeTrialAdminDeleteResult(bool Success, string Message);
 }

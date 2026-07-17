@@ -505,6 +505,33 @@ namespace PremierAPI.Controllers
             return Ok(new { msg = result.Message, status = result.Status });
         }
 
+        [HttpPost("free-trials/users/{userId:guid}/release")]
+        public async Task<IActionResult> ReleaseFreeTrialManually(Guid userId)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            string actor = _config["AdminEmail"] ?? "admin";
+            var result = await _freeTrials.ReleaseManuallyAsync(userId, actor);
+            if (result == null) return NotFound(new { erro = "Usuário não encontrado." });
+            if (!result.Success) return Conflict(new { erro = result.Message, status = result.Status });
+
+            _logger.LogInformation(
+                "[ADMIN][TESTE GRATIS] Teste liberado manualmente para o usuário {UserId} como solicitação {RequestId}.",
+                userId, result.Status?.RequestId);
+            return Ok(new { msg = result.Message, status = result.Status });
+        }
+
+        [HttpDelete("free-trials/{id:guid}")]
+        public async Task<IActionResult> DeleteRejectedFreeTrial(Guid id)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            var result = await _freeTrials.DeleteRejectedAsync(id);
+            if (result == null) return NotFound(new { erro = "Solicitação de teste não encontrada." });
+            if (!result.Success) return Conflict(new { erro = result.Message });
+
+            _logger.LogInformation("[ADMIN][TESTE GRATIS] Solicitação recusada {RequestId} excluída.", id);
+            return Ok(new { msg = result.Message });
+        }
+
         // ==========================================
         // WHATSAPP NOTIFICATIONS
         // ==========================================

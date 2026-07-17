@@ -1458,8 +1458,10 @@ function trialBadge(status){
   const item=map[status]||map.nao_solicitado;return `<span class="badge ${item[1]}">${item[0]}</span>`;
 }
 function trialActions(u){
-  if(!u.requestId)return '<span class="muted">Sem solicitação</span>';
   const buttons=[];
+  if(!u.requestId&&!u.hasPaidOrder){
+    buttons.push(`<button class="btn btn-outline trial-release" onclick="releaseFreeTrialManually('${u.userId}')">Liberar teste</button>`);
+  }
   if(u.status==='solicitado'){
     if(!u.hasPaidOrder)buttons.push(`<button class="btn btn-outline trial-release" onclick="updateFreeTrial('${u.requestId}','release','Liberar este teste grátis?')">Liberar</button>`);
     buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','reject','Recusar esta solicitação?')">Recusar</button>`);
@@ -1469,6 +1471,9 @@ function trialActions(u){
     buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','cancel','Cancelar esta liberação sem marcar uso?')">Cancelar</button>`);
   }
   if(u.whatsapp){const phone=u.whatsapp.replace(/\D/g,'');buttons.push(`<a class="btn btn-outline" target="_blank" rel="noopener" href="https://wa.me/55${phone.replace(/^55/,'')}">WhatsApp</a>`);}
+  if(u.status==='recusado'){
+    buttons.push(`<button class="btn btn-outline danger-action" style="padding:4px 8px" onclick="deleteRejectedFreeTrial('${u.requestId}')" title="Excluir solicitação recusada" aria-label="Excluir solicitação recusada">&#128465;</button>`);
+  }
   return buttons.length?`<div class="action-row">${buttons.join('')}</div>`:'<span class="muted">Sem ação</span>';
 }
 async function loadFreeTrials(p){
@@ -1501,6 +1506,20 @@ async function updateFreeTrial(id,action,message){
   const data=await response.json().catch(()=>null);
   if(!response.ok){showAdminMessage('error',data?.erro||'Não foi possível atualizar o teste.');return;}
   showAdminMessage('success',data?.msg||'Situação atualizada.');loadFreeTrials();
+}
+async function releaseFreeTrialManually(userId){
+  if(!await askAdminConfirm('Liberar manualmente um teste grátis para este usuário?',{title:'Teste grátis',confirmText:'Liberar'}))return;
+  const response=await fetch(`${API}/free-trials/users/${encodeURIComponent(userId)}/release`,{method:'POST',headers:hdrs()});
+  const data=await response.json().catch(()=>null);
+  if(!response.ok){showAdminMessage('error',data?.erro||'Não foi possível liberar o teste.');return;}
+  showAdminMessage('success',data?.msg||'Teste grátis liberado manualmente.');loadFreeTrials();
+}
+async function deleteRejectedFreeTrial(id){
+  if(!await askAdminConfirm('Excluir permanentemente esta solicitação recusada? O usuário voltará a aparecer como nunca solicitou.',{title:'Excluir solicitação',confirmText:'Excluir'}))return;
+  const response=await fetch(`${API}/free-trials/${encodeURIComponent(id)}`,{method:'DELETE',headers:hdrs()});
+  const data=await response.json().catch(()=>null);
+  if(!response.ok){showAdminMessage('error',data?.erro||'Não foi possível excluir a solicitação.');return;}
+  showAdminMessage('success',data?.msg||'Solicitação excluída.');loadFreeTrials();
 }
 
 function renderPag(type,total,cur,limit){
