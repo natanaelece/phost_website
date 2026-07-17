@@ -5,9 +5,9 @@ namespace PremierAPI.Services
 {
     public sealed class FreeTrialService
     {
-        private static readonly HashSet<string> ClosedStatuses = new(StringComparer.Ordinal)
+        private static readonly HashSet<string> ReopenableStatuses = new(StringComparer.Ordinal)
         {
-            "recusado", "cancelado"
+            "cancelado"
         };
 
         private readonly string _connectionString;
@@ -129,7 +129,7 @@ namespace PremierAPI.Services
                 return new FreeTrialRequestResult(ToStatus(current), false, true, false);
             }
 
-            if (!ClosedStatuses.Contains(current.Status ?? ""))
+            if (!ReopenableStatuses.Contains(current.Status ?? ""))
             {
                 await transaction.CommitAsync();
                 return new FreeTrialRequestResult(ToStatus(current), false, false, false);
@@ -456,7 +456,7 @@ namespace PremierAPI.Services
             string status = string.IsNullOrWhiteSpace(row.Status) ? "nao_solicitado" : row.Status;
             bool hasUsed = row.UsedAt.HasValue || status == "utilizado";
             bool eligible = !row.HasPaidOrder;
-            bool canRequest = eligible && (status is "nao_solicitado" or "recusado" or "cancelado") && !hasUsed;
+            bool canRequest = eligible && (status is "nao_solicitado" or "cancelado") && !hasUsed;
             return new FreeTrialStatusDto(
                 row.RequestId, status, eligible, row.HasPaidOrder, canRequest, hasUsed,
                 row.FirstRequestedAt, row.LastRequestedAt, row.ReleasedAt, row.UsedAt,

@@ -725,17 +725,18 @@
                 solicitado: ['Solicitado', 'Sua solicitação foi recebida e está aguardando liberação.', 'Solicitação registrada', false, 'bg-amber-500/15 text-amber-300'],
                 liberado: ['Liberado', 'Seu teste foi liberado. A equipe usará o WhatsApp cadastrado para orientar o acesso.', 'Teste liberado', false, 'bg-green-500/15 text-green-300'],
                 utilizado: ['Utilizado', 'Esta conta já utilizou o teste grátis.', 'Teste utilizado', false, 'bg-slate-700 text-slate-300'],
-                recusado: ['Não liberado', 'A solicitação anterior não foi liberada. Você pode registrar uma nova solicitação.', 'Solicitar novamente', true, 'bg-red-500/15 text-red-300'],
+                recusado: ['Não liberado', 'Sua solicitação de teste grátis não foi liberada.', 'Solicitação não liberada', false, 'bg-red-500/15 text-red-300'],
                 cancelado: ['Cancelado', 'A solicitação anterior foi cancelada antes do uso. Você pode solicitar novamente.', 'Solicitar novamente', true, 'bg-slate-700 text-slate-300']
             };
             const view = states[key] || states.nao_solicitado;
+            const canRequest = view[3] && status?.canRequest !== false;
             badge.textContent = view[0];
             badge.className = `rounded-full px-3 py-1 text-xs font-bold ${view[4]}`;
             message.textContent = view[1];
             action.textContent = view[2];
-            action.disabled = !view[3];
-            action.classList.toggle('opacity-50', !view[3]);
-            action.classList.toggle('cursor-not-allowed', !view[3]);
+            action.disabled = !canRequest;
+            action.classList.toggle('opacity-50', !canRequest);
+            action.classList.toggle('cursor-not-allowed', !canRequest);
             const items = [];
             if (status?.firstRequestedAt) items.push(`<span>Primeira solicitação: <strong class="text-slate-300">${formatFreeTrialDate(status.firstRequestedAt)}</strong></span>`);
             if (status?.lastRequestedAt && status.lastRequestedAt !== status.firstRequestedAt) items.push(`<span>Última solicitação: <strong class="text-slate-300">${formatFreeTrialDate(status.lastRequestedAt)}</strong></span>`);

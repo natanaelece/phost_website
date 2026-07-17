@@ -48,6 +48,14 @@ namespace PremierAPI.Controllers
                     status = result.Status
                 });
             }
+            if (string.Equals(result.Status.Status, "recusado", StringComparison.Ordinal))
+            {
+                return Conflict(new
+                {
+                    erro = "A solicitação de teste grátis não foi liberada.",
+                    status = result.Status
+                });
+            }
 
             _logger.LogInformation(
                 "[TESTE GRATIS] Solicitação {RequestId} registrada/consultada. Nova: {Created}.",
