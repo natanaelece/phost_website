@@ -423,7 +423,7 @@
                             </span>
                             <span id="resDescHardware" class="text-blue-400">- R$ 0,00</span>
                         </div>
-                        <div class="mb-2 flex justify-between gap-3">
+                        <div id="rowDescPeriodo" class="mb-2 hidden justify-between gap-3">
                             <span class="flex items-center gap-1 text-slate-500">Desconto Período:
                                 <span class="group relative flex items-center" tabindex="0" aria-label="Como o desconto de período é calculado" aria-describedby="resDescPeriodoInfo">
                                     <svg class="h-4 w-4 text-slate-500 transition-colors group-hover:text-blue-400 group-focus:text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
@@ -1591,19 +1591,21 @@
 
             const moeda = value => `R$ ${value.toFixed(2).replace('.', ',')}`;
             const acessosAdicionais = Math.max(0, wyds - rules.minSlots);
-            const detalheAcessos = `${moeda(periodo === 'diaria' ? rules.dailyWeeklyBasePrice : rules.weeklyBasePrice)} do plano + ${acessosAdicionais} acesso(s) adicional(is) × ${moeda(rules.additionalSlotPrice)}`;
+            const computadoresTexto = `${pcs} ${pcs === 1 ? 'computador' : 'computadores'}`;
+            const acessosTexto = `${acessosAdicionais} ${acessosAdicionais === 1 ? 'acesso adicional' : 'acessos adicionais'}`;
+            const detalheAcessos = `${moeda(periodo === 'diaria' ? rules.dailyWeeklyBasePrice : rules.weeklyBasePrice)} do plano + ${acessosTexto}`;
             const detalheBase = periodo === 'diaria'
-                ? `${pcs} computador(es) × ${dias} dia(s) × (${detalheAcessos}) ÷ ${rules.weeklyDays} dias = ${moeda(bruto)}.`
+                ? `${computadoresTexto} × ${dias} ${dias === 1 ? 'dia' : 'dias'} × (${detalheAcessos}).`
                 : periodo === 'mensal'
-                    ? `${pcs} computador(es) × ${rules.monthlyWeeks} semanas × (${detalheAcessos}) = ${moeda(bruto)}.`
-                    : `${pcs} computador(es) × (${detalheAcessos}) = ${moeda(bruto)}.`;
+                    ? `${computadoresTexto} × ${rules.monthlyWeeks} semanas × (${detalheAcessos}).`
+                    : `${computadoresTexto} × (${detalheAcessos}).`;
             document.getElementById('resBaseInfo').textContent = detalheBase;
             document.getElementById('resDescHardwareInfo').textContent = periodo === 'diaria'
                 ? 'O desconto por computadores adicionais não se aplica ao plano diário.'
-                : `${Math.max(0, pcs - 1)} computador(es) adicional(is) × ${moeda(rules.additionalComputerDiscount)} = ${moeda(descHardware)}.`;
-            document.getElementById('resDescPeriodoInfo').textContent = periodo === 'mensal'
-                ? `${(rules.monthlyDiscountRate * 100).toLocaleString('pt-BR')}% sobre o custo base de ${moeda(bruto)} = ${moeda(descPeriodo)}.`
-                : 'O desconto de período é aplicado ao plano mensal e não se aplica à seleção atual.';
+                : `Desconto aplicado sobre ${Math.max(0, pcs - 1)} ${pcs - 1 === 1 ? 'computador adicional' : 'computadores adicionais'}.`;
+            document.getElementById('resDescPeriodoInfo').textContent = `${(rules.monthlyDiscountRate * 100).toLocaleString('pt-BR')}% de desconto sobre o custo base do plano mensal.`;
+            document.getElementById('rowDescPeriodo').classList.toggle('hidden', periodo !== 'mensal');
+            document.getElementById('rowDescPeriodo').classList.toggle('flex', periodo === 'mensal');
             
             if (descArredonda > 0) { rowArredonda.classList.remove('hidden'); document.getElementById('resDescArredondamento').innerText = `- R$ ${descArredonda.toFixed(2).replace('.', ',')}`; } 
             else { rowArredonda.classList.add('hidden'); }
