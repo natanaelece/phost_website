@@ -616,48 +616,78 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            var user = await db.QueryFirstOrDefaultAsync<ResendConfirmationUser>(@"
-                SELECT id AS Id,
-                       name AS Name,
-                       email AS Email,
-                       email_confirmed AS EmailConfirmed,
-                       email_confirmation_token AS EmailConfirmationToken,
-                       email_confirmation_last_sent_at AS EmailConfirmationLastSentAt
-                FROM users WHERE id = @Id", new { Id = id });
-            if (user == null) return NotFound(new { erro = "Usuario nao encontrado." });
-            if (user.EmailConfirmed) return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
-
-            if (!force && user.EmailConfirmationLastSentAt?.Date == DateTime.Now.Date)
-            {
-                return Conflict(new
-                {
-                    requiresConfirmation = true,
-                    lastSentAt = user.EmailConfirmationLastSentAt,
-                    erro = "Ja houve um envio de confirmacao para este usuario hoje."
-                });
-            }
-
-            string token = user.EmailConfirmationToken ?? Guid.NewGuid().ToString();
+            await db.OpenAsync(HttpContext.RequestAborted);
+            await using var transaction = await db.BeginTransactionAsync(HttpContext.RequestAborted);
             try
             {
+                var user = await db.QueryFirstOrDefaultAsync<ResendConfirmationUser>(@"
+                    SELECT id AS Id,
+                           name AS Name,
+                           email AS Email,
+                           email_confirmed AS EmailConfirmed,
+                           email_confirmation_token AS EmailConfirmationToken,
+                           email_confirmation_last_sent_at AS EmailConfirmationLastSentAt
+                    FROM users
+                    WHERE id = @Id
+                    FOR UPDATE", new { Id = id }, transaction);
+                if (user == null)
+                {
+                    await transaction.RollbackAsync(HttpContext.RequestAborted);
+                    return NotFound(new { erro = "Usuario nao encontrado." });
+                }
+                if (user.EmailConfirmed)
+                {
+                    await transaction.RollbackAsync(HttpContext.RequestAborted);
+                    return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
+                }
+
+                DateTime localNow = GetEmailConfirmationLocalNow();
+                if (!force && user.EmailConfirmationLastSentAt?.Date == localNow.Date)
+                {
+                    await transaction.RollbackAsync(HttpContext.RequestAborted);
+                    return Conflict(new
+                    {
+                        requiresConfirmation = true,
+                        lastSentAt = user.EmailConfirmationLastSentAt,
+                        erro = "Ja houve um envio de confirmacao para este usuario hoje."
+                    });
+                }
+
+                string token = user.EmailConfirmationToken ?? Guid.NewGuid().ToString();
                 if (user.EmailConfirmationToken == null)
                 {
                     await db.ExecuteAsync(
                         "UPDATE users SET email_confirmation_token = @Token WHERE id = @Id AND email_confirmed = false",
-                        new { Id = id, Token = token });
+                        new { Id = id, Token = token }, transaction);
                 }
                 await _emailConfirmation.SendAsync(user.Email, user.Name, token, HttpContext.RequestAborted);
                 await db.ExecuteAsync(@"
                     UPDATE users
-                    SET email_confirmation_last_sent_at = CURRENT_TIMESTAMP
+                    SET email_confirmation_last_sent_at = @SentAt
                     WHERE id = @Id AND email_confirmed = false",
-                    new { Id = id });
+                    new { Id = id, SentAt = localNow }, transaction);
+                await transaction.CommitAsync(HttpContext.RequestAborted);
                 return Ok(new { msg = "E-mail de confirmacao reenviado." });
             }
             catch (Exception ex)
             {
+                if (transaction.Connection != null)
+                    await transaction.RollbackAsync(CancellationToken.None);
                 _logger.LogError(ex, "[EMAIL CONFIRMACAO] Falha no reenvio manual para o usuario {UserId}.", id);
                 return StatusCode(502, new { erro = "Nao foi possivel reenviar o e-mail de confirmacao." });
+            }
+        }
+
+        private DateTime GetEmailConfirmationLocalNow()
+        {
+            string timeZoneId = _config["EmailConfirmationReminders:TimeZone"] ?? "America/Sao_Paulo";
+            try
+            {
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(timeZoneId));
+            }
+            catch
+            {
+                return DateTime.Now;
             }
         }
 
