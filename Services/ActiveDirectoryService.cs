@@ -949,7 +949,7 @@ namespace PremierAPI.Services
             var groupsToRemove = new List<(string Computer, string GroupName, string GroupDn)>();
 
             // O grupo de acesso e derivado da descricao do computador:
-            // descricao SRV01-01 -> grupo ACESSO_SRV01-01.
+            // descricao SRV01_01 -> grupo ACESSO_SRV01-01.
             foreach (var pc in newComps)
             {
                 if (IsRequiredLogonComputer(pc)) continue;
@@ -1072,10 +1072,10 @@ namespace PremierAPI.Services
         {
             var match = Regex.Match(
                 description ?? "",
-                @"\bSRV(?<server>\d{2})[-_](?<computer>\d{2})\b",
+                @"^\s*SRV(?<server>\d{2})_(?<computer>\d{2})\s*$",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             return match.Success
-                ? $"ACESSO_SRV{match.Groups["server"].Value}_{match.Groups["computer"].Value}".ToUpperInvariant()
+                ? $"ACESSO_SRV{match.Groups["server"].Value}-{match.Groups["computer"].Value}".ToUpperInvariant()
                 : null;
         }
 

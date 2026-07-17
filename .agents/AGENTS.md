@@ -29,7 +29,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - A seleção manual de grupo para computador sem sugestão e todas as falhas LDAP recuperáveis usam ao menos `Warning`, acionando Telegram; falhas que impedem a ação usam `Error`. O admin possui uma tela de Logs em memória, sanitizada, para a execução atual.
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.
-- A descrição convencional `SRV01_01` corresponde a `ACESSO_SRV01_01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
+- A descrição convencional do computador `SRV01_01` corresponde ao grupo `ACESSO_SRV01-01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
 - Arquivos de aplicação são entregues com `no-store` no navegador e na Cloudflare; não remova os cabeçalhos específicos da CDN nem aplique Cache Rule que os sobreponha. Imagens e vídeos podem continuar cacheáveis.

@@ -35,7 +35,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - O vínculo local pode localizar usuários nas pastas ativos, expirados e website.
 - O admin cria grupos globais de segurança e objetos de computador. Valide nomes/atributos no backend. Criar o objeto não ingressa a máquina física no domínio.
 - Computadores expõem e gerenciam associações diretas com os grupos da OU configurada. A seleção manual de grupo durante o vínculo de acesso deve incluir o objeto do computador no grupo, permitindo reutilizar a associação nas próximas operações.
-- A convenção automática é descrição `SRV01_01` para grupo `ACESSO_SRV01_01` (hífen legado na descrição também é aceito e normalizado para sublinhado). Reconcilie somente computadores que correspondam integralmente a esse padrão; ignore os demais.
+- A convenção automática é descrição de computador `SRV01_01` para grupo `ACESSO_SRV01-01`: sublinhado na descrição e hífen no grupo. Reconcilie somente computadores que correspondam integralmente a esse padrão; ignore os demais.
 - Não crie, mova, habilite ou exclua objetos reais do AD apenas para testar sem autorização expressa.
 
 ## Segurança, SEO e telemetria
