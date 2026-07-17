@@ -24,7 +24,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - O vencimento comercial inclui todo o dia exibido: `accountExpires` vence à meia-noite seguinte; às 01:00 a conta sem outra licença ativa é desativada e movida para a OU configurada de inativos.
 - Confirmação de e-mail admite no máximo dois lembretes automáticos em dias distintos (11:00 e 19:00); o admin pode reenviar à parte ou confirmar manualmente.
 - Reenvio manual no mesmo dia exige confirmação explícita do operador, com a guarda aplicada também no backend.
-- A seleção manual de grupo para computador sem sugestão é um evento informativo esperado; falhas LDAP reais continuam usando níveis que acionam Telegram. O admin possui uma tela de Logs em memória, sanitizada, para a execução atual.
+- A seleção manual de grupo para computador sem sugestão e todas as falhas LDAP recuperáveis usam ao menos `Warning`, acionando Telegram; falhas que impedem a ação usam `Error`. O admin possui uma tela de Logs em memória, sanitizada, para a execução atual.
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.

@@ -1263,9 +1263,17 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> GetAdUser(string username, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
         {
             if (!await ValidateAdmin()) return Unauthorized();
-            var user = await ad.GetUserDetailsAsync(username);
-            if (user == null) return NotFound(new { erro = "Usuario nao encontrado no AD." });
-            return Ok(user);
+            try
+            {
+                var user = await ad.GetUserDetailsAsync(username);
+                if (user == null) return NotFound(new { erro = "Usuario nao encontrado no AD." });
+                return Ok(user);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[ADMIN][AD] Falha ao consultar usuario {Username}.", username);
+                return BadRequest(new { erro = ex.Message });
+            }
         }
 
         [HttpPut("ad/users/{username}")]
@@ -1344,7 +1352,7 @@ namespace PremierAPI.Controllers
             }
             catch (PremierAPI.Services.ComputerGroupSelectionRequiredException ex)
             {
-                _logger.LogInformation(
+                _logger.LogWarning(
                     "[ADMIN][AD] Selecao manual de grupo para {Username}, computador {Computer}. Grupo sugerido: {SuggestedGroup}. Operacao: {Operation}.",
                     username, ex.ComputerName, ex.SuggestedGroup ?? "(nenhum)", ex.Operation);
                 return Conflict(new

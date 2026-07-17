@@ -298,7 +298,10 @@ namespace PremierAPI.Services
                         Description = GetAttribute(entry, "description")
                     });
                 }
-                catch (LdapException) { }
+                catch (LdapException ex)
+                {
+                    _logger.LogWarning(ex, "[AD] Falha ao ler um grupo durante a listagem.");
+                }
             }
             return groups;
         }
@@ -328,7 +331,10 @@ namespace PremierAPI.Services
                         IsActive = (GetAttributeAsInt(entry, "userAccountControl") & 2) == 0
                     });
                 }
-                catch (LdapException) { }
+                catch (LdapException ex)
+                {
+                    _logger.LogWarning(ex, "[AD] Falha ao ler um computador durante a listagem.");
+                }
             }
             return computers
                 .OrderBy(c => string.IsNullOrWhiteSpace(c.Description) ? c.Name : c.Description, StringComparer.CurrentCultureIgnoreCase)
@@ -781,7 +787,20 @@ namespace PremierAPI.Services
                 if (string.Equals(groupName, "Domain Users", StringComparison.OrdinalIgnoreCase)) continue;
                 string? groupDn = GetGroupDn(conn, groupName);
                 if (!string.IsNullOrEmpty(groupDn))
-                    try { conn.Modify(groupDn, new[] { new LdapModification(LdapModification.Add, new LdapAttribute("member", newUserDn)) }); } catch { }
+                {
+                    try
+                    {
+                        conn.Modify(groupDn, new[] { new LdapModification(LdapModification.Add, new LdapAttribute("member", newUserDn)) });
+                    }
+                    catch (LdapException ex) when (ex.ResultCode == 20)
+                    {
+                        _logger.LogInformation("[AD] Usuario duplicado {Username} ja pertence ao grupo {GroupName}.", newUsername, groupName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[AD] Falha ao copiar o grupo {GroupName} para o usuario duplicado {Username}.", groupName, newUsername);
+                    }
+                }
             }
 
             _logger.LogInformation("[AD] Usuário {New} duplicado de {Source}.", newUsername, sourceUsername);
@@ -815,7 +834,16 @@ namespace PremierAPI.Services
 
             var op = add ? LdapModification.Add : LdapModification.Delete;
             var mod = new LdapModification(op, new LdapAttribute("member", userDn));
-            try { conn.Modify(groupDn, new[] { mod }); } catch { }
+            try
+            {
+                conn.Modify(groupDn, new[] { mod });
+            }
+            catch (LdapException ex) when ((add && ex.ResultCode == 20) || (!add && ex.ResultCode == 16))
+            {
+                _logger.LogInformation(
+                    "[AD] Associacao entre {Username} e {GroupName} ja estava no estado solicitado. Adicionar: {Add}.",
+                    username, groupName, add);
+            }
         }
 
         public async Task SetUserComputersAsync(

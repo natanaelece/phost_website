@@ -246,7 +246,7 @@ O provisionamento automático é idempotente e usa as colunas `orders.ad_provisi
 
 Criar o objeto de computador no AD **não ingressa a máquina física no domínio**. O ingresso ainda precisa ser executado no próprio Windows com credenciais autorizadas. Nunca crie, mova ou exclua objetos reais do AD apenas para testar uma alteração sem autorização expressa.
 
-Ao vincular um computador a um usuário, a descrição do computador pode sugerir automaticamente um grupo no padrão `ACESSO_SRV00-00`. Quando não há sugestão válida, a API responde com uma solicitação de seleção e o admin abre o modal para o operador escolher o grupo. Essa etapa esperada é registrada como `Information`, aparece em **Admin > Logs** e não dispara o Telegram configurado para `Warning` ou superior.
+Ao vincular um computador a um usuário, a descrição do computador pode sugerir automaticamente um grupo no padrão `ACESSO_SRV00-00`. Quando não há sugestão válida, a API responde com uma solicitação de seleção e o admin abre o modal para o operador escolher o grupo. Essa ocorrência usa `Warning`, aparece em **Admin > Logs** e também é enviada ao Telegram. Falhas LDAP recuperáveis usam `Warning`; falhas que impedem a operação usam `Error` e não devem ser descartadas silenciosamente.
 
 ## Validação antes de concluir alterações
 
