@@ -1461,7 +1461,7 @@ function trialActions(u){
   if(!u.requestId)return '<span class="muted">Sem solicitação</span>';
   const buttons=[];
   if(u.status==='solicitado'){
-    buttons.push(`<button class="btn btn-outline trial-release" onclick="updateFreeTrial('${u.requestId}','release','Liberar este teste grátis?')">Liberar</button>`);
+    if(!u.hasPaidOrder)buttons.push(`<button class="btn btn-outline trial-release" onclick="updateFreeTrial('${u.requestId}','release','Liberar este teste grátis?')">Liberar</button>`);
     buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','reject','Recusar esta solicitação?')">Recusar</button>`);
   }
   if(u.status==='liberado'){
@@ -1480,7 +1480,7 @@ async function loadFreeTrials(p){
   const data=await apiFetch(`${API}/free-trials?${qs}`);if(!data)return;
   setText('trial-never',data.stats?.neverRequested??0);setText('trial-not-used',data.stats?.notUsed??0);setText('trial-requested',data.stats?.requested??0);setText('trial-released',data.stats?.released??0);setText('trial-used',data.stats?.used??0);
   if(!data.users?.length)body.innerHTML='<tr><td colspan="9" class="empty">Nenhum usuário encontrado para este filtro.</td></tr>';
-  else body.innerHTML=data.users.map(u=>`<tr><td><div class="ucell"><div class="avatar">${initial(u.name)}</div><div><div class="ucell-name">${esc(u.name)}</div><div class="ucell-email">${esc(u.email)}</div></div></div></td><td class="muted">${esc(u.whatsapp||'-')}</td><td>${trialBadge(u.status)}</td><td class="muted"><span class="registration-date">${fmtDate(u.createdAt)} ${registrationInfo(u)}</span></td><td class="muted">${u.firstRequestedAt?fmtDateTime(u.firstRequestedAt):'—'}</td><td class="muted">${u.lastRequestedAt?fmtDateTime(u.lastRequestedAt):'—'}${u.requestCount>1?`<small class="trial-count">${u.requestCount} solicitações</small>`:''}</td><td class="muted">${u.releasedAt?fmtDateTime(u.releasedAt):'—'}</td><td class="muted">${u.usedAt?fmtDateTime(u.usedAt):'—'}</td><td>${trialActions(u)}</td></tr>`).join('');
+  else body.innerHTML=data.users.map(u=>`<tr><td><div class="ucell"><div class="avatar">${initial(u.name)}</div><div><div class="ucell-name">${esc(u.name)}</div><div class="ucell-email">${esc(u.email)}</div></div></div></td><td class="muted">${esc(u.whatsapp||'-')}</td><td>${trialBadge(u.status)}${u.hasPaidOrder?'<small class="trial-count">Cliente com pedido pago</small>':''}</td><td class="muted"><span class="registration-date">${fmtDate(u.createdAt)} ${registrationInfo(u)}</span></td><td class="muted">${u.firstRequestedAt?fmtDateTime(u.firstRequestedAt):'—'}</td><td class="muted">${u.lastRequestedAt?fmtDateTime(u.lastRequestedAt):'—'}${u.requestCount>1?`<small class="trial-count">${u.requestCount} solicitações</small>`:''}</td><td class="muted">${u.releasedAt?fmtDateTime(u.releasedAt):'—'}</td><td class="muted">${u.usedAt?fmtDateTime(u.usedAt):'—'}</td><td>${trialActions(u)}</td></tr>`).join('');
   enhanceResponsiveTables();
   renderTrialPagination(data.total,data.page,data.limit);
   setText('lupdate','Atualizado: '+new Date().toLocaleTimeString('pt-BR'));

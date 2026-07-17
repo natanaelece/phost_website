@@ -165,7 +165,7 @@
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Os computadores são máquinas virtuais?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Não. São computadores físicos reais, com conexão e IP próprios. O serviço não fornece hacks ou bots.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Como acesso o computador contratado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Você pode acessar pelo navegador em nossa página com Guacamole ou usar o RealVNC Viewer no computador. O suporte orienta a configuração inicial.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Quando o acesso é liberado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">O sistema recebe a confirmação do PIX e inicia a liberação. Você acompanha o pedido e as credenciais pelo painel.</p></details>
-                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Posso testar antes de contratar?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Sim. O teste gratuito dura 30 minutos. Entre na sua conta, registre a solicitação no painel e acompanhe a liberação. A equipe usa o WhatsApp cadastrado apenas para o contato operacional.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Posso testar antes de contratar?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Sim, desde que sua conta ainda não possua pedido pago. O teste gratuito dura 30 minutos: entre na sua conta, registre a solicitação no painel e acompanhe a liberação. A equipe usa o WhatsApp cadastrado apenas para o contato operacional.</p></details>
                 <div class="mt-6 rounded-xl border border-green-500/20 bg-green-500/10 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h3 class="font-bold text-white">Ainda ficou com alguma dúvida?</h3><p class="text-sm text-slate-400 mt-1">Fale diretamente com a equipe da Premier Host.</p></div><a href="https://wa.me/5534999187189?text=Ol%C3%A1%21+Tenho+uma+d%C3%BAvida+sobre+a+Premier+Host." target="_blank" rel="noopener" class="text-center bg-[#25D366] hover:bg-[#20bd5a] text-slate-950 px-5 py-3 rounded-lg font-black transition-colors whitespace-nowrap">Chamar no WhatsApp</a></div>
             </div>
         </div>
@@ -183,6 +183,18 @@
                 <a href="https://whatsapp.com/channel/0029Vb8DiAO0wajyAnLMGY3T" target="_blank" rel="noopener" onclick="fecharBoasVindasCanal()" class="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-black text-white transition-colors hover:bg-blue-500">Acompanhar canal</a>
                 <button type="button" onclick="fecharBoasVindasCanal()" class="rounded-lg border border-slate-700 px-4 py-3 text-sm font-bold text-slate-300 transition-colors hover:bg-slate-800 hover:text-white">Agora n&atilde;o</button>
             </div>
+        </div>
+    </div>
+
+    <div id="freeTrialIneligibleModal" class="hidden fixed inset-0 z-[95] items-center justify-center bg-slate-950/85 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="freeTrialIneligibleTitle">
+        <div class="relative w-full max-w-md rounded-2xl border border-amber-500/25 bg-slate-900 p-6 shadow-2xl">
+            <button type="button" onclick="closeFreeTrialIneligibleModal()" class="absolute right-4 top-4 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white" aria-label="Fechar aviso">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-2xl" aria-hidden="true">!</div>
+            <h2 id="freeTrialIneligibleTitle" class="pr-8 text-xl font-bold text-white">Teste grátis indisponível</h2>
+            <p class="mt-2 text-sm leading-6 text-slate-400">O teste grátis é destinado a novos usuários.</p>
+            <button type="button" onclick="closeFreeTrialIneligibleModal()" class="mt-6 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-blue-500">Entendi</button>
         </div>
     </div>
 
@@ -650,6 +662,21 @@
             document.body.classList.remove('overflow-hidden');
         }
 
+        function openFreeTrialIneligibleModal() {
+            const modal = document.getElementById('freeTrialIneligibleModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+            setTimeout(() => modal.querySelector('button')?.focus(), 0);
+        }
+
+        function closeFreeTrialIneligibleModal() {
+            const modal = document.getElementById('freeTrialIneligibleModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+        }
+
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && !document.getElementById('ajudaModal')?.classList.contains('hidden')) {
                 fecharAjuda();
@@ -658,6 +685,7 @@
             if (event.key === 'Escape' && !document.getElementById('wydServerModal')?.classList.contains('hidden')) fecharAvisoServidor();
             if (event.key === 'Escape' && !document.getElementById('profileModal')?.classList.contains('hidden')) fecharPerfil();
             if (event.key === 'Escape' && !document.getElementById('welcomeChannelModal')?.classList.contains('hidden')) fecharBoasVindasCanal();
+            if (event.key === 'Escape' && !document.getElementById('freeTrialIneligibleModal')?.classList.contains('hidden')) closeFreeTrialIneligibleModal();
             if (event.key === 'Tab') {
                 const modal = [...document.querySelectorAll('[role="dialog"]')].find(item => !item.classList.contains('hidden'));
                 if (!modal) return;
@@ -681,6 +709,12 @@
         }
 
         function renderFreeTrialStatus(status) {
+            const section = document.getElementById('teste-gratis');
+            if (status?.hasPaidOrder || status?.eligible === false) {
+                section.classList.add('hidden');
+                return;
+            }
+            section.classList.remove('hidden');
             const badge = document.getElementById('freeTrialBadge');
             const message = document.getElementById('freeTrialMessage');
             const action = document.getElementById('freeTrialAction');
@@ -713,6 +747,7 @@
         }
 
         function configureGuestFreeTrial() {
+            document.getElementById('teste-gratis')?.classList.remove('hidden');
             renderFreeTrialStatus({ status: 'nao_solicitado' });
             const action = document.getElementById('freeTrialAction');
             action.textContent = 'Entrar para solicitar';
@@ -727,9 +762,11 @@
             const response = await fetch('/api/free-trial/me', { headers: { 'X-Session-Token': localStorage.getItem('premier_token') } });
             if (response.status === 401) { clearLocalSession(); configureGuestAccess(); return; }
             if (!response.ok) throw new Error('Não foi possível consultar o teste grátis.');
-            renderFreeTrialStatus(await response.json());
+            const status = await response.json();
+            renderFreeTrialStatus(status);
             const action = document.getElementById('freeTrialAction');
             action.onclick = requestFreeTrial;
+            return status;
         }
 
         async function requestFreeTrial() {
@@ -743,6 +780,12 @@
                 const response = await fetch('/api/free-trial/request', { method: 'POST', headers: { 'X-Session-Token': localStorage.getItem('premier_token') } });
                 const data = await response.json().catch(() => null);
                 const status = data?.status?.status ? data.status : data?.status;
+                if (response.status === 403 && status?.hasPaidOrder) {
+                    renderFreeTrialStatus(status);
+                    openFreeTrialIneligibleModal();
+                    sessionStorage.removeItem('premier_post_auth_intent');
+                    return;
+                }
                 if (!response.ok) throw new Error(data?.erro || 'Não foi possível registrar a solicitação.');
                 renderFreeTrialStatus(status);
                 feedback.textContent = data?.msg || 'Solicitação registrada.';
@@ -917,12 +960,14 @@
 
                 document.getElementById('welcomeText').innerText = `Olá, ${userData.name.split(' ')[0]}. Monte seu plano`;
                 document.getElementById('orderWa').value = userData.whatsapp;
-                abrirBoasVindasCanal();
-                await loadFreeTrialStatus();
-                if (new URLSearchParams(window.location.search).get('intent') === 'free-trial' || window.location.hash === '#teste-gratis') {
+                const freeTrialIntent = new URLSearchParams(window.location.search).get('intent') === 'free-trial' || window.location.hash === '#teste-gratis' || sessionStorage.getItem('premier_post_auth_intent') === 'free-trial';
+                const freeTrialStatus = await loadFreeTrialStatus();
+                if (freeTrialIntent) {
                     sessionStorage.removeItem('premier_post_auth_intent');
-                    requestAnimationFrame(() => document.getElementById('teste-gratis')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+                    if (freeTrialStatus?.hasPaidOrder) openFreeTrialIneligibleModal();
+                    else requestAnimationFrame(() => document.getElementById('teste-gratis')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
                 }
+                else abrirBoasVindasCanal();
                 
                 // Preenche Modal Perfil
                 document.getElementById('profName').value = userData.name;

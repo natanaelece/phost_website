@@ -131,7 +131,7 @@
                 <div class="flex flex-col sm:flex-row sm:flex-wrap gap-4 justify-center">
                     <a href="/painel#simular-planos" data-analytics-event="plan_cta_clicked" data-analytics-cta="simular_preco" data-analytics-location="hero" class="bg-blue-600 hover:bg-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all glow-blue">Simular preço</a>
                     <button type="button" onclick="abrirModalAuth('login')" class="border border-blue-500/60 hover:border-blue-400 text-blue-300 text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Entrar na minha conta</button>
-                    <button type="button" onclick="solicitarTesteGratis()" class="border border-slate-700 hover:border-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Testar grátis por 30 min</button>
+                    <button type="button" data-free-trial-cta onclick="solicitarTesteGratis()" class="border border-slate-700 hover:border-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Testar grátis por 30 min</button>
                 </div>
                 <div class="mt-9 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-slate-400"><span>✓ Pagamento via Pix</span><span>✓ Liberação automatizada</span><span>✓ Suporte pelo WhatsApp</span></div>
             </div>
@@ -163,7 +163,7 @@
             <article class="card-hover bg-slate-900 border border-slate-800 rounded-2xl p-7 flex flex-col"><span class="text-sm font-bold text-blue-400 uppercase">Mensal</span><div class="my-5"><span class="text-4xl font-black text-white">R$ 105</span><span class="text-slate-500"> / PC</span></div><ul class="space-y-3 text-sm text-slate-400 mb-7"><li>✓ 30 dias de acesso</li><li>✓ 25% de desconto no período</li><li>✓ R$ 5 de desconto por PC adicional</li></ul><a href="/painel?periodo=mensal#simular-planos" data-analytics-event="plan_cta_clicked" data-analytics-cta="mensal" data-analytics-location="plan_card" class="mt-auto text-center border border-blue-500 text-blue-400 hover:bg-blue-600 hover:text-white py-3 rounded-lg font-bold transition-all">Simular plano mensal</a></article>
             </div><p class="text-xs text-slate-500 text-center mt-6">Valores-base vigentes no painel. Instâncias adicionais alteram o total e você também pode ganhar desconto por indicação. Consulte as condições no simulador.</p></div></section>
 
-        <section id="teste" class="border-y border-slate-800 bg-gradient-to-r from-blue-950/60 to-slate-900 py-20"><div class="max-w-5xl mx-auto px-6 grid md:grid-cols-[1fr_auto] gap-8 items-center"><div><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Conheça antes de contratar</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Teste grátis por 30 minutos</h2><p class="text-slate-400 leading-relaxed max-w-2xl">Entre ou crie sua conta para registrar a solicitação. Você acompanha o pedido no painel e nossa equipe entra em contato pelo WhatsApp cadastrado quando o ambiente de demonstração estiver disponível.</p></div><button type="button" onclick="solicitarTesteGratis()" class="inline-flex justify-center bg-blue-600 hover:bg-blue-500 text-white px-7 py-4 rounded-xl font-black transition-all whitespace-nowrap">Solicitar teste grátis</button></div></section>
+        <section id="teste" class="border-y border-slate-800 bg-gradient-to-r from-blue-950/60 to-slate-900 py-20"><div class="max-w-5xl mx-auto px-6 grid md:grid-cols-[1fr_auto] gap-8 items-center"><div><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Conheça antes de contratar</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Teste grátis por 30 minutos</h2><p class="text-slate-400 leading-relaxed max-w-2xl">Entre ou crie sua conta para registrar a solicitação. Você acompanha o pedido no painel e nossa equipe entra em contato pelo WhatsApp cadastrado quando o ambiente de demonstração estiver disponível.</p></div><button type="button" data-free-trial-cta onclick="solicitarTesteGratis()" class="inline-flex justify-center bg-blue-600 hover:bg-blue-500 text-white px-7 py-4 rounded-xl font-black transition-all whitespace-nowrap">Solicitar teste grátis</button></div></section>
 
         <section id="dispositivos" class="py-20"><div class="max-w-6xl mx-auto px-6 text-center"><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Flexibilidade</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Acesse em seus dispositivos favoritos</h2><p class="text-slate-400 max-w-3xl mx-auto mb-10">Escolha a forma que combina com sua rotina: pelo navegador com nossa página Guacamole ou pelo RealVNC Viewer no computador.</p><div class="grid md:grid-cols-3 gap-6"><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">💻</div><h3 class="font-bold text-white mb-2">Computador</h3><p class="text-sm text-slate-400">Acesso via RealVNC Viewer ou navegador.</p></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">📱</div><h3 class="font-bold text-white mb-2">Celular</h3><p class="text-sm text-slate-400">Entre pela página web compatível com navegadores modernos.</p></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">▣</div><h3 class="font-bold text-white mb-2">Tablet</h3><p class="text-sm text-slate-400">Mais espaço de tela com a mesma facilidade do acesso web.</p></div></div></div></section>
 
@@ -322,6 +322,19 @@
                 return;
             }
             abrirModalAuth('login');
+        }
+
+        async function applyFreeTrialEligibility() {
+            const token = localStorage.getItem('premier_token');
+            if (!token) return;
+            try {
+                const response = await fetch('/api/free-trial/me', { headers: { 'X-Session-Token': token } });
+                if (!response.ok) return;
+                const status = await response.json();
+                if (!status?.hasPaidOrder) return;
+                document.getElementById('teste')?.classList.add('hidden');
+                document.querySelectorAll('[data-free-trial-cta]').forEach(element => element.classList.add('hidden'));
+            } catch {}
         }
 
         function abrirModalAuth(tab = 'login') {
@@ -621,6 +634,7 @@
 		}
 		
 			document.addEventListener("DOMContentLoaded", function() {
+			applyFreeTrialEligibility();
 			const urlParams = new URLSearchParams(window.location.search);
 			if (urlParams.get('intent') === 'free-trial') {
 				sessionStorage.setItem('premier_post_auth_intent', 'free-trial');

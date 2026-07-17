@@ -32,6 +32,14 @@ namespace PremierAPI.Controllers
         {
             var result = await _freeTrials.RequestAsync(GetSessionToken());
             if (result == null) return Unauthorized(new { erro = "Sessão expirada." });
+            if (result.IneligibleDueToPaidOrder)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    erro = "O teste grátis é exclusivo para novos usuários.",
+                    status = result.Status
+                });
+            }
             if (result.AlreadyUsed)
             {
                 return Conflict(new

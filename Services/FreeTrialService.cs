@@ -32,7 +32,12 @@ namespace PremierAPI.Services
                     f.released_at AS ""ReleasedAt"",
                     f.used_at AS ""UsedAt"",
                     f.closed_at AS ""ClosedAt"",
-                    COALESCE(f.request_count, 0) AS ""RequestCount""
+                    COALESCE(f.request_count, 0) AS ""RequestCount"",
+                    EXISTS (
+                        SELECT 1 FROM orders o
+                        WHERE o.user_id = u.id
+                          AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
+                    ) AS ""HasPaidOrder""
                 FROM user_sessions s
                 INNER JOIN users u ON u.id = s.user_id
                 LEFT JOIN free_trial_requests f ON f.user_id = u.id
@@ -53,8 +58,14 @@ namespace PremierAPI.Services
             await db.OpenAsync();
             await using var transaction = await db.BeginTransactionAsync();
 
-            Guid? userId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
-                SELECT u.id
+            var identity = await db.QueryFirstOrDefaultAsync<FreeTrialIdentityRow>(@"
+                SELECT
+                    u.id AS ""UserId"",
+                    EXISTS (
+                        SELECT 1 FROM orders o
+                        WHERE o.user_id = u.id
+                          AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
+                    ) AS ""HasPaidOrder""
                 FROM user_sessions s
                 INNER JOIN users u ON u.id = s.user_id
                 WHERE s.token = @Token
@@ -63,10 +74,17 @@ namespace PremierAPI.Services
                 LIMIT 1;",
                 new { Token = sessionToken, Now = DateTime.UtcNow }, transaction);
 
-            if (!userId.HasValue)
+            if (identity == null)
             {
                 await transaction.RollbackAsync();
                 return null;
+            }
+
+            if (identity.HasPaidOrder)
+            {
+                var ineligible = await GetUserStatusRowAsync(db, transaction, identity.UserId);
+                await transaction.CommitAsync();
+                return new FreeTrialRequestResult(ToStatus(ineligible!), false, false, true);
             }
 
             Guid? insertedId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
@@ -74,14 +92,14 @@ namespace PremierAPI.Services
                 VALUES (@UserId)
                 ON CONFLICT (user_id) DO NOTHING
                 RETURNING id;",
-                new { UserId = userId.Value }, transaction);
+                new { UserId = identity.UserId }, transaction);
 
             if (insertedId.HasValue)
             {
-                await InsertEventAsync(db, transaction, insertedId.Value, "solicitado", "usuario", userId.Value.ToString());
-                var created = await GetRequestRowAsync(db, transaction, userId.Value);
+                await InsertEventAsync(db, transaction, insertedId.Value, "solicitado", "usuario", identity.UserId.ToString());
+                var created = await GetUserStatusRowAsync(db, transaction, identity.UserId);
                 await transaction.CommitAsync();
-                return new FreeTrialRequestResult(ToStatus(created!), true, false);
+                return new FreeTrialRequestResult(ToStatus(created!), true, false, false);
             }
 
             var current = await db.QueryFirstAsync<FreeTrialUserRow>(@"
@@ -94,22 +112,27 @@ namespace PremierAPI.Services
                     released_at AS ""ReleasedAt"",
                     used_at AS ""UsedAt"",
                     closed_at AS ""ClosedAt"",
-                    request_count AS ""RequestCount""
-                FROM free_trial_requests
-                WHERE user_id = @UserId
-                FOR UPDATE;",
-                new { UserId = userId.Value }, transaction);
+                    f.request_count AS ""RequestCount"",
+                    EXISTS (
+                        SELECT 1 FROM orders o
+                        WHERE o.user_id = f.user_id
+                          AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
+                    ) AS ""HasPaidOrder""
+                FROM free_trial_requests f
+                WHERE f.user_id = @UserId
+                FOR UPDATE OF f;",
+                new { UserId = identity.UserId }, transaction);
 
             if (current.UsedAt.HasValue || string.Equals(current.Status, "utilizado", StringComparison.Ordinal))
             {
                 await transaction.CommitAsync();
-                return new FreeTrialRequestResult(ToStatus(current), false, true);
+                return new FreeTrialRequestResult(ToStatus(current), false, true, false);
             }
 
             if (!ClosedStatuses.Contains(current.Status ?? ""))
             {
                 await transaction.CommitAsync();
-                return new FreeTrialRequestResult(ToStatus(current), false, false);
+                return new FreeTrialRequestResult(ToStatus(current), false, false, false);
             }
 
             await db.ExecuteAsync(@"
@@ -123,11 +146,11 @@ namespace PremierAPI.Services
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = @Id;",
                 new { Id = current.RequestId }, transaction);
-            await InsertEventAsync(db, transaction, current.RequestId!.Value, "solicitado", "usuario", userId.Value.ToString());
+            await InsertEventAsync(db, transaction, current.RequestId!.Value, "solicitado", "usuario", identity.UserId.ToString());
 
-            var reopened = await GetRequestRowAsync(db, transaction, userId.Value);
+            var reopened = await GetUserStatusRowAsync(db, transaction, identity.UserId);
             await transaction.CommitAsync();
-            return new FreeTrialRequestResult(ToStatus(reopened!), false, false);
+            return new FreeTrialRequestResult(ToStatus(reopened!), false, false, false);
         }
 
         public async Task<FreeTrialAdminListDto> GetAdminListAsync(
@@ -137,13 +160,18 @@ namespace PremierAPI.Services
             limit = Math.Clamp(limit, 1, 100);
             filter = (filter ?? "all").Trim().ToLowerInvariant();
             search = (search ?? "").Trim();
+            const string paidOrderSql = @"EXISTS (
+                SELECT 1 FROM orders paid_order
+                WHERE paid_order.user_id = u.id
+                  AND (paid_order.status = 'pago' OR COALESCE(paid_order.canceled_was_paid, false) = true)
+            )";
 
             string filterSql = filter switch
             {
-                "never_requested" => "f.id IS NULL",
-                "not_used" => "f.used_at IS NULL",
-                "solicitado" => "f.status = 'solicitado'",
-                "liberado" => "f.status = 'liberado'",
+                "never_requested" => $"f.id IS NULL AND NOT ({paidOrderSql})",
+                "not_used" => $"f.used_at IS NULL AND NOT ({paidOrderSql})",
+                "solicitado" => $"f.status = 'solicitado' AND NOT ({paidOrderSql})",
+                "liberado" => $"f.status = 'liberado' AND NOT ({paidOrderSql})",
                 "utilizado" => "f.status = 'utilizado'",
                 "recusado" => "f.status = 'recusado'",
                 "cancelado" => "f.status = 'cancelado'",
@@ -189,6 +217,7 @@ namespace PremierAPI.Services
                     u.registration_country_code AS ""RegistrationCountryCode"",
                     u.registration_referrer_host AS ""RegistrationReferrerHost"",
                     u.registration_source AS ""RegistrationSource"",
+                    {paidOrderSql} AS ""HasPaidOrder"",
                     f.id AS ""RequestId"",
                     COALESCE(f.status, 'nao_solicitado') AS ""Status"",
                     f.first_requested_at AS ""FirstRequestedAt"",
@@ -205,12 +234,12 @@ namespace PremierAPI.Services
                 LIMIT @Limit OFFSET @Offset;",
                 new { Search = $"%{search}%", Limit = limit, Offset = offset });
 
-            var stats = await db.QuerySingleAsync<FreeTrialAdminStatsDto>(@"
+            var stats = await db.QuerySingleAsync<FreeTrialAdminStatsDto>($@"
                 SELECT
-                    COUNT(*) FILTER (WHERE f.id IS NULL) AS ""NeverRequested"",
-                    COUNT(*) FILTER (WHERE f.used_at IS NULL) AS ""NotUsed"",
-                    COUNT(*) FILTER (WHERE f.status = 'solicitado') AS ""Requested"",
-                    COUNT(*) FILTER (WHERE f.status = 'liberado') AS ""Released"",
+                    COUNT(*) FILTER (WHERE f.id IS NULL AND NOT ({paidOrderSql})) AS ""NeverRequested"",
+                    COUNT(*) FILTER (WHERE f.used_at IS NULL AND NOT ({paidOrderSql})) AS ""NotUsed"",
+                    COUNT(*) FILTER (WHERE f.status = 'solicitado' AND NOT ({paidOrderSql})) AS ""Requested"",
+                    COUNT(*) FILTER (WHERE f.status = 'liberado' AND NOT ({paidOrderSql})) AS ""Released"",
                     COUNT(*) FILTER (WHERE f.status = 'utilizado') AS ""Used""
                 FROM users u
                 LEFT JOIN free_trial_requests f ON f.user_id = u.id;");
@@ -238,10 +267,15 @@ namespace PremierAPI.Services
                     user_id AS ""UserId"", id AS ""RequestId"", status AS ""Status"",
                     first_requested_at AS ""FirstRequestedAt"", last_requested_at AS ""LastRequestedAt"",
                     released_at AS ""ReleasedAt"", used_at AS ""UsedAt"", closed_at AS ""ClosedAt"",
-                    request_count AS ""RequestCount""
-                FROM free_trial_requests
-                WHERE id = @Id
-                FOR UPDATE;",
+                    f.request_count AS ""RequestCount"",
+                    EXISTS (
+                        SELECT 1 FROM orders o
+                        WHERE o.user_id = f.user_id
+                          AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
+                    ) AS ""HasPaidOrder""
+                FROM free_trial_requests f
+                WHERE f.id = @Id
+                FOR UPDATE OF f;",
                 new { Id = requestId }, transaction);
 
             if (current == null)
@@ -253,6 +287,14 @@ namespace PremierAPI.Services
             {
                 await transaction.CommitAsync();
                 return new FreeTrialAdminTransitionResult(true, "Estado já estava atualizado.", ToStatus(current));
+            }
+            if (action == "release" && current.HasPaidOrder)
+            {
+                await transaction.RollbackAsync();
+                return new FreeTrialAdminTransitionResult(
+                    false,
+                    "Cliente com pedido pago não é elegível para teste grátis.",
+                    ToStatus(current));
             }
 
             bool allowed = action switch
@@ -281,7 +323,7 @@ namespace PremierAPI.Services
                 new { Status = targetStatus, Actor = actor, Id = requestId }, transaction);
             await InsertEventAsync(db, transaction, requestId, targetStatus, "admin", actor);
 
-            var updated = await GetRequestRowAsync(db, transaction, current.UserId);
+            var updated = await GetUserStatusRowAsync(db, transaction, current.UserId);
             await transaction.CommitAsync();
             return new FreeTrialAdminTransitionResult(true, "Situação atualizada.", ToStatus(updated!));
         }
@@ -299,17 +341,23 @@ namespace PremierAPI.Services
                 transaction);
         }
 
-        private static Task<FreeTrialUserRow?> GetRequestRowAsync(
+        private static Task<FreeTrialUserRow?> GetUserStatusRowAsync(
             NpgsqlConnection db, NpgsqlTransaction transaction, Guid userId)
         {
             return db.QueryFirstOrDefaultAsync<FreeTrialUserRow>(@"
                 SELECT
-                    user_id AS ""UserId"", id AS ""RequestId"", status AS ""Status"",
-                    first_requested_at AS ""FirstRequestedAt"", last_requested_at AS ""LastRequestedAt"",
-                    released_at AS ""ReleasedAt"", used_at AS ""UsedAt"", closed_at AS ""ClosedAt"",
-                    request_count AS ""RequestCount""
-                FROM free_trial_requests
-                WHERE user_id = @UserId;",
+                    u.id AS ""UserId"", f.id AS ""RequestId"", f.status AS ""Status"",
+                    f.first_requested_at AS ""FirstRequestedAt"", f.last_requested_at AS ""LastRequestedAt"",
+                    f.released_at AS ""ReleasedAt"", f.used_at AS ""UsedAt"", f.closed_at AS ""ClosedAt"",
+                    COALESCE(f.request_count, 0) AS ""RequestCount"",
+                    EXISTS (
+                        SELECT 1 FROM orders o
+                        WHERE o.user_id = u.id
+                          AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
+                    ) AS ""HasPaidOrder""
+                FROM users u
+                LEFT JOIN free_trial_requests f ON f.user_id = u.id
+                WHERE u.id = @UserId;",
                 new { UserId = userId }, transaction);
         }
 
@@ -317,9 +365,10 @@ namespace PremierAPI.Services
         {
             string status = string.IsNullOrWhiteSpace(row.Status) ? "nao_solicitado" : row.Status;
             bool hasUsed = row.UsedAt.HasValue || status == "utilizado";
-            bool canRequest = (status is "nao_solicitado" or "recusado" or "cancelado") && !hasUsed;
+            bool eligible = !row.HasPaidOrder;
+            bool canRequest = eligible && (status is "nao_solicitado" or "recusado" or "cancelado") && !hasUsed;
             return new FreeTrialStatusDto(
-                row.RequestId, status, canRequest, hasUsed,
+                row.RequestId, status, eligible, row.HasPaidOrder, canRequest, hasUsed,
                 row.FirstRequestedAt, row.LastRequestedAt, row.ReleasedAt, row.UsedAt,
                 row.ClosedAt, row.RequestCount);
         }
@@ -335,20 +384,29 @@ namespace PremierAPI.Services
             public DateTime? UsedAt { get; set; }
             public DateTime? ClosedAt { get; set; }
             public int RequestCount { get; set; }
+            public bool HasPaidOrder { get; set; }
+        }
+
+        private sealed class FreeTrialIdentityRow
+        {
+            public Guid UserId { get; set; }
+            public bool HasPaidOrder { get; set; }
         }
     }
 
     public sealed record FreeTrialStatusDto(
-        Guid? RequestId, string Status, bool CanRequest, bool HasUsed,
+        Guid? RequestId, string Status, bool Eligible, bool HasPaidOrder, bool CanRequest, bool HasUsed,
         DateTime? FirstRequestedAt, DateTime? LastRequestedAt, DateTime? ReleasedAt,
         DateTime? UsedAt, DateTime? ClosedAt, int RequestCount);
 
-    public sealed record FreeTrialRequestResult(FreeTrialStatusDto Status, bool Created, bool AlreadyUsed);
+    public sealed record FreeTrialRequestResult(
+        FreeTrialStatusDto Status, bool Created, bool AlreadyUsed, bool IneligibleDueToPaidOrder);
 
     public sealed record FreeTrialAdminUserDto(
         Guid UserId, string Name, string Email, string? Whatsapp, DateTime CreatedAt,
         string? RegistrationIp, string? RegistrationUserAgent, string? RegistrationAcceptLanguage,
         string? RegistrationCountryCode, string? RegistrationReferrerHost, string? RegistrationSource,
+        bool HasPaidOrder,
         Guid? RequestId, string Status, DateTime? FirstRequestedAt, DateTime? LastRequestedAt,
         DateTime? ReleasedAt, DateTime? UsedAt, DateTime? ClosedAt, int RequestCount, string? ReleasedBy);
 
