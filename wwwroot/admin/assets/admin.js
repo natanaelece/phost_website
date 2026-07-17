@@ -636,7 +636,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     const AD_SORT_FIELDS = {
         users:['fullName','username','isActive','expiresAt'],
         groups:['name','description'],
-        computers:['name','description','operatingSystem','isActive']
+        computers:['name','description','operatingSystem','isActive','groups']
     };
     function adSortType(){return currentAdFilter==='groups'?'groups':currentAdFilter==='computers'?'computers':'users';}
     function ensureAdSortForFilter(){
@@ -651,6 +651,10 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const factor=_adSortDirection==='asc'?1:-1;
         return [...items].sort((a,b)=>{
             let av=a?.[field],bv=b?.[field];
+            if(field==='groups'){
+                av=Array.isArray(av)?av.join(', '):'';
+                bv=Array.isArray(bv)?bv.join(', '):'';
+            }
             if(av==null||av==='')return bv==null||bv===''?0:1;
             if(bv==null||bv==='')return -1;
             if(typeof av==='boolean'||typeof bv==='boolean')return (Number(av)-Number(bv))*factor;
@@ -686,7 +690,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-users-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário ativo encontrado.</td></tr>';
         document.getElementById('ad-website-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_WEBSITE').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário de website encontrado.</td></tr>';
         document.getElementById('ad-expired-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_EXPIRADOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário expirado encontrado.</td></tr>';
-        const computers=sortAdItems(_adComputers,['name','description','operatingSystem','isActive'],'description');
+        const computers=sortAdItems(_adComputers,['name','description','operatingSystem','isActive','groups'],'description');
         document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><div class="computer-groups">${(c.groups||[]).length?(c.groups||[]).map(group=>`<span class="badge b-accent">${esc(group)}</span>`).join(''):'<span class="muted">Nenhum</span>'}<button class="btn btn-outline ad-table-action" onclick="openAdComputerGroupsModal('${c.name}')">Gerenciar</button></div></td><td><button class="btn btn-outline ad-table-action" onclick="editAdComputer('${c.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdComputer('${c.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdComputer('${c.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty">Nenhum computador encontrado.</td></tr>';
         const groups=sortAdItems(_adGroups,['name','description'],'name');
         document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><button class="btn btn-outline ad-table-action" onclick="editAdGroup('${g.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdGroup('${g.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdGroup('${g.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum grupo encontrado.</td></tr>';
@@ -1030,7 +1034,7 @@ const SORTABLE_TABLES={
   'ad-website-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-expired-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-groups-body':{type:'ad',fields:['name','description',null,null,null]},
-  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive',null,null,null,null]}
+  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive','groups',null,null,null]}
 };
 function enhanceSortableHeaders(root=document){
   Object.entries(SORTABLE_TABLES).forEach(([bodyId,config])=>{
