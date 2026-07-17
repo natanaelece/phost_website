@@ -408,7 +408,7 @@
                             <span class="flex items-center gap-1 text-slate-500">Custo Base:
                                 <span class="group relative flex items-center" tabindex="0" aria-label="Como o custo base é calculado" aria-describedby="resBaseInfo">
                                     <svg class="h-4 w-4 text-slate-500 transition-colors group-hover:text-blue-400 group-focus:text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
-                                    <span id="resBaseInfo" role="tooltip" class="absolute bottom-full left-1/2 z-20 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-800 p-3 text-center text-xs font-normal leading-relaxed text-slate-300 shadow-lg group-hover:block group-focus:block"></span>
+                                    <span id="resBaseInfo" role="tooltip" class="absolute bottom-full left-1/2 z-20 mb-2 hidden w-64 -translate-x-1/2 whitespace-pre-line rounded-lg border border-slate-700 bg-slate-800 p-3 text-center text-xs font-normal leading-relaxed text-slate-300 shadow-lg group-hover:block group-focus:block"></span>
                                 </span>
                             </span>
                             <span id="resBase" class="text-white">R$ 0,00</span>
@@ -1590,13 +1590,14 @@
             document.getElementById('resDescPeriodo').innerText = `- R$ ${descPeriodo.toFixed(2).replace('.', ',')}`;
 
             const moeda = value => `R$ ${value.toFixed(2).replace('.', ',')}`;
+            const moedaCompacta = value => `R$${value.toFixed(2).replace('.', ',')}`;
             const acessosAdicionais = Math.max(0, wyds - rules.minSlots);
             const custoComputadorDiaria = (rules.dailyWeeklyBasePrice / rules.weeklyDays) * dias;
             const subtotalComputadoresDiaria = custoComputadorDiaria * pcs;
             const custoTelaAdicionalDiaria = (rules.additionalSlotPrice / rules.weeklyDays) * dias;
             const subtotalTelasAdicionaisDiaria = custoTelaAdicionalDiaria * acessosAdicionais * pcs;
             const detalheTelasDiaria = acessosAdicionais > 0
-                ? ` Telas adicionais: ${acessosAdicionais} por computador × ${moeda(custoTelaAdicionalDiaria)} por tela no período × ${pcs} ${pcs === 1 ? 'computador' : 'computadores'} = ${moeda(subtotalTelasAdicionaisDiaria)}.`
+                ? `\nTelas adicionais: ${acessosAdicionais} por computador (${moedaCompacta(custoTelaAdicionalDiaria)} por tela no período selecionado x ${pcs} ${pcs === 1 ? 'computador' : 'computadores'} = ${moedaCompacta(subtotalTelasAdicionaisDiaria)})`
                 : '';
             const semanasPeriodo = periodo === 'mensal' ? rules.monthlyWeeks : 1;
             const detalheDuracaoPeriodo = periodo === 'mensal' ? ` (${rules.monthlyWeeks} semanas)` : '';
@@ -1605,7 +1606,7 @@
             const custoTelaAdicionalPeriodo = rules.additionalSlotPrice * semanasPeriodo;
             const subtotalTelasAdicionaisPeriodo = custoTelaAdicionalPeriodo * acessosAdicionais * pcs;
             const detalheTelasPeriodo = acessosAdicionais > 0
-                ? ` Telas adicionais: ${acessosAdicionais} por computador × ${moeda(custoTelaAdicionalPeriodo)} por tela no período × ${pcs} ${pcs === 1 ? 'computador' : 'computadores'} = ${moeda(subtotalTelasAdicionaisPeriodo)}.`
+                ? `\nTelas adicionais: ${acessosAdicionais} por computador (${moedaCompacta(custoTelaAdicionalPeriodo)} por tela no período selecionado x ${pcs} ${pcs === 1 ? 'computador' : 'computadores'} = ${moedaCompacta(subtotalTelasAdicionaisPeriodo)})`
                 : '';
             const detalheBase = periodo === 'diaria'
                 ? `Computadores: ${moeda(custoComputadorDiaria)} por computador × ${pcs} = ${moeda(subtotalComputadoresDiaria)} antes do arredondamento.${detalheTelasDiaria}`

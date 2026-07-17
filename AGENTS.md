@@ -29,3 +29,47 @@ Se o SSH falhar, pare e informe o erro. Nunca use execução local como fallback
 
 Migrations, deploys, reinicializações, alterações de banco e comandos
 destrutivos precisam de autorização explícita do usuário.
+
+## Isolamento do llm-server
+
+Este projeto está montado no `llm-server` em
+`/opt/remotes/PremierAPI`, mas pertence ao host `website` e à raiz remota
+`/var/www/premierhost/PremierAPI`.
+
+Nenhum arquivo específico da tarefa pode ser criado ou mantido no filesystem
+local do `llm-server`.
+
+Código, documentação, relatórios, handoffs, planos, checkpoints, backups,
+dumps, logs, temporários, resultados de testes e quaisquer outros artefatos
+devem ficar:
+
+- dentro de `/opt/remotes/PremierAPI`, quando pertencem ao repositório; ou
+- diretamente no host `website`, quando não devem ser versionados.
+
+Backups não versionados devem ser criados remotamente, preferencialmente em
+`/var/backups`, por meio de SSH.
+
+Todos os comandos Git, build, teste, runtime, banco, serviço e geração de
+artefatos devem executar com:
+
+`ssh website 'cd /var/www/premierhost/PremierAPI && COMANDO'`
+
+Se o SSH falhar, pare. Nunca execute localmente como fallback.
+
+## Proteção de variáveis sensíveis
+
+O serviço `premierapi` possui atualmente variáveis sensíveis declaradas por
+diretivas `Environment=` no drop-in
+`/etc/systemd/system/premierapi.service.d/override.conf`. Não existe um
+`EnvironmentFile` privado referenciado pela unit neste momento.
+
+Nunca exiba ou registre a saída bruta de `systemctl cat premierapi` nem de
+`systemctl show premierapi -p Environment`. Para diagnóstico, consulte apenas
+propriedades não sensíveis, como `FragmentPath`, `DropInPaths` e
+`EnvironmentFiles`, e redija valores de qualquer diretiva antes de compartilhar
+a saída.
+
+A migração dos segredos para um `EnvironmentFile` externo ao repositório,
+pertencente a `root` e com modo `0600`, assim como qualquer rotação de
+credenciais, alteração da unit ou reinicialização, exige autorização explícita
+e janela operacional.
