@@ -44,6 +44,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - Preserve o key ring persistente do ASP.NET Data Protection e sua proteção por certificado em `DataProtectionConfiguration`; não volte a persistir chaves XML sem encryptor nem registre materiais criptográficos.
 - A telemetria é first-party e allowlisted. Nunca envie e-mail, WhatsApp, AnyDesk, senha, conteúdo Pix ou dados bancários. Não há GA4 nem Meta Pixel atualmente.
 - Mantenha no sitemap apenas `/`, `/painel` e `/privacidade`. Rotas internas devem continuar fora do índice. Ao mudar CSP ou Cloudflare, preserve `robots.txt`, `sitemap.xml` e recursos públicos necessários.
+- HTML, CSS, JavaScript e demais arquivos que definem a aplicação devem manter `Cache-Control`, `CDN-Cache-Control` e `Cloudflare-CDN-Cache-Control` como `no-store`; mídia pode continuar cacheável. Não crie Cache Rule no edge que sobreponha essa política para arquivos de aplicação.
 - E-mail não confirmado recebe no máximo dois reenvios automáticos: dia seguinte às 11:00 e outro dia às 19:00. Reenvio manual do admin não consome essa cota; confirmação manual continua explícita pelo checkbox.
 - Se já houve envio de confirmação no dia atual, o reenvio manual exige confirmação explícita no admin; o backend deve preservar essa guarda, permitindo a continuação somente quando informada pelo operador.
 - Confirmação de e-mail pelo link ou pelo checkbox administrativo invalida o token, cancela lembretes pendentes e usa a mesma notificação de sucesso ao cliente.

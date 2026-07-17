@@ -230,6 +230,8 @@ O `DatabaseInitializer.cs` valida o encoding na inicializacao e emite um aviso c
 
 O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo e Vanilla JavaScript. Cada area principal tem seu proprio `.html`, enquanto `admin/assets/admin.css`, `admin/assets/admin.js` e `admin/partials/modals.html` concentram estilos, logica compartilhada e modais. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.
 
+Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Assim, builds e reinicializações não dependem de limpeza manual do cache da Cloudflare. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
+
 Principais areas do painel:
 
 - **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.

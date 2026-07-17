@@ -205,15 +205,28 @@ app.Use(async (context, next) =>
 // =========================================================================
 
 app.UseDefaultFiles();
+var applicationInstance = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+var applicationFileExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+{
+    ".html", ".css", ".js", ".json", ".xml", ".txt", ".map", ".webmanifest"
+};
+
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = context =>
     {
-        if (context.Context.Request.Path.StartsWithSegments("/admin"))
+        var extension = Path.GetExtension(context.Context.Request.Path.Value ?? string.Empty);
+        if (applicationFileExtensions.Contains(extension))
         {
-            context.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            // Arquivos executaveis/de pagina devem sempre ser revalidados na origem.
+            // Os cabecalhos especificos impedem que o edge da Cloudflare entregue
+            // uma versao anterior depois de build ou reinicializacao da aplicacao.
+            context.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate, max-age=0";
+            context.Context.Response.Headers["Cloudflare-CDN-Cache-Control"] = "no-store";
+            context.Context.Response.Headers["CDN-Cache-Control"] = "no-store";
             context.Context.Response.Headers.Pragma = "no-cache";
             context.Context.Response.Headers.Expires = "0";
+            context.Context.Response.Headers["X-Premier-Instance"] = applicationInstance;
         }
     }
 });

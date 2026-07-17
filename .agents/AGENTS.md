@@ -32,6 +32,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - A descrição convencional `SRV01_01` corresponde a `ACESSO_SRV01_01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
+- Arquivos de aplicação são entregues com `no-store` no navegador e na Cloudflare; não remova os cabeçalhos específicos da CDN nem aplique Cache Rule que os sobreponha. Imagens e vídeos podem continuar cacheáveis.
 
 ## Segurança operacional
 
