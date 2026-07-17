@@ -96,6 +96,8 @@ namespace PremierAPI.Controllers
                 return Unauthorized(new { erro = "Conta inativa. Entre em contato com o suporte." });
             }
 
+            await FillMissingRegistrationMetadataAsync(db, user.Id);
+
             if (string.IsNullOrWhiteSpace(user.Ad_Username))
             {
                 string protectedPassword = _adPasswordProtection.Protect(req.Password);
@@ -562,6 +564,43 @@ namespace PremierAPI.Controllers
             string referrer = Request.Headers.Referer.FirstOrDefault() ?? "";
             if (!Uri.TryCreate(referrer, UriKind.Absolute, out var uri)) return null;
             return uri.Host[..Math.Min(uri.Host.Length, 150)];
+        }
+
+        private async Task FillMissingRegistrationMetadataAsync(NpgsqlConnection db, Guid userId)
+        {
+            try
+            {
+                await db.ExecuteAsync(@"
+                    UPDATE users
+                    SET registration_ip = COALESCE(registration_ip, CAST(@RegistrationIp AS inet)),
+                        registration_user_agent = COALESCE(registration_user_agent, @RegistrationUserAgent),
+                        registration_accept_language = COALESCE(registration_accept_language, @RegistrationAcceptLanguage),
+                        registration_country_code = COALESCE(registration_country_code, @RegistrationCountryCode),
+                        registration_referrer_host = COALESCE(registration_referrer_host, @RegistrationReferrerHost),
+                        registration_source = COALESCE(registration_source, 'login_recovery')
+                    WHERE id = @UserId
+                      AND (
+                          registration_ip IS NULL
+                          OR registration_user_agent IS NULL
+                          OR registration_accept_language IS NULL
+                          OR registration_country_code IS NULL
+                          OR registration_referrer_host IS NULL
+                          OR registration_source IS NULL
+                      );",
+                    new
+                    {
+                        UserId = userId,
+                        RegistrationIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                        RegistrationUserAgent = TruncateHeader("User-Agent", 512),
+                        RegistrationAcceptLanguage = TruncateHeader("Accept-Language", 200),
+                        RegistrationCountryCode = NormalizeCountryCode(TruncateHeader("CF-IPCountry", 2)),
+                        RegistrationReferrerHost = GetReferrerHost()
+                    });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[LOGIN METADADOS] Não foi possível completar os metadados técnicos do usuário {UserId}.", userId);
+            }
         }
     }
 

@@ -1392,7 +1392,7 @@ function registrationInfo(u){
   if(u.registrationAcceptLanguage)lines.push(`Idioma: ${u.registrationAcceptLanguage}`);
   if(u.registrationCountryCode)lines.push(`País (Cloudflare): ${u.registrationCountryCode}`);
   if(u.registrationReferrerHost)lines.push(`Origem: ${u.registrationReferrerHost}`);
-  if(u.registrationSource)lines.push(`Canal: ${u.registrationSource==='admin'?'Criado no Admin':u.registrationSource}`);
+  if(u.registrationSource){const sourceLabel={admin:'Criado no Admin',site:'Cadastro no site',login_recovery:'Recuperado no login'}[u.registrationSource]||u.registrationSource;lines.push(`Canal: ${sourceLabel}`);}
   if(!lines.length)lines.push('Metadados indisponíveis: cadastro anterior à coleta.');
   const text=lines.join('\n');
   return `<button type="button" class="registration-info" data-tooltip="${esc(text)}" title="${esc(text)}" aria-label="Informações técnicas do cadastro: ${esc(text)}">i</button>`;
