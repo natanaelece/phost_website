@@ -236,6 +236,8 @@ O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo
 
 Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Assim, builds e reinicializações não dependem de limpeza manual do cache da Cloudflare. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
 
+O rodapé da barra lateral administrativa possui o menu recolhido **Manutenção**. **Compilar e reiniciar website** executa build `Release` sem restore e só reinicia `premierapi` quando a compilação termina com sucesso; **Reiniciar serviço** ignora o build. As duas operações exigem sessão administrativa e confirmação, são mutuamente exclusivas e usam apenas comandos allowlisted. Um job systemd transitório executa `scripts/admin-maintenance.sh` fora do processo da API e persiste o andamento em `/run/premierapi-maintenance`, permitindo que o Admin bloqueie a interface, atravesse a indisponibilidade, retome o polling e recarregue sozinho quando a API voltar. O resultado é verde quando o build não tem avisos e o health check responde, amarelo quando a compilação tem warnings e vermelho em falhas. O acompanhamento usa consultas limitadas; nunca mantém `journalctl -f` preso a uma requisição HTTP.
+
 Principais areas do painel:
 
 - **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.

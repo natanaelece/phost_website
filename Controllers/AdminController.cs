@@ -29,6 +29,7 @@ namespace PremierAPI.Controllers
         private readonly AdPasswordProtectionService _adPasswordProtection;
         private readonly AdminLogStore _adminLogStore;
         private readonly FreeTrialService _freeTrials;
+        private readonly AdminMaintenanceService _maintenance;
 
         public AdminController(
             IConfiguration config,
@@ -38,7 +39,8 @@ namespace PremierAPI.Controllers
             EmailConfirmationService emailConfirmation,
             AdPasswordProtectionService adPasswordProtection,
             AdminLogStore adminLogStore,
-            FreeTrialService freeTrials)
+            FreeTrialService freeTrials,
+            AdminMaintenanceService maintenance)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -50,6 +52,7 @@ namespace PremierAPI.Controllers
             _adPasswordProtection = adPasswordProtection;
             _adminLogStore = adminLogStore;
             _freeTrials = freeTrials;
+            _maintenance = maintenance;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -530,6 +533,30 @@ namespace PremierAPI.Controllers
 
             _logger.LogInformation("[ADMIN][TESTE GRATIS] Solicitação {RequestId} excluída e redefinida para nunca solicitou.", id);
             return Ok(new { msg = result.Message });
+        }
+
+        [HttpPost("maintenance/{operation}")]
+        public async Task<IActionResult> StartMaintenance(string operation)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            var result = await _maintenance.StartAsync(operation);
+            if (!result.Success)
+                return Conflict(new { erro = result.Message, status = result.Status });
+
+            _logger.LogWarning(
+                "[ADMIN][MANUTENCAO] Operação {Operation} autorizada no painel como job {JobId}.",
+                operation, result.Status?.JobId);
+            return Accepted(new { msg = result.Message, status = result.Status });
+        }
+
+        [HttpGet("maintenance/{jobId}")]
+        public async Task<IActionResult> GetMaintenanceStatus(string jobId)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            var status = await _maintenance.GetStatusAsync(jobId);
+            return status == null
+                ? NotFound(new { erro = "Operação de manutenção não encontrada." })
+                : Ok(status);
         }
 
         // ==========================================

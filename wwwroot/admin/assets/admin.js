@@ -1100,6 +1100,8 @@ function showApp(){
   const n=S.user?.name||'Admin';document.getElementById('sname').textContent=n;document.getElementById('savatar').textContent=n[0].toUpperCase();
   setupCurrentView();
   loadCurrentView();
+  setupMaintenanceControls();
+  resumeMaintenanceState();
 }
 function ensureFreeTrialNavigation(){
   if(document.getElementById('nav-trials'))return;
@@ -1116,6 +1118,145 @@ function setupAdminMobileNavigation(){
   const close=()=>{document.getElementById('sidebar')?.classList.remove('mobile-open');backdrop.classList.remove('active');button.setAttribute('aria-expanded','false');};
   button.addEventListener('click',()=>{const sidebar=document.getElementById('sidebar');const open=!sidebar.classList.contains('mobile-open');sidebar.classList.toggle('mobile-open',open);backdrop.classList.toggle('active',open);button.setAttribute('aria-expanded',String(open));});
   backdrop.addEventListener('click',close);document.querySelectorAll('.ni').forEach(link=>link.addEventListener('click',close));
+}
+
+const MAINTENANCE_JOB_KEY='premier_admin_maintenance_job';
+const MAINTENANCE_RESULT_KEY='premier_admin_maintenance_result';
+let maintenancePollTimer=null;
+
+function setupMaintenanceControls(){
+  const footer=document.querySelector('.sfooter');
+  if(footer&&!document.getElementById('maintenance-menu')){
+    const menu=document.createElement('details');
+    menu.id='maintenance-menu';
+    menu.className='maintenance-menu';
+    menu.innerHTML=`<summary><span aria-hidden="true">&#9881;</span><span>Manuten&ccedil;&atilde;o</span><span class="maintenance-chevron" aria-hidden="true">&#9662;</span></summary><div class="maintenance-actions"><button type="button" onclick="startAdminMaintenance('publish')">Compilar e reiniciar website</button><button type="button" onclick="startAdminMaintenance('restart')">Reiniciar servi&ccedil;o</button></div>`;
+    footer.prepend(menu);
+  }
+  if(!document.getElementById('maintenance-blocker')){
+    const blocker=document.createElement('div');
+    blocker.id='maintenance-blocker';
+    blocker.className='maintenance-blocker';
+    blocker.setAttribute('role','alertdialog');
+    blocker.setAttribute('aria-modal','true');
+    blocker.innerHTML='<div class="maintenance-progress-card"><div class="maintenance-spinner" aria-hidden="true"></div><h2>Manuten&ccedil;&atilde;o em andamento</h2><p id="maintenance-progress-message">Preparando manuten&ccedil;&atilde;o...</p><small>O painel ser&aacute; liberado automaticamente quando a opera&ccedil;&atilde;o terminar.</small></div>';
+    document.body.appendChild(blocker);
+  }
+  if(!document.getElementById('maintenance-result')){
+    const modal=document.createElement('div');
+    modal.id='maintenance-result';
+    modal.className='modal-overlay maintenance-result';
+    modal.innerHTML='<div class="modal-box maintenance-result-box"><div id="maintenance-result-icon" class="maintenance-result-icon" aria-hidden="true"></div><div id="maintenance-result-title" class="modal-title"></div><div class="modal-body"><p id="maintenance-result-message" class="modal-note"></p><pre id="maintenance-result-log" class="maintenance-result-log hidden"></pre></div><div class="modal-footer"><a id="maintenance-result-logs" class="btn btn-outline hidden" href="/admin/logs.html">Conferir logs</a><button type="button" class="btn btn-primary" onclick="closeMaintenanceResult()">Fechar</button></div></div>';
+    document.body.appendChild(modal);
+  }
+}
+
+async function startAdminMaintenance(operation){
+  const publish=operation==='publish';
+  const confirmed=await askAdminConfirm(
+    publish
+      ? 'Compilar a aplicação em Release e reiniciar o website? O site ficará indisponível por alguns instantes.'
+      : 'Reiniciar o serviço premierapi agora? O site ficará indisponível por alguns instantes.',
+    {title:'Confirmar manutenção',confirmText:publish?'Compilar e reiniciar':'Reiniciar'});
+  if(!confirmed)return;
+  showMaintenanceBlocker(publish?'Solicitando compilação...':'Solicitando reinício...');
+  try{
+    const response=await fetch(`${API}/maintenance/${operation}`,{method:'POST',headers:hdrs()});
+    const data=await response.json().catch(()=>null);
+    const status=data?.status;
+    if(!response.ok||!status?.jobId)throw new Error(data?.erro||'Não foi possível iniciar a manutenção.');
+    sessionStorage.setItem(MAINTENANCE_JOB_KEY,status.jobId);
+    pollMaintenanceStatus(status.jobId);
+  }catch(error){
+    hideMaintenanceBlocker();
+    showMaintenanceResult({phase:'failed',message:error.message||'Não foi possível iniciar a manutenção.'});
+  }
+}
+
+function resumeMaintenanceState(){
+  setupMaintenanceControls();
+  const storedResult=sessionStorage.getItem(MAINTENANCE_RESULT_KEY);
+  if(storedResult){
+    sessionStorage.removeItem(MAINTENANCE_RESULT_KEY);
+    try{showMaintenanceResult(JSON.parse(storedResult));}catch{}
+    return;
+  }
+  const jobId=sessionStorage.getItem(MAINTENANCE_JOB_KEY);
+  if(jobId){showMaintenanceBlocker('Retomando acompanhamento da manutenção...');pollMaintenanceStatus(jobId);}
+}
+
+async function pollMaintenanceStatus(jobId){
+  clearTimeout(maintenancePollTimer);
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),4500);
+  try{
+    const response=await fetch(`${API}/maintenance/${encodeURIComponent(jobId)}`,{headers:hdrs(),signal:controller.signal,cache:'no-store'});
+    const status=await response.json().catch(()=>null);
+    if(response.ok&&status){
+      showMaintenanceBlocker(status.message||maintenancePhaseMessage(status.phase));
+      if(status.phase==='success'||status.phase==='warning'){
+        sessionStorage.removeItem(MAINTENANCE_JOB_KEY);
+        sessionStorage.setItem(MAINTENANCE_RESULT_KEY,JSON.stringify(status));
+        window.location.reload();
+        return;
+      }
+      if(status.phase==='failed'){
+        sessionStorage.removeItem(MAINTENANCE_JOB_KEY);
+        hideMaintenanceBlocker();
+        showMaintenanceResult(status);
+        return;
+      }
+    }else if(response.status===401){
+      sessionStorage.removeItem(MAINTENANCE_JOB_KEY);
+      hideMaintenanceBlocker();
+      showMaintenanceResult({phase:'failed',message:'A sessão administrativa expirou durante a manutenção.'});
+      return;
+    }
+  }catch{
+    showMaintenanceBlocker('Aguardando o website voltar a responder...');
+  }finally{
+    clearTimeout(timeout);
+  }
+  maintenancePollTimer=setTimeout(()=>pollMaintenanceStatus(jobId),2000);
+}
+
+function maintenancePhaseMessage(phase){
+  return {queued:'Preparando manutenção...',building:'Compilando a aplicação...',restarting:'Reiniciando o serviço...',waiting:'Aguardando o website voltar a responder...'}[phase]||'Manutenção em andamento...';
+}
+
+function showMaintenanceBlocker(message){
+  setupMaintenanceControls();
+  document.getElementById('maintenance-progress-message').textContent=message;
+  document.getElementById('maintenance-blocker').classList.add('active');
+  document.body.classList.add('maintenance-locked');
+}
+
+function hideMaintenanceBlocker(){
+  document.getElementById('maintenance-blocker')?.classList.remove('active');
+  document.body.classList.remove('maintenance-locked');
+}
+
+function showMaintenanceResult(status){
+  setupMaintenanceControls();
+  const warning=status.phase==='warning';
+  const success=status.phase==='success';
+  const modal=document.getElementById('maintenance-result');
+  modal.classList.toggle('is-success',success);
+  modal.classList.toggle('is-warning',warning);
+  modal.classList.toggle('is-error',!success&&!warning);
+  document.getElementById('maintenance-result-icon').textContent=success?'✓':warning?'⚠':'✕';
+  document.getElementById('maintenance-result-title').textContent=success?'Website recarregado':warning?'Recarregado com avisos':'Falha na manutenção';
+  document.getElementById('maintenance-result-message').textContent=status.message||'A operação foi concluída.';
+  const log=document.getElementById('maintenance-result-log');
+  log.textContent=status.logTail||'';
+  log.classList.toggle('hidden',!status.logTail);
+  document.getElementById('maintenance-result-logs').classList.toggle('hidden',success);
+  modal.classList.add('active');
+  setTimeout(()=>modal.querySelector('button')?.focus(),0);
+}
+
+function closeMaintenanceResult(){
+  document.getElementById('maintenance-result')?.classList.remove('active');
 }
 
 async function doLogin(){
