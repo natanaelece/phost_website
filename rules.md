@@ -43,6 +43,8 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - Não exponha segredos de `appsettings`, ambiente, tokens, chaves ou payloads sensíveis.
 - Preserve o key ring persistente do ASP.NET Data Protection e sua proteção por certificado em `DataProtectionConfiguration`; não volte a persistir chaves XML sem encryptor nem registre materiais criptográficos.
 - A telemetria é first-party e allowlisted. Nunca envie e-mail, WhatsApp, AnyDesk, senha, conteúdo Pix ou dados bancários. Não há GA4 nem Meta Pixel atualmente.
+- Teste grátis exige sessão autenticada e registro único por usuário. O fluxo deve preservar a trilha `solicitado -> liberado -> utilizado` ou os encerramentos explícitos, impedir nova solicitação depois de utilizado e nunca criar pedido, Pix, cliente Asaas, conta AD ou chamada à Evolution API.
+- Metadados técnicos do cadastro (IP, User-Agent, idioma, país aproximado, origem e canal) servem somente à segurança e validação operacional. Não os envie à telemetria nem os exponha fora das APIs administrativas autenticadas.
 - Mantenha no sitemap apenas `/`, `/painel` e `/privacidade`. Rotas internas devem continuar fora do índice. Ao mudar CSP ou Cloudflare, preserve `robots.txt`, `sitemap.xml` e recursos públicos necessários.
 - HTML, CSS, JavaScript e demais arquivos que definem a aplicação devem manter `Cache-Control`, `CDN-Cache-Control` e `Cloudflare-CDN-Cache-Control` como `no-store`; mídia pode continuar cacheável. Não crie Cache Rule no edge que sobreponha essa política para arquivos de aplicação.
 - E-mail não confirmado recebe no máximo dois reenvios automáticos: dia seguinte às 11:00 e outro dia às 19:00. Reenvio manual do admin não consome essa cota; confirmação manual continua explícita pelo checkbox.

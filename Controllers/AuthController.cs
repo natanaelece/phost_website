@@ -215,14 +215,23 @@ namespace PremierAPI.Controllers
 
             DateTime registeredAt = GetConfiguredLocalNow();
             DateTime firstReminderAt = EmailConfirmationReminderWorker.GetFirstReminderAt(registeredAt);
+            string? registrationIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            string? registrationUserAgent = TruncateHeader("User-Agent", 512);
+            string? registrationAcceptLanguage = TruncateHeader("Accept-Language", 200);
+            string? registrationCountryCode = NormalizeCountryCode(TruncateHeader("CF-IPCountry", 2));
+            string? registrationReferrerHost = GetReferrerHost();
             string sql = @"INSERT INTO users
                               (name, email, whatsapp, password_hash, referred_by,
                                email_confirmation_token, email_confirmed,
                                email_confirmation_resend_count, email_confirmation_last_sent_at,
-                               email_confirmation_next_send_at, created_at)
+                               email_confirmation_next_send_at, created_at,
+                               registration_ip, registration_user_agent, registration_accept_language,
+                               registration_country_code, registration_referrer_host, registration_source)
                            VALUES
                               (@Name, @Email, @Whatsapp, @Hash, @RefId,
-                               @EmailToken, false, 0, @RegisteredAt, @FirstReminderAt, @RegisteredAt)
+                               @EmailToken, false, 0, @RegisteredAt, @FirstReminderAt, @RegisteredAt,
+                               CAST(@RegistrationIp AS inet), @RegistrationUserAgent, @RegistrationAcceptLanguage,
+                               @RegistrationCountryCode, @RegistrationReferrerHost, 'site')
                            RETURNING id";
 
             await db.OpenAsync();
@@ -236,7 +245,12 @@ namespace PremierAPI.Controllers
                 RefId = referredBy,
                 EmailToken = emailToken,
                 RegisteredAt = registeredAt,
-                FirstReminderAt = firstReminderAt
+                FirstReminderAt = firstReminderAt,
+                RegistrationIp = registrationIp,
+                RegistrationUserAgent = registrationUserAgent,
+                RegistrationAcceptLanguage = registrationAcceptLanguage,
+                RegistrationCountryCode = registrationCountryCode,
+                RegistrationReferrerHost = registrationReferrerHost
             }, transaction);
             await db.ExecuteAsync(@"
                 INSERT INTO pending_ad_credentials (user_id, protected_password)
@@ -528,6 +542,26 @@ namespace PremierAPI.Controllers
             {
                 return DateTime.Now;
             }
+        }
+
+        private string? TruncateHeader(string name, int maxLength)
+        {
+            string value = Request.Headers[name].FirstOrDefault()?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            return value[..Math.Min(value.Length, maxLength)];
+        }
+
+        private static string? NormalizeCountryCode(string? value)
+        {
+            string normalized = (value ?? "").Trim().ToUpperInvariant();
+            return normalized.Length == 2 && normalized.All(char.IsLetter) ? normalized : null;
+        }
+
+        private string? GetReferrerHost()
+        {
+            string referrer = Request.Headers.Referer.FirstOrDefault() ?? "";
+            if (!Uri.TryCreate(referrer, UriKind.Absolute, out var uri)) return null;
+            return uri.Host[..Math.Min(uri.Host.Length, 150)];
         }
     }
 

@@ -153,7 +153,7 @@
             <div id="ajudaComoUsar" class="p-6 md:p-8">
                 <div class="grid sm:grid-cols-2 gap-4 mb-7">
                     <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">1</span><h3 class="font-bold text-white mb-2">Monte seu plano</h3><p class="text-sm text-slate-400 leading-relaxed">Escolha a quantidade de computadores, instâncias e o período. A simulação de preço funciona mesmo sem login.</p></div>
-                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">2</span><h3 class="font-bold text-white mb-2">Entre ou crie sua conta</h3><p class="text-sm text-slate-400 leading-relaxed">O login é necessário somente para gerar o Pix, acompanhar pedidos, credenciais e indicações.</p></div>
+                    <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">2</span><h3 class="font-bold text-white mb-2">Entre ou crie sua conta</h3><p class="text-sm text-slate-400 leading-relaxed">O login é necessário para solicitar o teste grátis, gerar o Pix e acompanhar pedidos, credenciais e indicações.</p></div>
                     <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">3</span><h3 class="font-bold text-white mb-2">Pague com Pix</h3><p class="text-sm text-slate-400 leading-relaxed">Revise o resumo, gere a cobrança e faça o pagamento. A confirmação é recebida automaticamente pela plataforma.</p></div>
                     <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">4</span><h3 class="font-bold text-white mb-2">Receba seu acesso</h3><p class="text-sm text-slate-400 leading-relaxed">Após a confirmação, acompanhe a liberação no painel. Nossa equipe auxilia na configuração inicial quando necessário.</p></div>
                 </div>
@@ -165,7 +165,7 @@
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Os computadores são máquinas virtuais?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Não. São computadores físicos reais, com conexão e IP próprios. O serviço não fornece hacks ou bots.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Como acesso o computador contratado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Você pode acessar pelo navegador em nossa página com Guacamole ou usar o RealVNC Viewer no computador. O suporte orienta a configuração inicial.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Quando o acesso é liberado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">O sistema recebe a confirmação do PIX e inicia a liberação. Você acompanha o pedido e as credenciais pelo painel.</p></details>
-                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Posso testar antes de contratar?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Sim. O teste gratuito dura 30 minutos e deve ser solicitado pelo WhatsApp, sujeito à disponibilidade e agendamento.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Posso testar antes de contratar?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Sim. O teste gratuito dura 30 minutos. Entre na sua conta, registre a solicitação no painel e acompanhe a liberação. A equipe usa o WhatsApp cadastrado apenas para o contato operacional.</p></details>
                 <div class="mt-6 rounded-xl border border-green-500/20 bg-green-500/10 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h3 class="font-bold text-white">Ainda ficou com alguma dúvida?</h3><p class="text-sm text-slate-400 mt-1">Fale diretamente com a equipe da Premier Host.</p></div><a href="https://wa.me/5534999187189?text=Ol%C3%A1%21+Tenho+uma+d%C3%BAvida+sobre+a+Premier+Host." target="_blank" rel="noopener" class="text-center bg-[#25D366] hover:bg-[#20bd5a] text-slate-950 px-5 py-3 rounded-lg font-black transition-colors whitespace-nowrap">Chamar no WhatsApp</a></div>
             </div>
         </div>
@@ -203,6 +203,21 @@
             </div>
             <a href="/?action=login" class="w-full md:w-auto text-center bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all">Fazer login</a>
         </div>
+
+        <section id="teste-gratis" class="mb-8 rounded-2xl border border-blue-500/25 bg-gradient-to-r from-blue-950/70 to-slate-900 p-6 shadow-xl" aria-labelledby="freeTrialTitle">
+            <div class="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                <div class="max-w-2xl">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <h2 id="freeTrialTitle" class="text-xl font-black text-white">Teste grátis por 30 minutos</h2>
+                        <span id="freeTrialBadge" class="rounded-full bg-slate-800 px-3 py-1 text-xs font-bold text-slate-300">Carregando</span>
+                    </div>
+                    <p id="freeTrialMessage" class="mt-2 text-sm leading-6 text-slate-400">Consulte a disponibilidade e acompanhe sua solicitação por aqui.</p>
+                    <div id="freeTrialDates" class="mt-3 hidden flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500"></div>
+                </div>
+                <button id="freeTrialAction" type="button" onclick="requestFreeTrial()" class="w-full rounded-lg bg-blue-600 px-5 py-3 text-sm font-black text-white transition-colors hover:bg-blue-500 md:w-auto">Solicitar teste grátis</button>
+            </div>
+            <p id="freeTrialFeedback" role="status" aria-live="polite" class="mt-3 hidden text-xs font-bold"></p>
+        </section>
 		
 		<!-- Bloco de Indicação (Criar Código) - Apenas se DB tiver Null -->
 		<div id="referralBlock" class="hidden bg-slate-900 border border-blue-500/20 p-5 rounded-xl shadow-lg mb-8 flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden">
@@ -655,7 +670,91 @@
         });
 
         function goLogin() {
-            window.location.href = '/?action=login';
+            const intent = sessionStorage.getItem('premier_post_auth_intent');
+            window.location.href = intent === 'free-trial' ? '/?action=login&intent=free-trial' : '/?action=login';
+        }
+
+        function formatFreeTrialDate(value) {
+            if (!value) return '';
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('pt-BR');
+        }
+
+        function renderFreeTrialStatus(status) {
+            const badge = document.getElementById('freeTrialBadge');
+            const message = document.getElementById('freeTrialMessage');
+            const action = document.getElementById('freeTrialAction');
+            const dates = document.getElementById('freeTrialDates');
+            const key = status?.status || 'nao_solicitado';
+            const states = {
+                nao_solicitado: ['Disponível', 'Você ainda não solicitou o teste grátis. O pedido será registrado e analisado pela equipe.', 'Solicitar teste grátis', true, 'bg-blue-500/15 text-blue-300'],
+                solicitado: ['Solicitado', 'Sua solicitação foi recebida e está aguardando liberação.', 'Solicitação registrada', false, 'bg-amber-500/15 text-amber-300'],
+                liberado: ['Liberado', 'Seu teste foi liberado. A equipe usará o WhatsApp cadastrado para orientar o acesso.', 'Teste liberado', false, 'bg-green-500/15 text-green-300'],
+                utilizado: ['Utilizado', 'Esta conta já utilizou o teste grátis.', 'Teste utilizado', false, 'bg-slate-700 text-slate-300'],
+                recusado: ['Não liberado', 'A solicitação anterior não foi liberada. Você pode registrar uma nova solicitação.', 'Solicitar novamente', true, 'bg-red-500/15 text-red-300'],
+                cancelado: ['Cancelado', 'A solicitação anterior foi cancelada antes do uso. Você pode solicitar novamente.', 'Solicitar novamente', true, 'bg-slate-700 text-slate-300']
+            };
+            const view = states[key] || states.nao_solicitado;
+            badge.textContent = view[0];
+            badge.className = `rounded-full px-3 py-1 text-xs font-bold ${view[4]}`;
+            message.textContent = view[1];
+            action.textContent = view[2];
+            action.disabled = !view[3];
+            action.classList.toggle('opacity-50', !view[3]);
+            action.classList.toggle('cursor-not-allowed', !view[3]);
+            const items = [];
+            if (status?.firstRequestedAt) items.push(`<span>Primeira solicitação: <strong class="text-slate-300">${formatFreeTrialDate(status.firstRequestedAt)}</strong></span>`);
+            if (status?.lastRequestedAt && status.lastRequestedAt !== status.firstRequestedAt) items.push(`<span>Última solicitação: <strong class="text-slate-300">${formatFreeTrialDate(status.lastRequestedAt)}</strong></span>`);
+            if (status?.releasedAt) items.push(`<span>Liberado: <strong class="text-slate-300">${formatFreeTrialDate(status.releasedAt)}</strong></span>`);
+            if (status?.usedAt) items.push(`<span>Utilizado: <strong class="text-slate-300">${formatFreeTrialDate(status.usedAt)}</strong></span>`);
+            dates.innerHTML = items.join('');
+            dates.classList.toggle('hidden', items.length === 0);
+            dates.classList.toggle('flex', items.length > 0);
+        }
+
+        function configureGuestFreeTrial() {
+            renderFreeTrialStatus({ status: 'nao_solicitado' });
+            const action = document.getElementById('freeTrialAction');
+            action.textContent = 'Entrar para solicitar';
+            action.disabled = false;
+            action.onclick = () => {
+                sessionStorage.setItem('premier_post_auth_intent', 'free-trial');
+                goLogin();
+            };
+        }
+
+        async function loadFreeTrialStatus() {
+            const response = await fetch('/api/free-trial/me', { headers: { 'X-Session-Token': localStorage.getItem('premier_token') } });
+            if (response.status === 401) { clearLocalSession(); configureGuestAccess(); return; }
+            if (!response.ok) throw new Error('Não foi possível consultar o teste grátis.');
+            renderFreeTrialStatus(await response.json());
+            const action = document.getElementById('freeTrialAction');
+            action.onclick = requestFreeTrial;
+        }
+
+        async function requestFreeTrial() {
+            if (!isLoggedIn) { configureGuestFreeTrial(); goLogin(); return; }
+            const action = document.getElementById('freeTrialAction');
+            const feedback = document.getElementById('freeTrialFeedback');
+            action.disabled = true;
+            action.textContent = 'Registrando...';
+            feedback.classList.add('hidden');
+            try {
+                const response = await fetch('/api/free-trial/request', { method: 'POST', headers: { 'X-Session-Token': localStorage.getItem('premier_token') } });
+                const data = await response.json().catch(() => null);
+                const status = data?.status?.status ? data.status : data?.status;
+                if (!response.ok) throw new Error(data?.erro || 'Não foi possível registrar a solicitação.');
+                renderFreeTrialStatus(status);
+                feedback.textContent = data?.msg || 'Solicitação registrada.';
+                feedback.className = 'mt-3 text-xs font-bold text-green-400';
+                window.premierAnalytics?.track('free_trial_requested', { result: 'success' });
+                sessionStorage.removeItem('premier_post_auth_intent');
+            } catch (error) {
+                feedback.textContent = error.message || 'Não foi possível registrar a solicitação.';
+                feedback.className = 'mt-3 text-xs font-bold text-red-400';
+                action.disabled = false;
+                action.textContent = 'Tentar novamente';
+            }
         }
 
         function clearLocalSession() {
@@ -691,6 +790,7 @@
             pendingPixData = null;
             clearInterval(discountInterval);
             clearInterval(pixPollingInterval);
+            configureGuestFreeTrial();
 
             document.getElementById('loginRequiredBanner')?.classList.remove('hidden');
             document.getElementById('loginRequiredBanner')?.classList.add('flex');
@@ -818,6 +918,11 @@
                 document.getElementById('welcomeText').innerText = `Olá, ${userData.name.split(' ')[0]}. Monte seu plano`;
                 document.getElementById('orderWa').value = userData.whatsapp;
                 abrirBoasVindasCanal();
+                await loadFreeTrialStatus();
+                if (new URLSearchParams(window.location.search).get('intent') === 'free-trial' || window.location.hash === '#teste-gratis') {
+                    sessionStorage.removeItem('premier_post_auth_intent');
+                    requestAnimationFrame(() => document.getElementById('teste-gratis')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+                }
                 
                 // Preenche Modal Perfil
                 document.getElementById('profName').value = userData.name;

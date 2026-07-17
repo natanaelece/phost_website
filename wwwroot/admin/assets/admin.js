@@ -1000,8 +1000,8 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         if(r.ok) showAdminMessage('success', msg); else showAdminMessage('error', msg);
     }
 
-const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html',logs:'/admin/logs.html'};
-const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
+const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',trials:'/admin/testes-gratis.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html',logs:'/admin/logs.html'};
+const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
 
 function init(){
@@ -1030,6 +1030,7 @@ function enhanceResponsiveTables(root=document){
 const SORTABLE_TABLES={
   'orders-body':{type:'orders',fields:['customer','whatsapp','server','period','computers','totalPrice','asaasPaymentId','status','delivered','expiresAt','createdAt','canceledAt',null]},
   'users-body':{type:'users',fields:['name','whatsapp','isActive','adUsername','totalOrders','totalSpent','activeLicenses','emailConfirmed','createdAt',null]},
+  'trials-body':{type:'trials',fields:['name','whatsapp','status','createdAt','firstRequestedAt','lastRequestedAt','releasedAt','usedAt',null]},
   'ad-users-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-website-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-expired-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
@@ -1060,6 +1061,7 @@ function enhanceSortableHeaders(root=document){
 function currentSortState(type){
   if(type==='orders')return{field:S.ordSort,direction:S.ordSortDir};
   if(type==='users')return{field:S.usrSort,direction:S.usrSortDir};
+  if(type==='trials')return{field:S.trialSort,direction:S.trialSortDir};
   return{field:_adSortField,direction:_adSortDirection};
 }
 function updateSortableHeaderState(){
@@ -1076,6 +1078,7 @@ function applyColumnSort(type,field){
   const state=currentSortState(type);const direction=state.field===field&&state.direction==='asc'?'desc':'asc';
   if(type==='orders'){S.ordSort=field;S.ordSortDir=direction;S.ordPage=1;updateSortableHeaderState();loadOrders();return;}
   if(type==='users'){S.usrSort=field;S.usrSortDir=direction;S.usrPage=1;updateSortableHeaderState();loadUsers();return;}
+  if(type==='trials'){S.trialSort=field;S.trialSortDir=direction;S.trialPage=1;updateSortableHeaderState();loadFreeTrials();return;}
   _adSortField=field;_adSortDirection=direction;renderAdCollections();updateSortableHeaderState();
 }
 function setupResponsiveTables(){
@@ -1092,16 +1095,23 @@ function setupResponsiveTables(){
 function showLogin(){document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';}
 function showApp(){
   document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';
+  ensureFreeTrialNavigation();
   setupAdminMobileNavigation();
   const n=S.user?.name||'Admin';document.getElementById('sname').textContent=n;document.getElementById('savatar').textContent=n[0].toUpperCase();
   setupCurrentView();
   loadCurrentView();
 }
+function ensureFreeTrialNavigation(){
+  if(document.getElementById('nav-trials'))return;
+  const crm=document.getElementById('nav-crm');if(!crm)return;
+  const link=document.createElement('a');link.className='ni';link.id='nav-trials';link.href='/admin/testes-gratis.html';link.innerHTML='<span class="ni-icon">&#9201;</span>Testes gr&aacute;tis';crm.after(link);
+}
 function setupAdminMobileNavigation(){
   const header=document.querySelector('#main > header');
-  if(!header||header.querySelector('.mobile-nav-toggle'))return;
-  const button=document.createElement('button');button.type='button';button.className='mobile-nav-toggle';button.setAttribute('aria-label','Abrir menu administrativo');button.setAttribute('aria-controls','sidebar');button.setAttribute('aria-expanded','false');button.textContent='☰';
-  header.prepend(button);
+  if(!header)return;
+  let button=header.querySelector('.mobile-nav-toggle');
+  if(!button){button=document.createElement('button');button.type='button';button.className='mobile-nav-toggle';button.setAttribute('aria-label','Abrir menu administrativo');button.setAttribute('aria-controls','sidebar');button.setAttribute('aria-expanded','false');button.textContent='☰';header.prepend(button);}
+  if(button.dataset.wired==='true')return;button.dataset.wired='true';
   const backdrop=document.createElement('div');backdrop.className='sidebar-backdrop';document.body.appendChild(backdrop);
   const close=()=>{document.getElementById('sidebar')?.classList.remove('mobile-open');backdrop.classList.remove('active');button.setAttribute('aria-expanded','false');};
   button.addEventListener('click',()=>{const sidebar=document.getElementById('sidebar');const open=!sidebar.classList.contains('mobile-open');sidebar.classList.toggle('mobile-open',open);backdrop.classList.toggle('active',open);button.setAttribute('aria-expanded',String(open));});
@@ -1151,7 +1161,7 @@ async function apiFetch(url){
   return data;
 }
 
-const HDR={dashboard:['Dashboard','Cockpit financeiro e operacional'],financeiro:['Financeiro','Receita, planos e origem dos pedidos'],crm:['CRM','Clientes, renovacoes e fila comercial'],pedidos:['Pedidos','Gerenciar todos os pedidos'],usuarios:['Usuarios','Gerenciar usuarios cadastrados'],ad:['Active Directory','Gerenciar AD Local'],notificacoes:['Notificacoes','Mensagens automaticas do WhatsApp'],logs:['Logs','Acompanhar eventos e falhas da aplicacao']};
+const HDR={dashboard:['Dashboard','Cockpit financeiro e operacional'],financeiro:['Financeiro','Receita, planos e origem dos pedidos'],crm:['CRM','Clientes, renovacoes e fila comercial'],trials:['Testes grátis','Solicitações, liberações e uso do teste'],pedidos:['Pedidos','Gerenciar todos os pedidos'],usuarios:['Usuarios','Gerenciar usuarios cadastrados'],ad:['Active Directory','Gerenciar AD Local'],notificacoes:['Notificacoes','Mensagens automaticas do WhatsApp'],logs:['Logs','Acompanhar eventos e falhas da aplicacao']};
 function setupCurrentView(){
   S.view=document.body?.dataset.view||S.view||'dashboard';
   document.querySelectorAll('.ni').forEach(e=>e.classList.remove('active'));
@@ -1162,7 +1172,7 @@ function setupCurrentView(){
   document.getElementById('hsub').textContent=s;
 }
 function loadCurrentView(){
-  if(S.view==='dashboard')loadDash();else if(S.view==='financeiro')loadFinanceiro();else if(S.view==='crm')loadCrm();else if(S.view==='pedidos')loadOrders();else if(S.view==='usuarios')loadUsers();else if(S.view==='ad')loadAd();else if(S.view==='notificacoes'){wireWhatsAppEditor();loadNotificacoes();}else if(S.view==='logs'){wireAdminLogs();loadAdminLogs();}
+  if(S.view==='dashboard')loadDash();else if(S.view==='financeiro')loadFinanceiro();else if(S.view==='crm')loadCrm();else if(S.view==='trials')loadFreeTrials();else if(S.view==='pedidos')loadOrders();else if(S.view==='usuarios')loadUsers();else if(S.view==='ad')loadAd();else if(S.view==='notificacoes'){wireWhatsAppEditor();loadNotificacoes();}else if(S.view==='logs'){wireAdminLogs();loadAdminLogs();}
 }
 function go(v){
   const target=ADMIN_ROUTES[v];
@@ -1368,6 +1378,26 @@ async function loadOrders(p){
 }
 function setFilter(f,btn){S.ordFilter=f;S.ordPage=1;document.querySelectorAll('#fbar .fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadOrders();}
 
+function browserSummary(userAgent){
+  const ua=userAgent||'';
+  const patterns=[[/Edg\/([\d.]+)/,'Edge'],[/OPR\/([\d.]+)/,'Opera'],[/Chrome\/([\d.]+)/,'Chrome'],[/Firefox\/([\d.]+)/,'Firefox'],[/Version\/([\d.]+).*Safari/,'Safari']];
+  const browser=patterns.map(([re,name])=>{const m=ua.match(re);return m?`${name} ${m[1]}`:null;}).find(Boolean)||'Não identificado';
+  const os=/Windows NT 10/.test(ua)?'Windows':/Android/.test(ua)?'Android':/iPhone|iPad/.test(ua)?'iOS/iPadOS':/Mac OS X/.test(ua)?'macOS':/Linux/.test(ua)?'Linux':'SO não identificado';
+  return `${browser} · ${os}`;
+}
+function registrationInfo(u){
+  const lines=[];
+  if(u.registrationIp)lines.push(`IP: ${u.registrationIp}`);
+  if(u.registrationUserAgent){lines.push(`Navegador: ${browserSummary(u.registrationUserAgent)}`);lines.push(`User-Agent: ${u.registrationUserAgent}`);}
+  if(u.registrationAcceptLanguage)lines.push(`Idioma: ${u.registrationAcceptLanguage}`);
+  if(u.registrationCountryCode)lines.push(`País (Cloudflare): ${u.registrationCountryCode}`);
+  if(u.registrationReferrerHost)lines.push(`Origem: ${u.registrationReferrerHost}`);
+  if(u.registrationSource)lines.push(`Canal: ${u.registrationSource==='admin'?'Criado no Admin':u.registrationSource}`);
+  if(!lines.length)lines.push('Metadados indisponíveis: cadastro anterior à coleta.');
+  const text=lines.join('\n');
+  return `<button type="button" class="registration-info" data-tooltip="${esc(text)}" title="${esc(text)}" aria-label="Informações técnicas do cadastro: ${esc(text)}">i</button>`;
+}
+
 async function loadUsers(p){
   if(p)S.usrPage=p;
   updateSortableHeaderState();
@@ -1386,7 +1416,7 @@ async function loadUsers(p){
           <td style="font-weight:600;color:var(--ok)">${fmtCur(u.totalSpent)}</td>
           <td style="text-align:center">${u.activeLicenses>0?'<span class="badge b-ok">'+u.activeLicenses+' ativa'+(u.activeLicenses>1?'s':'')+'</span>':'<span class="muted">&#8212;</span>'}</td>
           <td>${u.emailConfirmed?'<label class="inline-check"><input type="checkbox" checked disabled><span>Confirmado</span></label>':`<div class="email-confirmation-actions"><input type="checkbox" data-user-id="${u.id}" aria-label="Confirmar e-mail manualmente" title="Confirmar e-mail manualmente" onchange="confirmEmailFromCheckbox(this)"><button class="btn btn-outline" onclick="resendEmailConfirmation('${u.id}',this)">Reenviar</button></div>`}</td>
-          <td class="muted">${fmtDate(u.createdAt)}</td>
+          <td class="muted"><span class="registration-date">${fmtDate(u.createdAt)} ${registrationInfo(u)}</span></td>
           <td>
               <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
                   <button class="btn btn-outline" style="padding:4px 8px;font-size:12px" title="Editar" onclick="openUserModal('${u.id}')">Editar</button>
@@ -1399,6 +1429,56 @@ async function loadUsers(p){
   renderPag('users',data.total,S.usrPage,20);
 }
 let st_=null;function handleSearch(v){S.usrSearch=v;S.usrPage=1;clearTimeout(st_);st_=setTimeout(()=>loadUsers(),400);}
+
+function trialBadge(status){
+  const map={nao_solicitado:['Nunca solicitou','b-muted'],solicitado:['Solicitado','b-warn'],liberado:['Liberado','b-ok'],utilizado:['Utilizado','b-accent'],recusado:['Recusado','b-err'],cancelado:['Cancelado','b-muted']};
+  const item=map[status]||map.nao_solicitado;return `<span class="badge ${item[1]}">${item[0]}</span>`;
+}
+function trialActions(u){
+  if(!u.requestId)return '<span class="muted">Sem solicitação</span>';
+  const buttons=[];
+  if(u.status==='solicitado'){
+    buttons.push(`<button class="btn btn-outline trial-release" onclick="updateFreeTrial('${u.requestId}','release','Liberar este teste grátis?')">Liberar</button>`);
+    buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','reject','Recusar esta solicitação?')">Recusar</button>`);
+  }
+  if(u.status==='liberado'){
+    buttons.push(`<button class="btn btn-outline trial-used" onclick="updateFreeTrial('${u.requestId}','mark-used','Confirmar que o teste foi realmente utilizado?')">Marcar utilizado</button>`);
+    buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','cancel','Cancelar esta liberação sem marcar uso?')">Cancelar</button>`);
+  }
+  if(u.whatsapp){const phone=u.whatsapp.replace(/\D/g,'');buttons.push(`<a class="btn btn-outline" target="_blank" rel="noopener" href="https://wa.me/55${phone.replace(/^55/,'')}">WhatsApp</a>`);}
+  return buttons.length?`<div class="action-row">${buttons.join('')}</div>`:'<span class="muted">Sem ação</span>';
+}
+async function loadFreeTrials(p){
+  if(p)S.trialPage=p;
+  updateSortableHeaderState();
+  const body=document.getElementById('trials-body');if(!body)return;
+  body.innerHTML='<tr><td colspan="9" class="loading"><div class="spinner"></div> Carregando...</td></tr>';
+  const qs=new URLSearchParams({filter:S.trialFilter,page:S.trialPage,limit:20,search:S.trialSearch,sortBy:S.trialSort,sortDir:S.trialSortDir});
+  const data=await apiFetch(`${API}/free-trials?${qs}`);if(!data)return;
+  setText('trial-never',data.stats?.neverRequested??0);setText('trial-not-used',data.stats?.notUsed??0);setText('trial-requested',data.stats?.requested??0);setText('trial-released',data.stats?.released??0);setText('trial-used',data.stats?.used??0);
+  if(!data.users?.length)body.innerHTML='<tr><td colspan="9" class="empty">Nenhum usuário encontrado para este filtro.</td></tr>';
+  else body.innerHTML=data.users.map(u=>`<tr><td><div class="ucell"><div class="avatar">${initial(u.name)}</div><div><div class="ucell-name">${esc(u.name)}</div><div class="ucell-email">${esc(u.email)}</div></div></div></td><td class="muted">${esc(u.whatsapp||'-')}</td><td>${trialBadge(u.status)}</td><td class="muted"><span class="registration-date">${fmtDate(u.createdAt)} ${registrationInfo(u)}</span></td><td class="muted">${u.firstRequestedAt?fmtDateTime(u.firstRequestedAt):'—'}</td><td class="muted">${u.lastRequestedAt?fmtDateTime(u.lastRequestedAt):'—'}${u.requestCount>1?`<small class="trial-count">${u.requestCount} solicitações</small>`:''}</td><td class="muted">${u.releasedAt?fmtDateTime(u.releasedAt):'—'}</td><td class="muted">${u.usedAt?fmtDateTime(u.usedAt):'—'}</td><td>${trialActions(u)}</td></tr>`).join('');
+  enhanceResponsiveTables();
+  renderTrialPagination(data.total,data.page,data.limit);
+  setText('lupdate','Atualizado: '+new Date().toLocaleTimeString('pt-BR'));
+}
+function setTrialFilter(filter,button){S.trialFilter=filter;S.trialPage=1;document.querySelectorAll('#trial-filters .fb').forEach(b=>b.classList.remove('active'));button.classList.add('active');loadFreeTrials();}
+let trialSearchTimer=null;function handleTrialSearch(value){S.trialSearch=value;S.trialPage=1;clearTimeout(trialSearchTimer);trialSearchTimer=setTimeout(()=>loadFreeTrials(),350);}
+function renderTrialPagination(total,current,limit){
+  const count=document.getElementById('trials-count'),buttons=document.getElementById('trials-pag');const pages=Math.ceil(total/limit);
+  count.textContent=total?`${(current-1)*limit+1}-${Math.min(current*limit,total)} de ${total}`:'0 resultados';
+  if(pages<=1){buttons.innerHTML='';return;}
+  let html=`<button class="pb" onclick="loadFreeTrials(${current-1})" ${current===1?'disabled':''}>&lsaquo;</button>`;
+  for(let i=1;i<=pages;i++){if(i===1||i===pages||(i>=current-1&&i<=current+1))html+=`<button class="pb ${i===current?'active':''}" onclick="loadFreeTrials(${i})">${i}</button>`;else if(i===current-2||i===current+2)html+='<span class="muted">…</span>';}
+  html+=`<button class="pb" onclick="loadFreeTrials(${current+1})" ${current===pages?'disabled':''}>&rsaquo;</button>`;buttons.innerHTML=html;
+}
+async function updateFreeTrial(id,action,message){
+  if(!await askAdminConfirm(message,{title:'Teste grátis',confirmText:'Confirmar'}))return;
+  const response=await fetch(`${API}/free-trials/${encodeURIComponent(id)}/${encodeURIComponent(action)}`,{method:'PUT',headers:hdrs()});
+  const data=await response.json().catch(()=>null);
+  if(!response.ok){showAdminMessage('error',data?.erro||'Não foi possível atualizar o teste.');return;}
+  showAdminMessage('success',data?.msg||'Situação atualizada.');loadFreeTrials();
+}
 
 function renderPag(type,total,cur,limit){
   const pages=Math.ceil(total/limit);const cnt=document.getElementById(type+'-count');const btns=document.getElementById(type+'-pag');

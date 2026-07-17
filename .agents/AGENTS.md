@@ -20,6 +20,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - Ordenação das tabelas mostra somente uma seta na coluna ativa; mobile deve preservar todas as informações em cartões.
 - Usuário local pode ser vinculado às OUs/pastas de ativos, expirados e website.
 - Cadastro público nunca cria usuário AD. O provisionamento e vínculo acontecem somente após pedido pago; falhas ficam para reconciliação automática e são reportadas pelo logger/Telegram.
+- Teste grátis exige sessão local, possui um registro por usuário e trilha de eventos, e nunca aciona pedidos, Pix, Asaas, AD ou Evolution API. Metadados técnicos de cadastro ficam restritos ao admin.
 - Se `ad_username` já existe, o provisionamento pago reutiliza a conta vinculada e não cria outra.
 - A conta AD usa a mesma senha do site. Até o primeiro pagamento, ela fica reversivelmente protegida em `pending_ad_credentials`; apague o registro logo após criar e vincular a conta AD. Nunca envie ou registre a senha.
 - O vencimento comercial inclui todo o dia exibido: `accountExpires` vence à meia-noite seguinte; às 01:00 a conta sem outra licença ativa é desativada e movida para a OU configurada de inativos.

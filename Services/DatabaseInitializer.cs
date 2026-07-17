@@ -112,6 +112,12 @@ namespace PremierAPI.Services
                 );",
 
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_ip INET;",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_user_agent VARCHAR(512);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_accept_language VARCHAR(200);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_country_code VARCHAR(2);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_referrer_host VARCHAR(150);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_source VARCHAR(30);",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT false;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS asaas_customer_id VARCHAR(100);",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS asaas_pix_qr_code_id VARCHAR(100);",
@@ -177,6 +183,35 @@ namespace PremierAPI.Services
                 "CREATE INDEX IF NOT EXISTS idx_analytics_events_session_date ON product_analytics_events(session_id, occurred_at DESC);",
                 "CREATE INDEX IF NOT EXISTS idx_analytics_events_user_date ON product_analytics_events(user_id, occurred_at DESC) WHERE user_id IS NOT NULL;",
                 "DELETE FROM product_analytics_events WHERE occurred_at < CURRENT_TIMESTAMP - INTERVAL '13 months';",
+
+                @"CREATE TABLE IF NOT EXISTS free_trial_requests (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    status VARCHAR(20) NOT NULL DEFAULT 'solicitado'
+                        CHECK (status IN ('solicitado', 'liberado', 'utilizado', 'recusado', 'cancelado')),
+                    first_requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    request_count INT NOT NULL DEFAULT 1 CHECK (request_count > 0),
+                    released_at TIMESTAMP,
+                    used_at TIMESTAMP,
+                    closed_at TIMESTAMP,
+                    released_by VARCHAR(150),
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );",
+
+                @"CREATE TABLE IF NOT EXISTS free_trial_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    free_trial_request_id UUID NOT NULL REFERENCES free_trial_requests(id) ON DELETE CASCADE,
+                    event_type VARCHAR(20) NOT NULL
+                        CHECK (event_type IN ('solicitado', 'liberado', 'utilizado', 'recusado', 'cancelado')),
+                    actor_type VARCHAR(20) NOT NULL CHECK (actor_type IN ('usuario', 'admin', 'sistema')),
+                    actor_identifier VARCHAR(150),
+                    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );",
+
+                "CREATE INDEX IF NOT EXISTS idx_free_trial_requests_status_date ON free_trial_requests(status, last_requested_at DESC);",
+                "CREATE INDEX IF NOT EXISTS idx_free_trial_requests_used_at ON free_trial_requests(used_at DESC) WHERE used_at IS NOT NULL;",
+                "CREATE INDEX IF NOT EXISTS idx_free_trial_events_request_date ON free_trial_events(free_trial_request_id, occurred_at DESC);",
                 
                 "UPDATE users SET is_active = true WHERE is_active IS NULL;",
                 "UPDATE users SET email_confirmation_resend_count = 0 WHERE email_confirmation_resend_count IS NULL;",

@@ -28,6 +28,7 @@ namespace PremierAPI.Controllers
         private readonly EmailConfirmationService _emailConfirmation;
         private readonly AdPasswordProtectionService _adPasswordProtection;
         private readonly AdminLogStore _adminLogStore;
+        private readonly FreeTrialService _freeTrials;
 
         public AdminController(
             IConfiguration config,
@@ -36,7 +37,8 @@ namespace PremierAPI.Controllers
             AdAccountProvisioningService adProvisioning,
             EmailConfirmationService emailConfirmation,
             AdPasswordProtectionService adPasswordProtection,
-            AdminLogStore adminLogStore)
+            AdminLogStore adminLogStore,
+            FreeTrialService freeTrials)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -47,6 +49,7 @@ namespace PremierAPI.Controllers
             _emailConfirmation = emailConfirmation;
             _adPasswordProtection = adPasswordProtection;
             _adminLogStore = adminLogStore;
+            _freeTrials = freeTrials;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -466,8 +469,40 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
             long total = await db.QueryFirstOrDefaultAsync<long>(hasSearch ? "SELECT COUNT(*) FROM users WHERE name ILIKE @Search OR email ILIKE @Search" : "SELECT COUNT(*) FROM users", new { Search = $"%{search}%" });
             string sw = hasSearch ? "WHERE u.name ILIKE @Search OR u.email ILIKE @Search" : "";
-            var raw = await db.QueryAsync($@"SELECT u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at AS user_created_at, COUNT(o.id) AS total_orders, COALESCE(SUM(CASE WHEN o.status = 'pago' THEN o.total_price ELSE 0 END), 0) AS total_spent, COUNT(CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN 1 END) AS active_licenses FROM users u LEFT JOIN orders o ON u.id = o.user_id {sw} GROUP BY u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at ORDER BY {orderColumn} {direction} NULLS LAST, u.id DESC LIMIT @Limit OFFSET @Offset", new { Search = $"%{search}%", Limit = limit, Offset = offset });
-            return Ok(new { total, page, limit, users = raw.Select(u => new { id = (Guid)u.id, name = (string)u.name, email = (string)u.email, whatsapp = u.whatsapp as string, isActive = (bool)u.is_active, emailConfirmed = (bool)u.email_confirmed, adUsername = u.ad_username as string, createdAt = (DateTime)u.user_created_at, totalOrders = (long)u.total_orders, totalSpent = (decimal)u.total_spent, activeLicenses = (long)u.active_licenses }) });
+            var raw = await db.QueryAsync($@"SELECT u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at AS user_created_at, u.registration_ip::text AS registration_ip, u.registration_user_agent, u.registration_accept_language, u.registration_country_code, u.registration_referrer_host, u.registration_source, COUNT(o.id) AS total_orders, COALESCE(SUM(CASE WHEN o.status = 'pago' THEN o.total_price ELSE 0 END), 0) AS total_spent, COUNT(CASE WHEN o.status = 'pago' AND (o.created_at::date + o.days + 1) > NOW() THEN 1 END) AS active_licenses FROM users u LEFT JOIN orders o ON u.id = o.user_id {sw} GROUP BY u.id, u.name, u.email, u.whatsapp, u.is_active, u.email_confirmed, u.ad_username, u.created_at, u.registration_ip, u.registration_user_agent, u.registration_accept_language, u.registration_country_code, u.registration_referrer_host, u.registration_source ORDER BY {orderColumn} {direction} NULLS LAST, u.id DESC LIMIT @Limit OFFSET @Offset", new { Search = $"%{search}%", Limit = limit, Offset = offset });
+            return Ok(new { total, page, limit, users = raw.Select(u => new { id = (Guid)u.id, name = (string)u.name, email = (string)u.email, whatsapp = u.whatsapp as string, isActive = (bool)u.is_active, emailConfirmed = (bool)u.email_confirmed, adUsername = u.ad_username as string, createdAt = (DateTime)u.user_created_at, registrationIp = u.registration_ip as string, registrationUserAgent = u.registration_user_agent as string, registrationAcceptLanguage = u.registration_accept_language as string, registrationCountryCode = u.registration_country_code as string, registrationReferrerHost = u.registration_referrer_host as string, registrationSource = u.registration_source as string, totalOrders = (long)u.total_orders, totalSpent = (decimal)u.total_spent, activeLicenses = (long)u.active_licenses }) });
+        }
+
+        [HttpGet("free-trials")]
+        public async Task<IActionResult> GetFreeTrials(
+            [FromQuery] string filter = "all", [FromQuery] int page = 1, [FromQuery] int limit = 20,
+            [FromQuery] string search = "", [FromQuery] string sortBy = "lastRequestedAt", [FromQuery] string sortDir = "desc")
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            var result = await _freeTrials.GetAdminListAsync(filter, page, limit, search, sortBy, sortDir);
+            return Ok(new
+            {
+                result.Total,
+                result.Page,
+                result.Limit,
+                users = result.Users,
+                stats = result.Stats
+            });
+        }
+
+        [HttpPut("free-trials/{id:guid}/{action}")]
+        public async Task<IActionResult> UpdateFreeTrial(Guid id, string action)
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            string actor = _config["AdminEmail"] ?? "admin";
+            var result = await _freeTrials.TransitionAsync(id, action.Trim().ToLowerInvariant(), actor);
+            if (result == null) return NotFound(new { erro = "Solicitação de teste não encontrada." });
+            if (!result.Success) return Conflict(new { erro = result.Message, status = result.Status });
+
+            _logger.LogInformation(
+                "[ADMIN][TESTE GRATIS] Solicitação {RequestId} alterada para {Status}.",
+                id, result.Status?.Status);
+            return Ok(new { msg = result.Message, status = result.Status });
         }
 
         // ==========================================
@@ -533,8 +568,8 @@ namespace PremierAPI.Controllers
             await db.OpenAsync();
             await using var transaction = await db.BeginTransactionAsync();
             Guid userId = await db.QuerySingleAsync<Guid>(@"
-                INSERT INTO users (name, email, whatsapp, password_hash, is_active, email_confirmed)
-                VALUES (@Name, @Email, @Whatsapp, @Hash, true, true)
+                INSERT INTO users (name, email, whatsapp, password_hash, is_active, email_confirmed, registration_source)
+                VALUES (@Name, @Email, @Whatsapp, @Hash, true, true, 'admin')
                 RETURNING id",
                 new { Name = req.Name ?? "", Email = req.Email, Whatsapp = req.Whatsapp ?? "", Hash = hash }, transaction);
             await db.ExecuteAsync(@"

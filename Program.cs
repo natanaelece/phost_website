@@ -29,6 +29,7 @@ DataProtectionConfiguration.AddPremierDataProtection(
     builder.Environment.ContentRootPath);
 builder.Services.AddSingleton<PremierAPI.Services.ActiveDirectoryService>();
 builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
+builder.Services.AddScoped<PremierAPI.Services.FreeTrialService>();
 builder.Services.AddSingleton<PremierAPI.Services.EmailConfirmationService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdCredentialEmailService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdPasswordProtectionService>();
