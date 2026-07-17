@@ -490,12 +490,12 @@ namespace PremierAPI.Controllers
             });
         }
 
-        [HttpPut("free-trials/{id:guid}/{action}")]
-        public async Task<IActionResult> UpdateFreeTrial(Guid id, string action)
+        [HttpPut("free-trials/{id:guid}/{operation}")]
+        public async Task<IActionResult> UpdateFreeTrial(Guid id, string operation)
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             string actor = _config["AdminEmail"] ?? "admin";
-            var result = await _freeTrials.TransitionAsync(id, action.Trim().ToLowerInvariant(), actor);
+            var result = await _freeTrials.TransitionAsync(id, operation.Trim().ToLowerInvariant(), actor);
             if (result == null) return NotFound(new { erro = "Solicitação de teste não encontrada." });
             if (!result.Success) return Conflict(new { erro = result.Message, status = result.Status });
 
