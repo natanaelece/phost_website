@@ -24,6 +24,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - O vencimento comercial inclui todo o dia exibido: `accountExpires` vence à meia-noite seguinte; às 01:00 a conta sem outra licença ativa é desativada e movida para a OU configurada de inativos.
 - Confirmação de e-mail admite no máximo dois lembretes automáticos em dias distintos (11:00 e 19:00); o admin pode reenviar à parte ou confirmar manualmente.
 - Reenvio manual no mesmo dia exige confirmação explícita do operador, com a guarda aplicada também no backend.
+- Confirmação pelo link ou pelo admin invalida o token, cancela lembretes e envia a mesma notificação de sucesso ao cliente.
 - A seleção manual de grupo para computador sem sugestão e todas as falhas LDAP recuperáveis usam ao menos `Warning`, acionando Telegram; falhas que impedem a ação usam `Error`. O admin possui uma tela de Logs em memória, sanitizada, para a execução atual.
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.

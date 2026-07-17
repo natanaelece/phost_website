@@ -272,14 +272,23 @@ namespace PremierAPI.Controllers
                                email_confirmation_token = NULL,
                                email_confirmation_next_send_at = NULL
                            WHERE email_confirmation_token = @Token
-                           RETURNING email";
+                           RETURNING name AS Name, email AS Email";
 
-            string? emailCadastrado = await db.QueryFirstOrDefaultAsync<string>(sql, new { Token = token });
+            var confirmedUser = await db.QueryFirstOrDefaultAsync<ConfirmedEmailUser>(sql, new { Token = token });
 
-            if (string.IsNullOrEmpty(emailCadastrado))
+            if (confirmedUser == null)
                 return BadRequest(new { erro = "Token inválido ou já expirou." });
 
-            return Ok(new { success = true, mensagem = "E-mail verificado com sucesso!", email = emailCadastrado });
+            try
+            {
+                await _emailConfirmation.SendConfirmedAsync(confirmedUser.Email, confirmedUser.Name, HttpContext.RequestAborted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[EMAIL CONFIRMACAO] E-mail confirmado, mas a notificacao de sucesso falhou.");
+            }
+
+            return Ok(new { success = true, mensagem = "E-mail verificado com sucesso!", email = confirmedUser.Email });
         }
 
         // =========================================================================
@@ -570,6 +579,12 @@ namespace PremierAPI.Controllers
         public bool Is_Active { get; set; } = true;
         public string? Ad_Username { get; set; }
         [JsonIgnore] public string Password_Hash { get; set; } = "";
+    }
+
+    internal class ConfirmedEmailUser
+    {
+        public string Name { get; set; } = "";
+        public string Email { get; set; } = "";
     }
 
     // DTO público retornado ao cliente

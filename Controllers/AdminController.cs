@@ -601,14 +601,43 @@ namespace PremierAPI.Controllers
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
-            int rows = await db.ExecuteAsync(@"
-                UPDATE users
-                SET email_confirmed = true,
-                    email_confirmation_token = NULL,
-                    email_confirmation_next_send_at = NULL
-                WHERE id = @Id", new { Id = id });
-            if (rows == 0) return NotFound(new { erro = "Usuario nao encontrado." });
-            return Ok(new { msg = "E-mail confirmado manualmente." });
+            await db.OpenAsync(HttpContext.RequestAborted);
+            await using var transaction = await db.BeginTransactionAsync(HttpContext.RequestAborted);
+            try
+            {
+                var user = await db.QueryFirstOrDefaultAsync<ManualConfirmationUser>(@"
+                    SELECT id AS Id, name AS Name, email AS Email, email_confirmed AS EmailConfirmed
+                    FROM users
+                    WHERE id = @Id
+                    FOR UPDATE", new { Id = id }, transaction);
+                if (user == null)
+                {
+                    await transaction.RollbackAsync(HttpContext.RequestAborted);
+                    return NotFound(new { erro = "Usuario nao encontrado." });
+                }
+                if (user.EmailConfirmed)
+                {
+                    await transaction.RollbackAsync(HttpContext.RequestAborted);
+                    return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
+                }
+
+                await db.ExecuteAsync(@"
+                    UPDATE users
+                    SET email_confirmed = true,
+                        email_confirmation_token = NULL,
+                        email_confirmation_next_send_at = NULL
+                    WHERE id = @Id", new { Id = id }, transaction);
+                await _emailConfirmation.SendConfirmedAsync(user.Email, user.Name, HttpContext.RequestAborted);
+                await transaction.CommitAsync(HttpContext.RequestAborted);
+                return Ok(new { msg = "E-mail confirmado manualmente e cliente notificado." });
+            }
+            catch (Exception ex)
+            {
+                if (transaction.Connection != null)
+                    await transaction.RollbackAsync(CancellationToken.None);
+                _logger.LogError(ex, "[EMAIL CONFIRMACAO] Falha ao confirmar manualmente ou notificar o usuario {UserId}.", id);
+                return StatusCode(502, new { erro = "Nao foi possivel confirmar o e-mail e notificar o cliente." });
+            }
         }
 
         [HttpPost("users/{id}/resend-confirmation")]
@@ -1429,6 +1458,7 @@ namespace PremierAPI.Controllers
 
     public class CreateWhatsAppTemplateRequest { public string Title { get; set; } = ""; public string Audience { get; set; } = "Personalizada"; public string TriggerDescription { get; set; } = ""; public string Body { get; set; } = ""; }
     public class ResendConfirmationUser { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Email { get; set; } = ""; public bool EmailConfirmed { get; set; } public string? EmailConfirmationToken { get; set; } public DateTime? EmailConfirmationLastSentAt { get; set; } }
+    public class ManualConfirmationUser { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Email { get; set; } = ""; public bool EmailConfirmed { get; set; } }
     public class UpdateWhatsAppTemplateRequest { public string Body { get; set; } = ""; }
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
     public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }

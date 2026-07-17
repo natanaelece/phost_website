@@ -44,6 +44,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - Mantenha no sitemap apenas `/`, `/painel` e `/privacidade`. Rotas internas devem continuar fora do índice. Ao mudar CSP ou Cloudflare, preserve `robots.txt`, `sitemap.xml` e recursos públicos necessários.
 - E-mail não confirmado recebe no máximo dois reenvios automáticos: dia seguinte às 11:00 e outro dia às 19:00. Reenvio manual do admin não consome essa cota; confirmação manual continua explícita pelo checkbox.
 - Se já houve envio de confirmação no dia atual, o reenvio manual exige confirmação explícita no admin; o backend deve preservar essa guarda, permitindo a continuação somente quando informada pelo operador.
+- Confirmação de e-mail pelo link ou pelo checkbox administrativo invalida o token, cancela lembretes pendentes e usa a mesma notificação de sucesso ao cliente.
 - A seleção manual de grupo de acesso para um computador sem grupo sugerido deve usar `Warning` e ser enviada ao Telegram. Falhas LDAP não podem ser descartadas silenciosamente: operações recuperáveis usam `Warning` e falhas que impedem a ação usam `Error`.
 
 ## Validação mínima
