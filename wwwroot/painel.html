@@ -1591,21 +1591,25 @@
 
             const moeda = value => `R$ ${value.toFixed(2).replace('.', ',')}`;
             const acessosAdicionais = Math.max(0, wyds - rules.minSlots);
-            const computadoresTexto = `${pcs} ${pcs === 1 ? 'computador' : 'computadores'}`;
-            const acessosTexto = `${acessosAdicionais} ${acessosAdicionais === 1 ? 'acesso adicional' : 'acessos adicionais'}`;
-            const detalheAcessos = `${moeda(periodo === 'diaria' ? rules.dailyWeeklyBasePrice : rules.weeklyBasePrice)} do plano + ${acessosTexto}`;
             const custoComputadorDiaria = (rules.dailyWeeklyBasePrice / rules.weeklyDays) * dias;
             const subtotalComputadoresDiaria = custoComputadorDiaria * pcs;
             const custoTelaAdicionalDiaria = (rules.additionalSlotPrice / rules.weeklyDays) * dias;
             const subtotalTelasAdicionaisDiaria = custoTelaAdicionalDiaria * acessosAdicionais * pcs;
             const detalheTelasDiaria = acessosAdicionais > 0
-                ? `Telas adicionais: ${acessosAdicionais} por computador × ${moeda(custoTelaAdicionalDiaria)} × ${pcs} = ${moeda(subtotalTelasAdicionaisDiaria)}.`
+                ? `Telas adicionais: ${acessosAdicionais} por computador × ${moeda(custoTelaAdicionalDiaria)} por tela no período × ${pcs} ${pcs === 1 ? 'computador' : 'computadores'} = ${moeda(subtotalTelasAdicionaisDiaria)}.`
+                : 'Telas adicionais: nenhuma.';
+            const semanasPeriodo = periodo === 'mensal' ? rules.monthlyWeeks : 1;
+            const detalheDuracaoPeriodo = periodo === 'mensal' ? ` (${rules.monthlyWeeks} semanas)` : '';
+            const custoComputadorPeriodo = rules.weeklyBasePrice * semanasPeriodo;
+            const subtotalComputadoresPeriodo = custoComputadorPeriodo * pcs;
+            const custoTelaAdicionalPeriodo = rules.additionalSlotPrice * semanasPeriodo;
+            const subtotalTelasAdicionaisPeriodo = custoTelaAdicionalPeriodo * acessosAdicionais * pcs;
+            const detalheTelasPeriodo = acessosAdicionais > 0
+                ? `Telas adicionais: ${acessosAdicionais} por computador × ${moeda(custoTelaAdicionalPeriodo)} por tela no período × ${pcs} ${pcs === 1 ? 'computador' : 'computadores'} = ${moeda(subtotalTelasAdicionaisPeriodo)}.`
                 : 'Telas adicionais: nenhuma.';
             const detalheBase = periodo === 'diaria'
                 ? `Computadores: ${moeda(custoComputadorDiaria)} por computador × ${pcs} = ${moeda(subtotalComputadoresDiaria)} antes do arredondamento. ${detalheTelasDiaria}`
-                : periodo === 'mensal'
-                    ? `${computadoresTexto} × ${rules.monthlyWeeks} semanas × (${detalheAcessos}).`
-                    : `${computadoresTexto} × (${detalheAcessos}).`;
+                : `Computadores: ${moeda(custoComputadorPeriodo)} por computador${detalheDuracaoPeriodo} × ${pcs} = ${moeda(subtotalComputadoresPeriodo)}. ${detalheTelasPeriodo}`;
             document.getElementById('resBaseInfo').textContent = detalheBase;
             document.getElementById('resDescHardwareInfo').textContent = periodo === 'diaria'
                 ? 'O desconto por computadores adicionais não se aplica ao plano diário.'
