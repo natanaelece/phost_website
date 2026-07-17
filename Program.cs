@@ -15,6 +15,23 @@ var builder = WebApplication.CreateBuilder(args);
 // CONFIGURAÇÃO: Carrega as configurações do sistema
 builder.Configuration.AddEnvironmentVariables();
 
+var invalidConfigKeys = StartupConfigurationValidator.FindInvalidKeys(builder.Configuration);
+if (invalidConfigKeys.Count > 0)
+{
+    string invalidKeyList = string.Join(", ", invalidConfigKeys);
+    const string prefix = "Falha de configuração na inicialização. Chaves ausentes ou inválidas: ";
+    Console.Error.WriteLine($"[CONFIG ERRO FATAL] {prefix}{invalidKeyList}");
+    await BootstrapTelegramNotifier.TrySendAsync(builder.Configuration, prefix + invalidKeyList);
+    Environment.ExitCode = 78;
+    return;
+}
+
+if (args.Contains("--validate-configuration", StringComparer.Ordinal))
+{
+    Console.WriteLine("CONFIGURATION_VALIDATION=PASS");
+    return;
+}
+
 // SEGURANÇA: Limita tamanho máximo do body (protege RAM do T8 Pro)
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -102,46 +119,25 @@ if (!Enum.TryParse<LogLevel>(tgMinimumLevelName, true, out var tgMinimumLevel))
     tgMinimumLevel = LogLevel.Warning;
 }
 
-if (!string.IsNullOrEmpty(tgToken) && !string.IsNullOrEmpty(tgChatId))
+if (!string.IsNullOrWhiteSpace(tgToken) && !string.IsNullOrWhiteSpace(tgChatId))
 {
     builder.Logging.AddProvider(new TelegramLoggerProvider(tgToken, tgChatId, tgMinimumLevel));
 }
 
-// RUN DB INITIALIZER (CRIA TABELAS SE NÃO EXISTIREM)
-PremierAPI.Services.DatabaseInitializer.Initialize(builder.Configuration);
-
 var app = builder.Build();
 
-var requiredConfigKeys = new[]
+try
 {
-    "ConnectionStrings:DefaultConnection",
-    "Cloudflare:TurnstileSecretKey",
-    "Smtp:Server",
-    "Smtp:Port",
-    "Smtp:User",
-    "Smtp:Password",
-    "Smtp:FromName",
-    "Smtp:FromEmail",
-    "Asaas:ApiKey",
-    "Asaas:ApiToken",
-    "Asaas:BaseUrl",
-    "Asaas:SandBoxBaseUrl",
-    "Evolution:BaseUrl",
-    "Evolution:Instance",
-    "Evolution:ApiKey",
-    "PremierConfig:BaseUrlFront"
-};
-
-var missingConfigs = requiredConfigKeys
-    .Where(key => string.IsNullOrWhiteSpace(app.Configuration[key]))
-    .ToArray();
-
-if (missingConfigs.Length > 0)
+    // RUN DB INITIALIZER (CRIA TABELAS SE NÃO EXISTIREM)
+    PremierAPI.Services.DatabaseInitializer.Initialize(app.Configuration);
+}
+catch (Exception ex)
 {
-    app.Logger.LogCritical(
-        "[CONFIG ERRO FATAL] As seguintes variaveis de ambiente (ou configs) estao ausentes e sao OBRIGATORIAS: {Variables}. O servico entrara em modo de PAUSA para evitar loop de reinicializacao.",
-        string.Join(", ", missingConfigs));
-    await Task.Delay(-1); // Pausa infinitamente (não dá crash, evita que o systemd fique reiniciando em loop)
+    const string message = "Falha crítica ao inicializar o banco de dados. Consulte o journal do serviço.";
+    app.Logger.LogCritical(ex, "[DATABASE INIT ERRO FATAL] A inicialização do banco falhou.");
+    await BootstrapTelegramNotifier.TrySendAsync(app.Configuration, message);
+    Environment.ExitCode = 70;
+    return;
 }
 
 // CLOUDFLARE E PROXY REVERSO: Garante que o IP real do cliente chegue na API em vez do IP do Cloudflare (Evita falso Rate Limit no Asaas)

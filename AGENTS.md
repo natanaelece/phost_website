@@ -58,18 +58,18 @@ Se o SSH falhar, pare. Nunca execute localmente como fallback.
 
 ## Proteção de variáveis sensíveis
 
-O serviço `premierapi` possui atualmente variáveis sensíveis declaradas por
-diretivas `Environment=` no drop-in
-`/etc/systemd/system/premierapi.service.d/override.conf`. Não existe um
-`EnvironmentFile` privado referenciado pela unit neste momento.
+O serviço `premierapi` carrega suas variáveis pelos arquivos protegidos
+`/etc/premierapi/premierapi.env` e
+`/etc/premierapi/telegram-alerts.env`. Eles ficam fora do repositório,
+pertencem a `root` e devem manter modo `0600`.
 
-Nunca exiba ou registre a saída bruta de `systemctl cat premierapi` nem de
-`systemctl show premierapi -p Environment`. Para diagnóstico, consulte apenas
-propriedades não sensíveis, como `FragmentPath`, `DropInPaths` e
-`EnvironmentFiles`, e redija valores de qualquer diretiva antes de compartilhar
-a saída.
+O drop-in `/etc/systemd/system/premierapi.service.d/override.conf` deve conter
+somente as referências `EnvironmentFile=` e nunca valores inline em
+`Environment=`. Nunca exiba ou registre `systemctl show premierapi -p
+Environment`. Para diagnóstico, consulte apenas propriedades não sensíveis,
+como `FragmentPath`, `DropInPaths` e `EnvironmentFiles`, e use
+`dotnet PremierAPI.dll --validate-configuration`, que informa apenas nomes de
+chaves ausentes ou inválidas.
 
-A migração dos segredos para um `EnvironmentFile` externo ao repositório,
-pertencente a `root` e com modo `0600`, assim como qualquer rotação de
-credenciais, alteração da unit ou reinicialização, exige autorização explícita
-e janela operacional.
+Qualquer rotação de credenciais, alteração dos arquivos protegidos, mudança da
+unit ou reinicialização exige autorização explícita e janela operacional.

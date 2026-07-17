@@ -63,10 +63,10 @@ namespace PremierAPI.Services
                 text += $"\n*Exception:* {exception.Message}\n";
             }
 
-            SendTelegramMessageAsync(text);
+            _ = SendTelegramMessageAsync(text);
         }
 
-        private async void SendTelegramMessageAsync(string text)
+        private async Task SendTelegramMessageAsync(string text)
         {
             try
             {

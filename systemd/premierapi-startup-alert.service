@@ -1,0 +1,9 @@
+[Unit]
+Description=PremierAPI startup failure Telegram alert
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/premierapi/telegram-alerts.env
+ExecStart=/bin/bash /var/www/premierhost/PremierAPI/scripts/systemd-telegram-alert.sh
