@@ -36,6 +36,7 @@ namespace PremierAPI.Services
         public string Description { get; set; } = "";
         public string OperatingSystem { get; set; } = "";
         public bool IsActive { get; set; }
+        public List<string> Groups { get; set; } = new List<string>();
     }
 
     public class ComputerGroupSelectionRequiredException : Exception
@@ -315,7 +316,7 @@ namespace PremierAPI.Services
                 _computersOu,
                 LdapConnection.ScopeSub,
                 "(objectCategory=computer)",
-                new[] { "cn", "description", "operatingSystem", "userAccountControl" },
+                new[] { "cn", "description", "operatingSystem", "userAccountControl", "memberOf" },
                 false);
 
             while (searchResults.HasMore())
@@ -323,13 +324,15 @@ namespace PremierAPI.Services
                 try
                 {
                     var entry = searchResults.Next();
-                    computers.Add(new AdComputerDto
+                    var computer = new AdComputerDto
                     {
                         Name = GetAttribute(entry, "cn"),
                         Description = GetAttribute(entry, "description"),
                         OperatingSystem = GetAttribute(entry, "operatingSystem"),
                         IsActive = (GetAttributeAsInt(entry, "userAccountControl") & 2) == 0
-                    });
+                    };
+                    computer.Groups.AddRange(GetManagedGroupNames(entry));
+                    computers.Add(computer);
                 }
                 catch (LdapException ex)
                 {
@@ -846,6 +849,57 @@ namespace PremierAPI.Services
             }
         }
 
+        public async Task SetComputerGroupsAsync(string computerName, IEnumerable<string>? groupNames)
+        {
+            if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
+
+            var desiredNames = (groupNames ?? Array.Empty<string>())
+                .Select(name => (name ?? "").Trim())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (desiredNames.Count > 100) throw new Exception("Selecione no máximo 100 grupos por computador.");
+
+            using var conn = GetConnection();
+            string computerDn = GetComputerDn(conn, computerName)
+                ?? throw new Exception($"Computador '{computerName}' não encontrado no AD.");
+            var computerEntry = ReadEntry(conn, computerDn, "memberOf");
+            var currentGroups = GetAttributeValues(computerEntry, "memberOf")
+                .Where(IsManagedGroupDn)
+                .Select(dn => new { Name = GetCnFromDn(dn), Dn = dn })
+                .Where(group => !string.IsNullOrWhiteSpace(group.Name))
+                .GroupBy(group => group.Name!, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToDictionary(group => group.Name!, group => group.Dn, StringComparer.OrdinalIgnoreCase);
+
+            var desiredGroups = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string groupName in desiredNames)
+            {
+                string groupDn = GetGroupDn(conn, groupName)
+                    ?? throw new Exception($"Grupo '{groupName}' não encontrado no AD.");
+                desiredGroups[groupName] = groupDn;
+            }
+
+            foreach (var group in desiredGroups.Where(group => !currentGroups.ContainsKey(group.Key)))
+                AddComputerToGroup(conn, computerDn, computerName, group.Key, group.Value);
+
+            foreach (var group in currentGroups.Where(group => !desiredGroups.ContainsKey(group.Key)))
+            {
+                try
+                {
+                    conn.Modify(group.Value, new[]
+                    {
+                        new LdapModification(LdapModification.Delete, new LdapAttribute("member", computerDn))
+                    });
+                    _logger.LogInformation("[AD] Computador {Computer} removido do grupo {GroupName}.", computerName, group.Key);
+                }
+                catch (LdapException ex) when (ex.ResultCode == 16)
+                {
+                    _logger.LogInformation("[AD] Computador {Computer} ja nao pertencia ao grupo {GroupName}.", computerName, group.Key);
+                }
+            }
+        }
+
         public async Task SetUserComputersAsync(
             string username,
             string computersStr,
@@ -974,16 +1028,26 @@ namespace PremierAPI.Services
                 _computersOu,
                 LdapConnection.ScopeSub,
                 $"(&(objectCategory=computer)(cn={EscapeLdapFilterValue(computerName)}))",
-                new[] { "description" },
+                new[] { "description", "memberOf" },
                 false);
 
             if (!results.HasMore()) return null;
 
-            string description = GetAttribute(results.Next(), "description");
+            var computer = results.Next();
+            string description = GetAttribute(computer, "description");
             var match = Regex.Match(description, @"\bSRV\d{2}[-_]\d{2}\b", RegexOptions.IgnoreCase);
-            return match.Success
+            string? describedGroup = match.Success
                 ? $"ACESSO_{match.Value.ToUpperInvariant().Replace('_', '-')}"
                 : null;
+
+            if (!string.IsNullOrWhiteSpace(describedGroup) && !string.IsNullOrWhiteSpace(GetGroupDn(conn, describedGroup)))
+                return describedGroup;
+
+            string? membershipGroup = GetManagedGroupNames(computer)
+                .OrderByDescending(name => name.StartsWith("ACESSO_", StringComparison.OrdinalIgnoreCase))
+                .ThenBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            return membershipGroup ?? describedGroup;
         }
 
         private (string GroupName, string GroupDn) ResolveComputerGroup(
@@ -995,6 +1059,7 @@ namespace PremierAPI.Services
             string? suggestedGroup = GetComputerAccessGroupName(conn, computerName);
             string? groupName = suggestedGroup;
             string? groupDn = string.IsNullOrWhiteSpace(groupName) ? null : GetGroupDn(conn, groupName);
+            bool manuallySelected = false;
 
             if (string.IsNullOrEmpty(groupDn)
                 && computerGroups != null
@@ -1005,6 +1070,7 @@ namespace PremierAPI.Services
                 groupDn = GetGroupDn(conn, groupName);
                 if (string.IsNullOrEmpty(groupDn))
                     throw new Exception($"O grupo selecionado '{groupName}' não foi encontrado no AD.");
+                manuallySelected = true;
             }
 
             if (string.IsNullOrEmpty(groupName) || string.IsNullOrEmpty(groupDn))
@@ -1012,7 +1078,56 @@ namespace PremierAPI.Services
                 throw new ComputerGroupSelectionRequiredException(computerName, suggestedGroup, operation);
             }
 
+            if (manuallySelected)
+            {
+                string computerDn = GetComputerDn(conn, computerName)
+                    ?? throw new Exception($"Computador '{computerName}' não encontrado no AD.");
+                AddComputerToGroup(conn, computerDn, computerName, groupName, groupDn);
+            }
+
             return (groupName, groupDn);
+        }
+
+        private void AddComputerToGroup(LdapConnection conn, string computerDn, string computerName, string groupName, string groupDn)
+        {
+            try
+            {
+                conn.Modify(groupDn, new[]
+                {
+                    new LdapModification(LdapModification.Add, new LdapAttribute("member", computerDn))
+                });
+                _logger.LogInformation("[AD] Computador {Computer} adicionado ao grupo {GroupName}.", computerName, groupName);
+            }
+            catch (LdapException ex) when (ex.ResultCode == 20)
+            {
+                _logger.LogInformation("[AD] Computador {Computer} ja pertence ao grupo {GroupName}.", computerName, groupName);
+            }
+        }
+
+        private List<string> GetManagedGroupNames(LdapEntry entry)
+        {
+            return GetAttributeValues(entry, "memberOf")
+                .Where(IsManagedGroupDn)
+                .Select(GetCnFromDn)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private bool IsManagedGroupDn(string groupDn)
+        {
+            return groupDn.Equals(_groupsOu, StringComparison.OrdinalIgnoreCase)
+                || groupDn.EndsWith("," + _groupsOu, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string? GetCnFromDn(string distinguishedName)
+        {
+            string firstPart = distinguishedName.Split(',', 2)[0].Trim();
+            return firstPart.StartsWith("CN=", StringComparison.OrdinalIgnoreCase)
+                ? firstPart[3..]
+                : null;
         }
 
         private static string EscapeLdapFilterValue(string value)

@@ -26,6 +26,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - Reenvio manual no mesmo dia exige confirmação explícita do operador, com a guarda aplicada também no backend.
 - A seleção manual de grupo para computador sem sugestão e todas as falhas LDAP recuperáveis usam ao menos `Warning`, acionando Telegram; falhas que impedem a ação usam `Error`. O admin possui uma tela de Logs em memória, sanitizada, para a execução atual.
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
+- A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
 

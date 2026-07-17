@@ -33,6 +33,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - Renomear CN exige `ModifyDNRequest`; alteração comum de atributos usa `LdapModification`.
 - O vínculo local pode localizar usuários nas pastas ativos, expirados e website.
 - O admin cria grupos globais de segurança e objetos de computador. Valide nomes/atributos no backend. Criar o objeto não ingressa a máquina física no domínio.
+- Computadores expõem e gerenciam associações diretas com os grupos da OU configurada. A seleção manual de grupo durante o vínculo de acesso deve incluir o objeto do computador no grupo, permitindo reutilizar a associação nas próximas operações.
 - Não crie, mova, habilite ou exclua objetos reais do AD apenas para testar sem autorização expressa.
 
 ## Segurança, SEO e telemetria

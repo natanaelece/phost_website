@@ -184,6 +184,18 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="modal-ad-computer-groups">
+        <div class="modal-box">
+            <div class="modal-title" id="m-ad-computer-groups-title">Grupos do computador</div>
+            <div class="modal-body">
+                <input type="hidden" id="m-ad-computer-groups-name">
+                <p class="modal-note">Marque os grupos aos quais este computador deve pertencer no Active Directory.</p>
+                <div class="check-list" id="m-ad-computer-groups-list"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline" onclick="closeModals()">Cancelar</button><button class="btn" id="btn-save-ad-computer-groups" onclick="saveAdComputerGroups()">Salvar grupos</button></div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="manualOrderModal">
         <div class="modal-box">
             <div class="modal-title">Novo Pedido Manual</div>

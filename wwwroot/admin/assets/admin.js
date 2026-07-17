@@ -608,6 +608,28 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         try{const response=await fetch('/api/admin/ad/computers/'+encodeURIComponent(name),{method:'DELETE',headers:hdrs()});const msg=await readResponseMessage(response,'Computador excluído.');if(!response.ok)return showAdminMessage('error',msg);showAdminMessage('success',msg);await loadAd();}
         catch{showAdminMessage('error','Falha de conexão ao excluir o computador.');}
     }
+    function openAdComputerGroupsModal(name){
+        const computer=_adComputers.find(item=>item.name.toUpperCase()===name.toUpperCase());
+        if(!computer)return;
+        document.getElementById('m-ad-computer-groups-name').value=computer.name;
+        document.getElementById('m-ad-computer-groups-title').textContent=`Grupos de ${computer.name}`;
+        const current=new Set((computer.groups||[]).map(group=>group.toLocaleUpperCase('pt-BR')));
+        const list=document.getElementById('m-ad-computer-groups-list');
+        list.innerHTML=_adGroups.length?_adGroups.map(group=>`<label class="check-row"><input type="checkbox" value="${esc(group.name)}" ${current.has(group.name.toLocaleUpperCase('pt-BR'))?'checked':''}><span class="check-main"><span class="check-name">${esc(group.name)}</span><span class="check-desc">${esc(group.description||'Sem descrição')}</span></span></label>`).join(''):'<div class="ad-link-empty">Nenhum grupo disponível na pasta configurada.</div>';
+        document.getElementById('modal-ad-computer-groups').classList.add('active');
+    }
+    async function saveAdComputerGroups(){
+        const name=document.getElementById('m-ad-computer-groups-name').value;
+        const groups=[...document.querySelectorAll('#m-ad-computer-groups-list input:checked')].map(input=>input.value);
+        const button=document.getElementById('btn-save-ad-computer-groups');button.disabled=true;
+        try{
+            const response=await fetch('/api/admin/ad/computers/'+encodeURIComponent(name)+'/groups',{method:'PUT',headers:hdrs(),body:JSON.stringify({groups})});
+            const msg=await readResponseMessage(response,'Grupos do computador atualizados.');
+            if(!response.ok)return showAdminMessage('error',msg);
+            closeModals();showAdminMessage('success',msg);await loadAd();
+        }catch{showAdminMessage('error','Falha de conexão ao atualizar os grupos do computador.');}
+        finally{button.disabled=false;}
+    }
 
     const AD_SORT_FIELDS = {
         users:['fullName','username','isActive','expiresAt'],
@@ -663,7 +685,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-website-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_WEBSITE').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário de website encontrado.</td></tr>';
         document.getElementById('ad-expired-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_EXPIRADOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário expirado encontrado.</td></tr>';
         const computers=sortAdItems(_adComputers,['name','description','operatingSystem','isActive'],'description');
-        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><button class="btn btn-outline ad-table-action" onclick="editAdComputer('${c.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdComputer('${c.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdComputer('${c.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhum computador encontrado.</td></tr>';
+        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><div class="computer-groups">${(c.groups||[]).length?(c.groups||[]).map(group=>`<span class="badge b-accent">${esc(group)}</span>`).join(''):'<span class="muted">Nenhum</span>'}<button class="btn btn-outline ad-table-action" onclick="openAdComputerGroupsModal('${c.name}')">Gerenciar</button></div></td><td><button class="btn btn-outline ad-table-action" onclick="editAdComputer('${c.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdComputer('${c.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdComputer('${c.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty">Nenhum computador encontrado.</td></tr>';
         const groups=sortAdItems(_adGroups,['name','description'],'name');
         document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><button class="btn btn-outline ad-table-action" onclick="editAdGroup('${g.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdGroup('${g.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdGroup('${g.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum grupo encontrado.</td></tr>';
     }
@@ -715,7 +737,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                     <div class="tbl-wrap"><table><thead><tr><th>Grupo</th><th>Descri&ccedil;&atilde;o</th><th>Editar</th><th>Duplicar</th><th>Excluir</th></tr></thead><tbody id="ad-groups-body"></tbody></table></div>
                 </div>
                 <div class="tbl-card hidden" id="ad-computers-tbl">
-                    <div class="tbl-wrap"><table><thead><tr><th>Computador</th><th>Descri&ccedil;&atilde;o</th><th>Sistema Operacional</th><th>Status</th><th>Editar</th><th>Duplicar</th><th>Excluir</th></tr></thead><tbody id="ad-computers-body"></tbody></table></div>
+                    <div class="tbl-wrap"><table><thead><tr><th>Computador</th><th>Descri&ccedil;&atilde;o</th><th>Sistema Operacional</th><th>Status</th><th>Grupos</th><th>Editar</th><th>Duplicar</th><th>Excluir</th></tr></thead><tbody id="ad-computers-body"></tbody></table></div>
                 </div>
             `;
         }
@@ -860,7 +882,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             ? ` O grupo automático esperado era ${data.suggestedGroup}.`
             : '';
         document.getElementById('ad-group-select-note').textContent =
-            `Selecione o grupo que deve ser usado para ${action} o acesso do computador ${data.computer}.${suggestion}`;
+            `Selecione o grupo que deve ser usado para ${action} o acesso do computador ${data.computer}.${suggestion} A escolha também será salva como grupo do computador no Active Directory.`;
 
         const select = document.getElementById('ad-manual-group');
         select.innerHTML = '<option value="">Selecione um grupo</option>' +
@@ -989,7 +1011,7 @@ const SORTABLE_TABLES={
   'ad-website-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-expired-body':{type:'ad',fields:['username','fullName','isActive',null,'expiresAt',null]},
   'ad-groups-body':{type:'ad',fields:['name','description',null,null,null]},
-  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive',null,null,null]}
+  'ad-computers-body':{type:'ad',fields:['name','description','operatingSystem','isActive',null,null,null,null]}
 };
 function enhanceSortableHeaders(root=document){
   Object.entries(SORTABLE_TABLES).forEach(([bodyId,config])=>{
