@@ -756,11 +756,72 @@ namespace PremierAPI.Controllers
         }
 
         [HttpGet("logs")]
-        public async Task<IActionResult> GetLogs([FromQuery] string? level = null, [FromQuery] string? search = null, [FromQuery] int limit = 300)
+        public async Task<IActionResult> GetLogs(
+            [FromQuery] string? level = null,
+            [FromQuery] string? search = null,
+            [FromQuery] int limit = 300,
+            [FromQuery] bool usersOnly = false)
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
+            if (usersOnly)
+            {
+                limit = Math.Clamp(limit, 1, 1_000);
+                string term = (search ?? "").Trim();
+                await using var db = new NpgsqlConnection(_connString);
+                var rows = await db.QueryAsync(@"
+                    SELECT
+                        e.id,
+                        e.event_type,
+                        e.occurred_at,
+                        e.ip_address::text AS ip_address,
+                        e.user_agent,
+                        e.accept_language,
+                        e.country_code,
+                        e.referrer_host,
+                        u.id AS user_id,
+                        u.name,
+                        u.email,
+                        u.whatsapp
+                    FROM user_activity_events e
+                    INNER JOIN users u ON u.id = e.user_id
+                    WHERE @Search = ''
+                       OR u.name ILIKE @Pattern
+                       OR u.email ILIKE @Pattern
+                       OR COALESCE(u.whatsapp, '') ILIKE @Pattern
+                       OR COALESCE(e.ip_address::text, '') ILIKE @Pattern
+                       OR COALESCE(e.user_agent, '') ILIKE @Pattern
+                       OR COALESCE(e.accept_language, '') ILIKE @Pattern
+                       OR COALESCE(e.country_code, '') ILIKE @Pattern
+                       OR COALESCE(e.referrer_host, '') ILIKE @Pattern
+                    ORDER BY e.occurred_at DESC, e.id DESC
+                    LIMIT @Limit;",
+                    new { Search = term, Pattern = $"%{term}%", Limit = limit });
+
+                return Ok(new
+                {
+                    mode = "users",
+                    generatedAt = DateTimeOffset.Now,
+                    entries = rows.Select(entry => new
+                    {
+                        id = (long)entry.id,
+                        eventType = (string)entry.event_type,
+                        timestamp = (DateTime)entry.occurred_at,
+                        userId = (Guid)entry.user_id,
+                        name = (string)entry.name,
+                        email = (string)entry.email,
+                        whatsapp = entry.whatsapp as string,
+                        ipAddress = entry.ip_address as string,
+                        userAgent = entry.user_agent as string,
+                        acceptLanguage = entry.accept_language as string,
+                        countryCode = entry.country_code as string,
+                        referrerHost = entry.referrer_host as string
+                    })
+                });
+            }
+
             return Ok(new
             {
+                mode = "system",
                 generatedAt = DateTimeOffset.Now,
                 entries = _adminLogStore.Query(level, search, limit)
             });

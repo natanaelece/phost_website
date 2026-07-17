@@ -212,6 +212,34 @@ namespace PremierAPI.Services
                 "CREATE INDEX IF NOT EXISTS idx_free_trial_requests_status_date ON free_trial_requests(status, last_requested_at DESC);",
                 "CREATE INDEX IF NOT EXISTS idx_free_trial_requests_used_at ON free_trial_requests(used_at DESC) WHERE used_at IS NOT NULL;",
                 "CREATE INDEX IF NOT EXISTS idx_free_trial_events_request_date ON free_trial_events(free_trial_request_id, occurred_at DESC);",
+
+                @"CREATE TABLE IF NOT EXISTS user_activity_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    event_type VARCHAR(20) NOT NULL CHECK (event_type IN ('cadastro', 'login', 'logout')),
+                    ip_address INET,
+                    user_agent VARCHAR(512),
+                    accept_language VARCHAR(200),
+                    country_code VARCHAR(2),
+                    referrer_host VARCHAR(150),
+                    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );",
+
+                "CREATE INDEX IF NOT EXISTS idx_user_activity_events_type_date ON user_activity_events(event_type, occurred_at DESC);",
+                "CREATE INDEX IF NOT EXISTS idx_user_activity_events_user_date ON user_activity_events(user_id, occurred_at DESC);",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_activity_events_single_registration ON user_activity_events(user_id) WHERE event_type = 'cadastro';",
+                @"INSERT INTO user_activity_events
+                    (user_id, event_type, ip_address, user_agent, accept_language, country_code, referrer_host, occurred_at)
+                  SELECT
+                    u.id, 'cadastro', u.registration_ip, u.registration_user_agent,
+                    u.registration_accept_language, u.registration_country_code,
+                    u.registration_referrer_host, COALESCE(u.created_at, CURRENT_TIMESTAMP)
+                  FROM users u
+                  WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM user_activity_events e
+                    WHERE e.user_id = u.id AND e.event_type = 'cadastro'
+                  );",
                 
                 "UPDATE users SET is_active = true WHERE is_active IS NULL;",
                 "UPDATE users SET email_confirmation_resend_count = 0 WHERE email_confirmation_resend_count IS NULL;",

@@ -1189,6 +1189,12 @@ function wireAdminLogs(){
   document.getElementById('logs-level')?.addEventListener('change',loadAdminLogs);
   document.getElementById('logs-limit')?.addEventListener('change',loadAdminLogs);
   document.getElementById('logs-search')?.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(loadAdminLogs,350);});
+  document.getElementById('logs-users-only')?.addEventListener('change',()=>{
+    const usersOnly=document.getElementById('logs-users-only')?.checked;
+    const level=document.getElementById('logs-level');if(level)level.disabled=usersOnly;
+    const search=document.getElementById('logs-search');if(search)search.placeholder=usersOnly?'Nome, e-mail, WhatsApp, IP ou navegador...':'Categoria ou mensagem...';
+    loadAdminLogs();
+  });
   document.getElementById('logs-auto')?.addEventListener('change',updateAdminLogsTimer);
   updateAdminLogsTimer();
 }
@@ -1207,7 +1213,8 @@ async function loadAdminLogs(){
   const qs=new URLSearchParams({
     level:document.getElementById('logs-level')?.value||'all',
     search:document.getElementById('logs-search')?.value||'',
-    limit:document.getElementById('logs-limit')?.value||'300'
+    limit:document.getElementById('logs-limit')?.value||'300',
+    usersOnly:document.getElementById('logs-users-only')?.checked?'true':'false'
   });
   const data=await apiFetch(`${API}/logs?${qs}`);
   if(!data){
@@ -1218,7 +1225,23 @@ async function loadAdminLogs(){
   const entries=data.entries||[];
   setText('logs-count',`${entries.length} registro${entries.length===1?'':'s'} exibido${entries.length===1?'':'s'}`);
   setText('lupdate',`Atualizado ${new Date(data.generatedAt).toLocaleTimeString('pt-BR')}`);
+  if(data.mode==='users'){
+    setText('logs-head-time','Horário');setText('logs-head-level','Evento');setText('logs-head-category','Usuário');setText('logs-head-message','IP e localização');setText('logs-head-exception','Navegador e origem');
+  }else{
+    setText('logs-head-time','Horário');setText('logs-head-level','Nível');setText('logs-head-category','Categoria');setText('logs-head-message','Mensagem');setText('logs-head-exception','Exceção');
+  }
   if(!entries.length){body.innerHTML='<tr><td colspan="5" class="empty">Nenhum log encontrado para estes filtros.</td></tr>';return;}
+  if(data.mode==='users'){
+    const eventLabel={cadastro:'Cadastro',login:'Login',logout:'Logout'};
+    body.innerHTML=entries.map(entry=>`<tr>
+      <td class="muted log-time">${fmtDateTime(entry.timestamp)}</td>
+      <td><span class="badge ${entry.eventType==='cadastro'?'b-ok':entry.eventType==='login'?'b-accent':'b-muted'}">${eventLabel[entry.eventType]||esc(entry.eventType)}</span></td>
+      <td><div class="ucell-name">${esc(entry.name)}</div><div class="ucell-email">${esc(entry.email)}</div><div class="ucell-email">${esc(entry.whatsapp||'WhatsApp não informado')}</div></td>
+      <td><div class="log-message">IP: ${esc(entry.ipAddress||'não disponível')}</div><div class="ucell-email">País: ${esc(entry.countryCode||'não disponível')}</div></td>
+      <td><div class="log-message">${esc(browserSummary(entry.userAgent))}</div><div class="ucell-email" title="${esc(entry.userAgent||'')}">User-Agent: ${esc(entry.userAgent||'não disponível')}</div><div class="ucell-email">Idioma: ${esc(entry.acceptLanguage||'não disponível')}</div><div class="ucell-email">Origem: ${esc(entry.referrerHost||'direta/não disponível')}</div></td>
+    </tr>`).join('');
+    return;
+  }
   body.innerHTML=entries.map(entry=>`<tr>
     <td class="muted log-time">${fmtDateTime(entry.timestamp)}</td>
     <td>${logLevelBadge(entry.level)}</td>

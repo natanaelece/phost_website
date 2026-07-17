@@ -96,7 +96,8 @@ namespace PremierAPI.Controllers
                 return Unauthorized(new { erro = "Conta inativa. Entre em contato com o suporte." });
             }
 
-            await FillMissingRegistrationMetadataAsync(db, user.Id);
+            var loginMetadata = CaptureRequestMetadata();
+            await FillMissingRegistrationMetadataAsync(db, user.Id, loginMetadata);
 
             if (string.IsNullOrWhiteSpace(user.Ad_Username))
             {
@@ -113,10 +114,17 @@ namespace PremierAPI.Controllers
             string sessionToken = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
             DateTime sessionExpires = DateTime.UtcNow.AddDays(7);
 
-            // Multiple sessions support: insere nova sessao sem derrubar as existentes
-            await db.ExecuteAsync(
-                "INSERT INTO user_sessions (user_id, token, expires_at) VALUES (@Id, @Token, @Expires)",
-                new { Id = user.Id, Token = sessionToken, Expires = sessionExpires });
+            // Multiple sessions support: insere nova sessao sem derrubar as existentes.
+            // O evento de login pertence à mesma transação, sem armazenar o token.
+            if (db.State != System.Data.ConnectionState.Open) await db.OpenAsync();
+            await using (var transaction = await db.BeginTransactionAsync())
+            {
+                await db.ExecuteAsync(
+                    "INSERT INTO user_sessions (user_id, token, expires_at) VALUES (@Id, @Token, @Expires)",
+                    new { Id = user.Id, Token = sessionToken, Expires = sessionExpires }, transaction);
+                await InsertUserActivityAsync(db, transaction, user.Id, "login", loginMetadata);
+                await transaction.CommitAsync();
+            }
 
             if (_debugLogs) _logger.LogInformation("[LOGIN SUCESSO] {Email}", req.Email);
 
@@ -134,6 +142,34 @@ namespace PremierAPI.Controllers
                     Whatsapp = user.Whatsapp
                 }
             });
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            string? sessionToken = Request.Headers["X-Session-Token"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(sessionToken)) return Ok(new { msg = "Sessão já encerrada." });
+
+            await using var db = new NpgsqlConnection(_connString);
+            await db.OpenAsync();
+            await using var transaction = await db.BeginTransactionAsync();
+            Guid? userId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
+                SELECT user_id
+                FROM user_sessions
+                WHERE token = @Token
+                FOR UPDATE;",
+                new { Token = sessionToken }, transaction);
+
+            if (!userId.HasValue)
+            {
+                await transaction.RollbackAsync();
+                return Ok(new { msg = "Sessão já encerrada." });
+            }
+
+            await InsertUserActivityAsync(db, transaction, userId.Value, "logout", CaptureRequestMetadata());
+            await db.ExecuteAsync("DELETE FROM user_sessions WHERE token = @Token", new { Token = sessionToken }, transaction);
+            await transaction.CommitAsync();
+            return Ok(new { msg = "Sessão encerrada." });
         }
 
         // =========================================================================
@@ -217,11 +253,7 @@ namespace PremierAPI.Controllers
 
             DateTime registeredAt = GetConfiguredLocalNow();
             DateTime firstReminderAt = EmailConfirmationReminderWorker.GetFirstReminderAt(registeredAt);
-            string? registrationIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-            string? registrationUserAgent = TruncateHeader("User-Agent", 512);
-            string? registrationAcceptLanguage = TruncateHeader("Accept-Language", 200);
-            string? registrationCountryCode = NormalizeCountryCode(TruncateHeader("CF-IPCountry", 2));
-            string? registrationReferrerHost = GetReferrerHost();
+            var registrationMetadata = CaptureRequestMetadata();
             string sql = @"INSERT INTO users
                               (name, email, whatsapp, password_hash, referred_by,
                                email_confirmation_token, email_confirmed,
@@ -248,16 +280,17 @@ namespace PremierAPI.Controllers
                 EmailToken = emailToken,
                 RegisteredAt = registeredAt,
                 FirstReminderAt = firstReminderAt,
-                RegistrationIp = registrationIp,
-                RegistrationUserAgent = registrationUserAgent,
-                RegistrationAcceptLanguage = registrationAcceptLanguage,
-                RegistrationCountryCode = registrationCountryCode,
-                RegistrationReferrerHost = registrationReferrerHost
+                RegistrationIp = registrationMetadata.IpAddress,
+                RegistrationUserAgent = registrationMetadata.UserAgent,
+                RegistrationAcceptLanguage = registrationMetadata.AcceptLanguage,
+                RegistrationCountryCode = registrationMetadata.CountryCode,
+                RegistrationReferrerHost = registrationMetadata.ReferrerHost
             }, transaction);
             await db.ExecuteAsync(@"
                 INSERT INTO pending_ad_credentials (user_id, protected_password)
                 VALUES (@UserId, @ProtectedPassword)",
                 new { UserId = userId, ProtectedPassword = protectedPassword }, transaction);
+            await InsertUserActivityAsync(db, transaction, userId, "cadastro", registrationMetadata);
             await transaction.CommitAsync();
             try
             {
@@ -566,7 +599,41 @@ namespace PremierAPI.Controllers
             return uri.Host[..Math.Min(uri.Host.Length, 150)];
         }
 
-        private async Task FillMissingRegistrationMetadataAsync(NpgsqlConnection db, Guid userId)
+        private RequestMetadata CaptureRequestMetadata()
+        {
+            return new RequestMetadata(
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                TruncateHeader("User-Agent", 512),
+                TruncateHeader("Accept-Language", 200),
+                NormalizeCountryCode(TruncateHeader("CF-IPCountry", 2)),
+                GetReferrerHost());
+        }
+
+        private static Task InsertUserActivityAsync(
+            NpgsqlConnection db,
+            NpgsqlTransaction transaction,
+            Guid userId,
+            string eventType,
+            RequestMetadata metadata)
+        {
+            return db.ExecuteAsync(@"
+                INSERT INTO user_activity_events
+                    (user_id, event_type, ip_address, user_agent, accept_language, country_code, referrer_host)
+                VALUES
+                    (@UserId, @EventType, CAST(@IpAddress AS inet), @UserAgent, @AcceptLanguage, @CountryCode, @ReferrerHost);",
+                new
+                {
+                    UserId = userId,
+                    EventType = eventType,
+                    metadata.IpAddress,
+                    metadata.UserAgent,
+                    metadata.AcceptLanguage,
+                    metadata.CountryCode,
+                    metadata.ReferrerHost
+                }, transaction);
+        }
+
+        private async Task FillMissingRegistrationMetadataAsync(NpgsqlConnection db, Guid userId, RequestMetadata metadata)
         {
             try
             {
@@ -590,11 +657,11 @@ namespace PremierAPI.Controllers
                     new
                     {
                         UserId = userId,
-                        RegistrationIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
-                        RegistrationUserAgent = TruncateHeader("User-Agent", 512),
-                        RegistrationAcceptLanguage = TruncateHeader("Accept-Language", 200),
-                        RegistrationCountryCode = NormalizeCountryCode(TruncateHeader("CF-IPCountry", 2)),
-                        RegistrationReferrerHost = GetReferrerHost()
+                        RegistrationIp = metadata.IpAddress,
+                        RegistrationUserAgent = metadata.UserAgent,
+                        RegistrationAcceptLanguage = metadata.AcceptLanguage,
+                        RegistrationCountryCode = metadata.CountryCode,
+                        RegistrationReferrerHost = metadata.ReferrerHost
                     });
             }
             catch (Exception ex)
@@ -602,6 +669,13 @@ namespace PremierAPI.Controllers
                 _logger.LogWarning(ex, "[LOGIN METADADOS] Não foi possível completar os metadados técnicos do usuário {UserId}.", userId);
             }
         }
+
+        private sealed record RequestMetadata(
+            string? IpAddress,
+            string? UserAgent,
+            string? AcceptLanguage,
+            string? CountryCode,
+            string? ReferrerHost);
     }
 
     // =========================================================================

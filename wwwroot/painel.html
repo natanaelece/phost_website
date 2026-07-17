@@ -1803,9 +1803,21 @@
             setTimeout(() => { btn.innerHTML = 'Copiar código Pix'; btn.classList.replace('bg-blue-600', 'bg-slate-800'); }, 3000);
         }
 
-        function logout() {
-            clearLocalSession();
-            window.location.href = '/';
+        async function logout() {
+            const token = localStorage.getItem('premier_token');
+            try {
+                if (token) {
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: { 'X-Session-Token': token },
+                        keepalive: true
+                    });
+                }
+            } catch {}
+            finally {
+                clearLocalSession();
+                window.location.href = '/';
+            }
         }
     </script>
 </body>
