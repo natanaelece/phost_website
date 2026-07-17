@@ -5,6 +5,8 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     let _adAccessUser = '';
     let _adSelectedComputers = new Set();
     let _adAllowAllComputers = false;
+    let _adAccessSortField = 'computer';
+    let _adAccessSortDirection = 'asc';
     let _adGroups = [];
     let _adComputerGroups = {};
     let _adPendingGroupSelection = null;
@@ -773,6 +775,8 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         _adSelectedComputers = new Set(String(pcsStr || '').split(',').map(normalizeComputerName).filter(Boolean));
         _adComputerGroups = {};
         _adPendingGroupSelection = null;
+        _adAccessSortField = 'computer';
+        _adAccessSortDirection = 'asc';
         document.getElementById('m-ad-access-title').textContent = 'Acessos de ' + u;
         document.getElementById('ad-computer-search').value = '';
         renderAdComputerChecks();
@@ -791,10 +795,15 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                     || normalizeComputerName(c.operatingSystem).includes(q);
             })
             .sort((a,b) => {
-                const sa = _adSelectedComputers.has(normalizeComputerName(a.name)) ? 0 : 1;
-                const sb = _adSelectedComputers.has(normalizeComputerName(b.name)) ? 0 : 1;
-                // Selecionados primeiro, depois ordena por descrição
-                return sa - sb || String(a.description||a.name||'').localeCompare(String(b.description||b.name||''), 'pt-BR', {sensitivity:'base'});
+                const factor = _adAccessSortDirection === 'asc' ? 1 : -1;
+                const av = _adAccessSortField === 'status'
+                    ? (a.isActive !== false ? 'Ativo' : 'Inativo')
+                    : String(a.description || a.name || '');
+                const bv = _adAccessSortField === 'status'
+                    ? (b.isActive !== false ? 'Ativo' : 'Inativo')
+                    : String(b.description || b.name || '');
+                const compared = av.localeCompare(bv, 'pt-BR', {sensitivity:'base', numeric:true});
+                return compared * factor || String(a.name||'').localeCompare(String(b.name||''), 'pt-BR', {sensitivity:'base',numeric:true});
             });
 
         if(!list.length) {
@@ -806,6 +815,10 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             <input type="checkbox" id="ad-check-all" onchange="toggleAdAllComputers()" ${ _adAllowAllComputers ? 'checked' : '' }>
             <span style="color:#60a5fa;font-weight:600;margin-left:8px">&#127760; Liberar todos os computadores</span>
         </label>`;
+
+        const computerArrow = _adAccessSortField === 'computer' ? (_adAccessSortDirection === 'asc' ? '↑' : '↓') : '';
+        const statusArrow = _adAccessSortField === 'status' ? (_adAccessSortDirection === 'asc' ? '↑' : '↓') : '';
+        html += `<div class="check-list-header" role="row"><span aria-hidden="true"></span><button type="button" onclick="sortAdAccessComputers('computer')">Computadores <span class="sort-indicator">${computerArrow}</span></button><button type="button" onclick="sortAdAccessComputers('status')">Status <span class="sort-indicator">${statusArrow}</span></button></div>`;
 
         html += list.map(c => {
             const name = normalizeComputerName(c.name);
@@ -820,6 +833,12 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         
         holder.innerHTML = html;
         toggleAdAllComputers(); // Update disabled state initially
+    }
+
+    function sortAdAccessComputers(field) {
+        if(_adAccessSortField === field) _adAccessSortDirection = _adAccessSortDirection === 'asc' ? 'desc' : 'asc';
+        else { _adAccessSortField = field; _adAccessSortDirection = 'asc'; }
+        renderAdComputerChecks();
     }
 
     function toggleAdAllComputers() {

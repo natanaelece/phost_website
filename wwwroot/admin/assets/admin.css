@@ -50,6 +50,10 @@
         .check-row { display:grid!important; grid-template-columns:22px 1fr auto; gap:10px; align-items:center; padding:10px 12px; margin:0!important; border-bottom:1px solid rgba(48,54,61,.55); cursor:pointer; color:var(--txt); }
         .check-row:last-child { border-bottom:none; }
         .check-row:hover { background:rgba(59,130,246,.08); }
+        .check-list-header { display:grid; grid-template-columns:22px 1fr auto; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--border); background:var(--bg2); }
+        .check-list-header button { display:inline-flex; align-items:center; gap:5px; border:0; background:transparent; color:var(--txt2); cursor:pointer; font:600 10px/1.3 Inter,sans-serif; text-transform:uppercase; letter-spacing:.05em; padding:3px 0; text-align:left; }
+        .check-list-header button:last-child { justify-self:end; }
+        .check-list-header button:hover,.check-list-header button:focus-visible { color:var(--accent); }
         .check-main { min-width:0; }
         .check-name { font-size:13px; font-weight:700; }
         .check-desc { color:var(--txt2); font-size:11px; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
