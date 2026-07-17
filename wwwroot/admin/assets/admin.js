@@ -1408,6 +1408,37 @@ function browserSummary(userAgent){
   const os=/Windows NT 10/.test(ua)?'Windows':/Android/.test(ua)?'Android':/iPhone|iPad/.test(ua)?'iOS/iPadOS':/Mac OS X/.test(ua)?'macOS':/Linux/.test(ua)?'Linux':'SO não identificado';
   return `${browser} · ${os}`;
 }
+let registrationInfoTooltip=null;
+let registrationInfoAnchor=null;
+function hideRegistrationInfo(){
+  registrationInfoTooltip?.remove();
+  registrationInfoAnchor?.removeAttribute('aria-describedby');
+  registrationInfoTooltip=null;
+  registrationInfoAnchor=null;
+}
+function showRegistrationInfo(button){
+  const text=button?.dataset.tooltip;
+  if(!text)return;
+  hideRegistrationInfo();
+  const tooltip=document.createElement('div');
+  tooltip.id='registration-info-tooltip';
+  tooltip.className='registration-info-tooltip';
+  tooltip.setAttribute('role','tooltip');
+  tooltip.textContent=text;
+  document.body.appendChild(tooltip);
+  const buttonRect=button.getBoundingClientRect();
+  const tooltipRect=tooltip.getBoundingClientRect();
+  const left=Math.min(window.innerWidth-tooltipRect.width-12,Math.max(12,buttonRect.right-tooltipRect.width));
+  const preferredTop=buttonRect.top-tooltipRect.height-9;
+  const top=preferredTop>=12?preferredTop:buttonRect.bottom+9;
+  tooltip.style.left=`${left}px`;
+  tooltip.style.top=`${top}px`;
+  button.setAttribute('aria-describedby',tooltip.id);
+  registrationInfoTooltip=tooltip;
+  registrationInfoAnchor=button;
+}
+window.addEventListener('resize',hideRegistrationInfo);
+window.addEventListener('scroll',hideRegistrationInfo,true);
 function registrationInfo(u){
   const lines=[];
   if(u.registrationIp)lines.push(`IP: ${u.registrationIp}`);
@@ -1418,7 +1449,7 @@ function registrationInfo(u){
   if(u.registrationSource){const sourceLabel={admin:'Criado no Admin',site:'Cadastro no site',login_recovery:'Recuperado no login'}[u.registrationSource]||u.registrationSource;lines.push(`Canal: ${sourceLabel}`);}
   if(!lines.length)lines.push('Metadados indisponíveis: cadastro anterior à coleta.');
   const text=lines.join('\n');
-  return `<button type="button" class="registration-info" data-tooltip="${esc(text)}" title="${esc(text)}" aria-label="Informações técnicas do cadastro: ${esc(text)}">i</button>`;
+  return `<button type="button" class="registration-info" data-tooltip="${esc(text)}" aria-label="Informações técnicas do cadastro: ${esc(text)}" onmouseenter="showRegistrationInfo(this)" onmouseleave="hideRegistrationInfo()" onfocus="showRegistrationInfo(this)" onblur="hideRegistrationInfo()">i</button>`;
 }
 
 async function loadUsers(p){
