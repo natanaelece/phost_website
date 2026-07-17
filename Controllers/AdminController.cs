@@ -521,14 +521,14 @@ namespace PremierAPI.Controllers
         }
 
         [HttpDelete("free-trials/{id:guid}")]
-        public async Task<IActionResult> DeleteRejectedFreeTrial(Guid id)
+        public async Task<IActionResult> DeleteFreeTrial(Guid id)
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
-            var result = await _freeTrials.DeleteRejectedAsync(id);
+            var result = await _freeTrials.DeleteResettableAsync(id);
             if (result == null) return NotFound(new { erro = "Solicitação de teste não encontrada." });
             if (!result.Success) return Conflict(new { erro = result.Message });
 
-            _logger.LogInformation("[ADMIN][TESTE GRATIS] Solicitação recusada {RequestId} excluída.", id);
+            _logger.LogInformation("[ADMIN][TESTE GRATIS] Solicitação {RequestId} excluída e redefinida para nunca solicitou.", id);
             return Ok(new { msg = result.Message });
         }
 

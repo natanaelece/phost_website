@@ -1471,8 +1471,9 @@ function trialActions(u){
     buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','cancel','Cancelar esta liberação sem marcar uso?')">Cancelar</button>`);
   }
   if(u.whatsapp){const phone=u.whatsapp.replace(/\D/g,'');buttons.push(`<a class="btn btn-outline" target="_blank" rel="noopener" href="https://wa.me/55${phone.replace(/^55/,'')}">WhatsApp</a>`);}
-  if(u.status==='recusado'){
-    buttons.push(`<button class="btn btn-outline danger-action" style="padding:4px 8px" onclick="deleteRejectedFreeTrial('${u.requestId}')" title="Excluir solicitação recusada" aria-label="Excluir solicitação recusada">&#128465;</button>`);
+  if(u.status==='recusado'||u.status==='utilizado'){
+    const description=u.status==='utilizado'?'teste utilizado':'solicitação recusada';
+    buttons.push(`<button class="btn btn-outline danger-action" style="padding:4px 8px" onclick="deleteFreeTrial('${u.requestId}','${u.status}')" title="Excluir ${description}" aria-label="Excluir ${description}">&#128465;</button>`);
   }
   return buttons.length?`<div class="action-row">${buttons.join('')}</div>`:'<span class="muted">Sem ação</span>';
 }
@@ -1514,8 +1515,9 @@ async function releaseFreeTrialManually(userId){
   if(!response.ok){showAdminMessage('error',data?.erro||'Não foi possível liberar o teste.');return;}
   showAdminMessage('success',data?.msg||'Teste grátis liberado manualmente.');loadFreeTrials();
 }
-async function deleteRejectedFreeTrial(id){
-  if(!await askAdminConfirm('Excluir permanentemente esta solicitação recusada? O usuário voltará a aparecer como nunca solicitou.',{title:'Excluir solicitação',confirmText:'Excluir'}))return;
+async function deleteFreeTrial(id,status){
+  const description=status==='utilizado'?'este teste utilizado':'esta solicitação recusada';
+  if(!await askAdminConfirm(`Excluir permanentemente ${description}? O usuário voltará a aparecer como nunca solicitou.`,{title:'Excluir solicitação',confirmText:'Excluir'}))return;
   const response=await fetch(`${API}/free-trials/${encodeURIComponent(id)}`,{method:'DELETE',headers:hdrs()});
   const data=await response.json().catch(()=>null);
   if(!response.ok){showAdminMessage('error',data?.erro||'Não foi possível excluir a solicitação.');return;}

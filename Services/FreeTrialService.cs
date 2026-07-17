@@ -386,7 +386,7 @@ namespace PremierAPI.Services
             return new FreeTrialAdminTransitionResult(true, "Teste grátis liberado manualmente.", ToStatus(created!));
         }
 
-        public async Task<FreeTrialAdminDeleteResult?> DeleteRejectedAsync(Guid requestId)
+        public async Task<FreeTrialAdminDeleteResult?> DeleteResettableAsync(Guid requestId)
         {
             await using var db = new NpgsqlConnection(_connectionString);
             await db.OpenAsync();
@@ -404,10 +404,10 @@ namespace PremierAPI.Services
                 await transaction.RollbackAsync();
                 return null;
             }
-            if (!string.Equals(status, "recusado", StringComparison.Ordinal))
+            if (status is not ("recusado" or "utilizado"))
             {
                 await transaction.RollbackAsync();
-                return new FreeTrialAdminDeleteResult(false, "Somente solicitações recusadas podem ser excluídas.");
+                return new FreeTrialAdminDeleteResult(false, "Somente solicitações recusadas ou utilizadas podem ser excluídas.");
             }
 
             await db.ExecuteAsync(@"
@@ -415,7 +415,7 @@ namespace PremierAPI.Services
                 WHERE id = @Id;",
                 new { Id = requestId }, transaction);
             await transaction.CommitAsync();
-            return new FreeTrialAdminDeleteResult(true, "Solicitação recusada excluída.");
+            return new FreeTrialAdminDeleteResult(true, "Solicitação excluída. O usuário voltou para nunca solicitou.");
         }
 
         private static async Task InsertEventAsync(
