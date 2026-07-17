@@ -20,6 +20,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - Ordenação das tabelas mostra somente uma seta na coluna ativa; mobile deve preservar todas as informações em cartões.
 - Usuário local pode ser vinculado às OUs/pastas de ativos, expirados e website.
 - Cadastro público nunca cria usuário AD. O provisionamento e vínculo acontecem somente após pedido pago; falhas ficam para reconciliação automática e são reportadas pelo logger/Telegram.
+- Se `ad_username` já existe, o provisionamento pago reutiliza a conta vinculada e não cria outra.
 - A conta AD usa a mesma senha do site. Até o primeiro pagamento, ela fica reversivelmente protegida em `pending_ad_credentials`; apague o registro logo após criar e vincular a conta AD. Nunca envie ou registre a senha.
 - O vencimento comercial inclui todo o dia exibido: `accountExpires` vence à meia-noite seguinte; às 01:00 a conta sem outra licença ativa é desativada e movida para a OU configurada de inativos.
 - Confirmação de e-mail admite no máximo dois lembretes automáticos em dias distintos (11:00 e 19:00); o admin pode reenviar à parte ou confirmar manualmente.
@@ -28,6 +29,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - A seleção manual de grupo para computador sem sugestão e todas as falhas LDAP recuperáveis usam ao menos `Warning`, acionando Telegram; falhas que impedem a ação usam `Error`. O admin possui uma tela de Logs em memória, sanitizada, para a execução atual.
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.
+- A descrição convencional `SRV01_01` corresponde a `ACESSO_SRV01_01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
 

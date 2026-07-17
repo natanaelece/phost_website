@@ -133,7 +133,13 @@ namespace PremierAPI.Services
                 {
                     if (!await _ad.UserExistsAsync(username))
                         throw new InvalidOperationException($"O usuário AD vinculado '{username}' não foi encontrado.");
+                    _logger.LogInformation(
+                        "[AD PROVISIONAMENTO] Cadastro {UserId} ja vinculado a {AdUsername}; a conta existente sera reutilizada.",
+                        order.UserId, username);
                     await _ad.ActivateAndRestoreUserAsync(username);
+                    await db.ExecuteAsync(
+                        "DELETE FROM pending_ad_credentials WHERE user_id = @UserId",
+                        new { order.UserId });
                 }
 
                 await _ad.SetUserExpirationAsync(username, expiresOn);

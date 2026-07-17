@@ -332,6 +332,27 @@ namespace PremierAPI.Services
                         IsActive = (GetAttributeAsInt(entry, "userAccountControl") & 2) == 0
                     };
                     computer.Groups.AddRange(GetManagedGroupNames(entry));
+                    string? conventionGroup = GetConventionComputerGroupName(computer.Description);
+                    if (!string.IsNullOrWhiteSpace(conventionGroup)
+                        && !computer.Groups.Contains(conventionGroup, StringComparer.OrdinalIgnoreCase))
+                    {
+                        string? conventionGroupDn = GetGroupDn(conn, conventionGroup);
+                        if (string.IsNullOrWhiteSpace(conventionGroupDn))
+                        {
+                            _logger.LogWarning(
+                                "[AD] Computador {Computer} segue a convencao {Description}, mas o grupo {GroupName} nao foi encontrado.",
+                                computer.Name, computer.Description, conventionGroup);
+                        }
+                        else
+                        {
+                            AddComputerToGroup(conn, entry.Dn, computer.Name, conventionGroup, conventionGroupDn);
+                            computer.Groups.Add(conventionGroup);
+                            computer.Groups = computer.Groups
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+                        }
+                    }
                     computers.Add(computer);
                 }
                 catch (LdapException ex)
@@ -1035,10 +1056,7 @@ namespace PremierAPI.Services
 
             var computer = results.Next();
             string description = GetAttribute(computer, "description");
-            var match = Regex.Match(description, @"\bSRV\d{2}[-_]\d{2}\b", RegexOptions.IgnoreCase);
-            string? describedGroup = match.Success
-                ? $"ACESSO_{match.Value.ToUpperInvariant().Replace('_', '-')}"
-                : null;
+            string? describedGroup = GetConventionComputerGroupName(description);
 
             if (!string.IsNullOrWhiteSpace(describedGroup) && !string.IsNullOrWhiteSpace(GetGroupDn(conn, describedGroup)))
                 return describedGroup;
@@ -1048,6 +1066,17 @@ namespace PremierAPI.Services
                 .ThenBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
             return membershipGroup ?? describedGroup;
+        }
+
+        private static string? GetConventionComputerGroupName(string? description)
+        {
+            var match = Regex.Match(
+                description ?? "",
+                @"\bSRV(?<server>\d{2})[-_](?<computer>\d{2})\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return match.Success
+                ? $"ACESSO_SRV{match.Groups["server"].Value}_{match.Groups["computer"].Value}".ToUpperInvariant()
+                : null;
         }
 
         private (string GroupName, string GroupDn) ResolveComputerGroup(
