@@ -1154,7 +1154,12 @@ async function loadAdminLogs(){
     search:document.getElementById('logs-search')?.value||'',
     limit:document.getElementById('logs-limit')?.value||'300'
   });
-  const data=await apiFetch(`${API}/logs?${qs}`);if(!data)return;
+  const data=await apiFetch(`${API}/logs?${qs}`);
+  if(!data){
+    body.innerHTML='<tr><td colspan="5" class="empty">Não foi possível carregar os logs. Verifique o aviso exibido e tente novamente.</td></tr>';
+    setText('logs-count','Falha ao carregar');
+    return;
+  }
   const entries=data.entries||[];
   setText('logs-count',`${entries.length} registro${entries.length===1?'':'s'} exibido${entries.length===1?'':'s'}`);
   setText('lupdate',`Atualizado ${new Date(data.generatedAt).toLocaleTimeString('pt-BR')}`);
