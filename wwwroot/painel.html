@@ -404,10 +404,34 @@
                     <div>
                         <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wide border-b border-slate-800 pb-3 mb-4">Resumo do pedido</h2>
                         
-                        <div class="flex justify-between mb-2"><span class="text-slate-500">Custo Base:</span><span id="resBase" class="text-white">R$ 0,00</span></div>
+                        <div class="mb-2 flex justify-between gap-3">
+                            <span class="flex items-center gap-1 text-slate-500">Custo Base:
+                                <span class="group relative flex items-center" tabindex="0" aria-label="Como o custo base é calculado" aria-describedby="resBaseInfo">
+                                    <svg class="h-4 w-4 text-slate-500 transition-colors group-hover:text-blue-400 group-focus:text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                                    <span id="resBaseInfo" role="tooltip" class="absolute bottom-full left-1/2 z-20 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-800 p-3 text-center text-xs font-normal leading-relaxed text-slate-300 shadow-lg group-hover:block group-focus:block"></span>
+                                </span>
+                            </span>
+                            <span id="resBase" class="text-white">R$ 0,00</span>
+                        </div>
 
-                        <div class="flex justify-between mb-2"><span class="text-slate-500">Desconto Hardware:</span><span id="resDescHardware" class="text-blue-400">- R$ 0,00</span></div>
-                        <div class="flex justify-between mb-2"><span class="text-slate-500">Desconto Período:</span><span id="resDescPeriodo" class="text-blue-400">- R$ 0,00</span></div>
+                        <div class="mb-2 flex justify-between gap-3">
+                            <span class="flex items-center gap-1 text-slate-500">Desconto Hardware:
+                                <span class="group relative flex items-center" tabindex="0" aria-label="Como o desconto de hardware é calculado" aria-describedby="resDescHardwareInfo">
+                                    <svg class="h-4 w-4 text-slate-500 transition-colors group-hover:text-blue-400 group-focus:text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                                    <span id="resDescHardwareInfo" role="tooltip" class="absolute bottom-full left-1/2 z-20 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-800 p-3 text-center text-xs font-normal leading-relaxed text-slate-300 shadow-lg group-hover:block group-focus:block"></span>
+                                </span>
+                            </span>
+                            <span id="resDescHardware" class="text-blue-400">- R$ 0,00</span>
+                        </div>
+                        <div class="mb-2 flex justify-between gap-3">
+                            <span class="flex items-center gap-1 text-slate-500">Desconto Período:
+                                <span class="group relative flex items-center" tabindex="0" aria-label="Como o desconto de período é calculado" aria-describedby="resDescPeriodoInfo">
+                                    <svg class="h-4 w-4 text-slate-500 transition-colors group-hover:text-blue-400 group-focus:text-blue-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                                    <span id="resDescPeriodoInfo" role="tooltip" class="absolute bottom-full left-1/2 z-20 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-800 p-3 text-center text-xs font-normal leading-relaxed text-slate-300 shadow-lg group-hover:block group-focus:block"></span>
+                                </span>
+                            </span>
+                            <span id="resDescPeriodo" class="text-blue-400">- R$ 0,00</span>
+                        </div>
                         
                         <!-- CUPOM VISUAL -->
                         <div id="rowCupomExtra" class="flex justify-between mb-2 hidden">
@@ -1488,7 +1512,7 @@
             lastPeriodo = periodo;
 
             const contDias = document.getElementById('containerDias'), msgDiasAlert = document.getElementById('msgDiasAlert'), msgPcsAlert = document.getElementById('msgPcsAlert'), msgDesc = document.getElementById('msgDescPc');
-            let bruto = 0, descPeriodo = 0, descHardware = 0, descIndicacao = 0, descCupom = 0;
+            let bruto = 0, descPeriodo = 0, descHardware = 0, descIndicacao = 0, descCupom = 0, dias = null;
             const slotIncrement = (Math.max(wyds, rules.minSlots) - 1) * rules.additionalSlotPrice;
             const basePadrao = rules.weeklyBasePrice + slotIncrement;
             
@@ -1503,7 +1527,7 @@
                 limparErro('qtdPcs', 'msgPcsAlert');
 
                 let diasInput = document.getElementById('qtdDias');
-                let dias = parseInt(diasInput.value);
+                dias = parseInt(diasInput.value);
                 diasInput.min = String(rules.minDailyDays); diasInput.max = String(rules.maxDailyDays);
                 if (isNaN(dias) || dias < rules.minDailyDays) { diasInput.value = rules.minDailyDays; dias = rules.minDailyDays; }
                 
@@ -1564,6 +1588,22 @@
             document.getElementById('resBase').innerText = `R$ ${bruto.toFixed(2).replace('.', ',')}`;
             document.getElementById('resDescHardware').innerText = `- R$ ${descHardware.toFixed(2).replace('.', ',')}`;
             document.getElementById('resDescPeriodo').innerText = `- R$ ${descPeriodo.toFixed(2).replace('.', ',')}`;
+
+            const moeda = value => `R$ ${value.toFixed(2).replace('.', ',')}`;
+            const acessosAdicionais = Math.max(0, wyds - rules.minSlots);
+            const detalheAcessos = `${moeda(periodo === 'diaria' ? rules.dailyWeeklyBasePrice : rules.weeklyBasePrice)} do plano + ${acessosAdicionais} acesso(s) adicional(is) × ${moeda(rules.additionalSlotPrice)}`;
+            const detalheBase = periodo === 'diaria'
+                ? `${pcs} computador(es) × ${dias} dia(s) × (${detalheAcessos}) ÷ ${rules.weeklyDays} dias = ${moeda(bruto)}.`
+                : periodo === 'mensal'
+                    ? `${pcs} computador(es) × ${rules.monthlyWeeks} semanas × (${detalheAcessos}) = ${moeda(bruto)}.`
+                    : `${pcs} computador(es) × (${detalheAcessos}) = ${moeda(bruto)}.`;
+            document.getElementById('resBaseInfo').textContent = detalheBase;
+            document.getElementById('resDescHardwareInfo').textContent = periodo === 'diaria'
+                ? 'O desconto por computadores adicionais não se aplica ao plano diário.'
+                : `${Math.max(0, pcs - 1)} computador(es) adicional(is) × ${moeda(rules.additionalComputerDiscount)} = ${moeda(descHardware)}.`;
+            document.getElementById('resDescPeriodoInfo').textContent = periodo === 'mensal'
+                ? `${(rules.monthlyDiscountRate * 100).toLocaleString('pt-BR')}% sobre o custo base de ${moeda(bruto)} = ${moeda(descPeriodo)}.`
+                : 'O desconto de período é aplicado ao plano mensal e não se aplica à seleção atual.';
             
             if (descArredonda > 0) { rowArredonda.classList.remove('hidden'); document.getElementById('resDescArredondamento').innerText = `- R$ ${descArredonda.toFixed(2).replace('.', ',')}`; } 
             else { rowArredonda.classList.add('hidden'); }
