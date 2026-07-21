@@ -282,6 +282,27 @@ try {
           && resources.some(url => url.includes('/admin/assets/fonts/inter-latin-wght-normal.woff2'))
           && !resources.some(url => url.includes('cdn.jsdelivr.net') || url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com'));
       `
+    },
+    {
+      name: 'admin-navigation-without-shell-reload',
+      page: '/admin/testes-gratis?authenticated-fixture=1',
+      wait: 1750,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        document.getElementById('nav-dashboard').click();
+        const deadline = Date.now() + 4000;
+        const check = () => {
+          const resources = performance.getEntriesByType('resource').map(entry => new URL(entry.name).pathname);
+          const passed = location.pathname === '/admin/dashboard'
+            && document.body.dataset.view === 'dashboard'
+            && Boolean(document.getElementById('view-dashboard'))
+            && resources.filter(path => path === '/admin/assets/admin.js').length === 1
+            && resources.filter(path => path === '/api/admin/session').length === 1;
+          if (passed || Date.now() >= deadline) done(passed);
+          else setTimeout(check, 50);
+        };
+        check();
+      `
     }
   ];
 
@@ -291,9 +312,9 @@ try {
       body: { url: `http://${host}:${port}${interaction.page}` }
     });
     await sleep(interaction.wait || 750);
-    const passed = await webdriver(`/session/${sessionId}/execute/sync`, {
+    const passed = await webdriver(`/session/${sessionId}/execute/${interaction.asyncScript ? 'async' : 'sync'}`, {
       method: 'POST',
-      body: { script: interaction.script, args: [] }
+      body: { script: interaction.asyncScript || interaction.script, args: [] }
     });
     if (!passed) interactionFailures += 1;
     console.log(`${passed ? 'PASS' : 'FAIL'}\tinteraction\t${interaction.name}`);

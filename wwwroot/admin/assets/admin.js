@@ -1064,6 +1064,8 @@ const ADMIN_ROUTES={dashboard:'/admin/dashboard',financeiro:'/admin/financeiro',
 const S={csrfToken:null,user:null,loginChallengeId:null,twoFactorSetup:false,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
 let chartLoaderPromise=null;
+let adminNavigationController=null;
+let adminNavigationRequest=0;
 
 function ensureChartJs(){
   if(window.Chart)return Promise.resolve(true);
@@ -1177,6 +1179,7 @@ function showApp(){
   setupAdminMobileNavigation();
   const n=S.user?.name||'Admin';document.getElementById('sname').textContent=n;document.getElementById('savatar').textContent=n[0].toUpperCase();
   setupCurrentView();
+  setupAdminNavigation();
   loadCurrentView();
   setupMaintenanceControls();
   resumeMaintenanceState();
@@ -1451,9 +1454,63 @@ function setupCurrentView(){
 function loadCurrentView(){
   if(S.view==='dashboard')loadDash();else if(S.view==='financeiro')loadFinanceiro();else if(S.view==='crm')loadCrm();else if(S.view==='trials')loadFreeTrials();else if(S.view==='pedidos')loadOrders();else if(S.view==='usuarios')loadUsers();else if(S.view==='ad')loadAd();else if(S.view==='notificacoes'){wireWhatsAppEditor();loadNotificacoes();}else if(S.view==='logs'){wireAdminLogs();loadAdminLogs();}
 }
+function viewFromAdminPath(pathname){return Object.keys(ADMIN_ROUTES).find(view=>ADMIN_ROUTES[view]===pathname)||null;}
+function teardownCurrentView(nextView){
+  clearInterval(adminLogsRefreshTimer);adminLogsRefreshTimer=null;
+  if(S.view==='dashboard'&&nextView!=='dashboard'){
+    if(S.chart){S.chart.destroy();S.chart=null;}
+    if(S.statusChart){S.statusChart.destroy();S.statusChart=null;}
+  }
+  if(S.view==='notificacoes'&&nextView!=='notificacoes'){
+    S.waEditorWired=false;S.waSelected=null;S.waOriginalBody='';S.waHistory=[];S.waHistoryIndex=-1;
+  }
+}
+async function navigateAdmin(view,target=ADMIN_ROUTES[view],options={}){
+  if(!target||view===S.view&&window.location.pathname===target)return;
+  if(hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja sair e descarta-las?')){
+    if(options.fromHistory)history.replaceState({adminView:S.view},'',ADMIN_ROUTES[S.view]);
+    return;
+  }
+  adminNavigationController?.abort();
+  const controller=new AbortController();adminNavigationController=controller;
+  const request=++adminNavigationRequest;
+  document.body.classList.add('admin-navigation-loading');document.body.setAttribute('aria-busy','true');
+  try{
+    const response=await fetch(target,{cache:'no-store',credentials:'same-origin',headers:{Accept:'text/html'},signal:controller.signal});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const nextDocument=new DOMParser().parseFromString(await response.text(),'text/html');
+    const nextContent=nextDocument.querySelector('#main > .content');
+    const nextView=nextDocument.body?.dataset.view;
+    if(!nextContent||nextView!==view)throw new Error('Conteudo administrativo invalido');
+    teardownCurrentView(view);
+    document.querySelector('#main > .content').replaceWith(document.importNode(nextContent,true));
+    document.body.dataset.view=view;S.view=view;
+    document.title=nextDocument.title||document.title;
+    if(options.push!==false)history.pushState({adminView:view},'',target);
+    setupCurrentView();enhanceResponsiveTables(document.querySelector('#main > .content'));
+    loadCurrentView();window.scrollTo({top:0,behavior:'instant'});
+  }catch(error){
+    if(error.name!=='AbortError')showAdminMessage('error','Nao foi possivel abrir esta area. Tente novamente.');
+  }finally{
+    if(request===adminNavigationRequest){document.body.classList.remove('admin-navigation-loading');document.body.removeAttribute('aria-busy');adminNavigationController=null;}
+  }
+}
+function setupAdminNavigation(){
+  if(document.body.dataset.adminNavigationWired==='true')return;
+  document.body.dataset.adminNavigationWired='true';
+  history.replaceState({adminView:S.view},'',window.location.href);
+  document.addEventListener('click',event=>{
+    const link=event.target.closest('a.ni[href]');
+    if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||link.target)return;
+    const url=new URL(link.href,window.location.href);const view=viewFromAdminPath(url.pathname);
+    if(url.origin!==window.location.origin||!view)return;
+    event.preventDefault();navigateAdmin(view,url.pathname);
+  });
+  window.addEventListener('popstate',()=>{const view=viewFromAdminPath(window.location.pathname);if(view)navigateAdmin(view,window.location.pathname,{push:false,fromHistory:true});});
+}
 function go(v){
   const target=ADMIN_ROUTES[v];
-  if(target&&window.location.pathname!==target){window.location.href=target;return;}
+  if(target){navigateAdmin(v,target);return;}
   S.view=v;setupCurrentView();loadCurrentView();
 }
 async function refresh(){if(hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja atualizar e descarta-las?'))return;S.dashData=null;loadCurrentView();}

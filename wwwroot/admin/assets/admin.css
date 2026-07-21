@@ -144,3 +144,4 @@
 .admin-session-loading-card{display:flex;align-items:center;gap:10px;color:var(--txt2);font-size:13px}
 body.admin-session-pending #admin-session-loading{display:flex}
 body.admin-session-pending #login-screen,body.admin-session-pending #app{display:none}
+.admin-navigation-loading #main>.content{opacity:.55;pointer-events:none;transition:opacity .12s ease}.admin-navigation-loading #main{cursor:progress}
