@@ -1,5 +1,6 @@
 // AdminController.cs
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Npgsql;
 using Dapper;
 using Microsoft.Extensions.Configuration;
@@ -33,6 +34,7 @@ namespace PremierAPI.Controllers
         private readonly FreeTrialService _freeTrials;
         private readonly AdminMaintenanceService _maintenance;
         private readonly AdminSessionService _adminSessions;
+        private readonly AdminTotpService _adminTotp;
 
         public AdminController(
             IConfiguration config,
@@ -44,7 +46,8 @@ namespace PremierAPI.Controllers
             AdminLogStore adminLogStore,
             FreeTrialService freeTrials,
             AdminMaintenanceService maintenance,
-            AdminSessionService adminSessions)
+            AdminSessionService adminSessions,
+            AdminTotpService adminTotp)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -58,6 +61,7 @@ namespace PremierAPI.Controllers
             _freeTrials = freeTrials;
             _maintenance = maintenance;
             _adminSessions = adminSessions;
+            _adminTotp = adminTotp;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -123,6 +127,7 @@ namespace PremierAPI.Controllers
         }
 
         [HttpPost("login")]
+        [EnableRateLimiting("AuthLimiter")]
         public async Task<IActionResult> Login([FromBody] AdminLoginRequest req)
         {
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -160,13 +165,26 @@ namespace PremierAPI.Controllers
             // Sucesso, reseta tentativas
             _ipRateLimits.TryRemove(ip, out _);
 
-            var session = _adminSessions.CreateSession();
-            IssueAdminSessionCookie(session);
+            if (_adminTotp.IsEnrolled)
+            {
+                var challenge = _adminSessions.CreateLoginChallenge(null);
+                return Ok(new
+                {
+                    requiresTwoFactor = true,
+                    challengeId = challenge.ChallengeId,
+                    expiresAt = challenge.ExpiresAt
+                });
+            }
+
+            string setupSecret = _adminTotp.GenerateSecret();
+            var setupChallenge = _adminSessions.CreateLoginChallenge(setupSecret);
             return Ok(new
             {
-                csrfToken = session.CsrfToken,
-                expiresAt = session.ExpiresAt,
-                user = new { name = "Administrador", email = _config["AdminEmail"] }
+                requiresTwoFactorSetup = true,
+                challengeId = setupChallenge.ChallengeId,
+                expiresAt = setupChallenge.ExpiresAt,
+                setupKey = _adminTotp.FormatSecret(setupSecret),
+                provisioningUri = _adminTotp.CreateProvisioningUri(setupSecret)
             });
         }
 
@@ -175,6 +193,67 @@ namespace PremierAPI.Controllers
         [System.Text.Json.Serialization.JsonPropertyName("cf-turnstile-response")]
         public string? TurnstileResponse { get; set; }
     }
+
+        [HttpPost("login/verify")]
+        [EnableRateLimiting("AuthLimiter")]
+        public IActionResult VerifyTwoFactor([FromBody] AdminTwoFactorRequest req)
+        {
+            TotpVerificationResult verification = TotpVerificationResult.Invalid;
+            var result = _adminSessions.ValidateLoginChallenge(
+                req.ChallengeId,
+                challenge =>
+                {
+                    if (challenge.IsSetup)
+                        return _adminTotp.VerifySecret(challenge.PendingSetupSecret!, req.Code);
+
+                    verification = _adminTotp.VerifyEnrolledCode(req.Code);
+                    return verification.Success;
+                },
+                out var validatedChallenge);
+
+            if (result == AdminChallengeValidationResult.Expired)
+                return Unauthorized(new { erro = "Desafio expirado ou limite de tentativas excedido. Inicie o login novamente." });
+            if (result != AdminChallengeValidationResult.Success || validatedChallenge == null)
+                return Unauthorized(new { erro = "Código de autenticação inválido." });
+
+            IReadOnlyList<string> recoveryCodes = Array.Empty<string>();
+            if (validatedChallenge.IsSetup)
+            {
+                try
+                {
+                    recoveryCodes = _adminTotp.Activate(validatedChallenge.PendingSetupSecret!);
+                }
+                catch (InvalidOperationException)
+                {
+                    return Conflict(new { erro = "A autenticação em dois fatores já foi configurada. Inicie o login novamente." });
+                }
+            }
+
+            if (verification.UsedRecoveryCode)
+            {
+                _logger.LogWarning(
+                    "[ADMIN 2FA] Código de recuperação utilizado. Restam {RemainingCodes} códigos.",
+                    verification.RemainingRecoveryCodes);
+            }
+
+            var session = _adminSessions.CreateSession();
+            IssueAdminSessionCookie(session);
+            return Ok(new
+            {
+                csrfToken = session.CsrfToken,
+                expiresAt = session.ExpiresAt,
+                recoveryCodes,
+                usedRecoveryCode = verification.UsedRecoveryCode,
+                remainingRecoveryCodes = verification.RemainingRecoveryCodes,
+                user = new { name = "Administrador", email = _config["AdminEmail"] }
+            });
+        }
+
+        public class AdminTwoFactorRequest
+        {
+            public string ChallengeId { get; set; } = string.Empty;
+            public string Code { get; set; } = string.Empty;
+        }
 
         [HttpGet("session")]
         public async Task<IActionResult> GetSession()

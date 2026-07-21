@@ -1001,7 +1001,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     }
 
 const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',trials:'/admin/testes-gratis.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html',logs:'/admin/logs.html'};
-const S={csrfToken:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
+const S={csrfToken:null,user:null,loginChallengeId:null,twoFactorSetup:false,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
 
 async function init(){
@@ -1273,15 +1273,77 @@ async function doLogin(){
     const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({Token:pass,"cf-turnstile-response":tToken})});
     const d=await r.json();
     if(!r.ok){if(window.turnstile)window.turnstile.reset();showErr(d.erro||'Erro ao fazer login.');return;}
-    S.csrfToken=d.csrfToken;S.user=d.user;
     document.getElementById('lpass').value='';
-    showApp();
+    if(d.requiresTwoFactor||d.requiresTwoFactorSetup){showTwoFactorStep(d);return;}
+    showErr('Resposta de autenticação inválida.');
   }catch(e){if(window.turnstile)window.turnstile.reset();showErr('Erro de conexao. Tente novamente.');}
-  finally{btn.disabled=false;btn.innerHTML='Entrar no Painel';}
+  finally{btn.disabled=false;if(!S.loginChallengeId)btn.innerHTML='Entrar no Painel';}
   function showErr(m){err.textContent=m;err.style.display='block';}
 }
+
+function showTwoFactorStep(data){
+  S.loginChallengeId=data.challengeId;S.twoFactorSetup=!!data.requiresTwoFactorSetup;
+  const card=document.querySelector('#login-screen .login-card');
+  card.querySelectorAll('.fg,.cf-turnstile').forEach(element=>element.style.display='none');
+  document.getElementById('admin-2fa-step')?.remove();
+  const panel=document.createElement('div');panel.id='admin-2fa-step';panel.className='fg';
+  const intro=document.createElement('p');intro.className='login-sub';intro.style.marginBottom='14px';
+  intro.textContent=S.twoFactorSetup?'Configure o Authenticator usando a chave abaixo e informe o primeiro código de 6 dígitos.':'Informe o código de 6 dígitos do Authenticator ou um código de recuperação.';
+  panel.appendChild(intro);
+  if(S.twoFactorSetup){
+    const keyLabel=document.createElement('label');keyLabel.className='fl';keyLabel.textContent='Chave de configuração';panel.appendChild(keyLabel);
+    const key=document.createElement('code');key.id='admin-2fa-setup-key';key.style.cssText='display:block;padding:12px;margin-bottom:10px;border-radius:8px;background:var(--bg);color:var(--accent);font-size:14px;letter-spacing:1px;word-break:break-all';key.textContent=data.setupKey;panel.appendChild(key);
+    const actions=document.createElement('div');actions.style.cssText='display:flex;gap:8px;margin-bottom:14px';
+    const copy=document.createElement('button');copy.type='button';copy.className='btn btn-outline';copy.textContent='Copiar chave';copy.addEventListener('click',async()=>{await navigator.clipboard.writeText((data.setupKey||'').replace(/\s/g,''));copy.textContent='Copiada';});actions.appendChild(copy);
+    const open=document.createElement('a');open.className='btn btn-outline';open.textContent='Abrir Authenticator';open.href=data.provisioningUri;actions.appendChild(open);panel.appendChild(actions);
+  }
+  const codeLabel=document.createElement('label');codeLabel.className='fl';codeLabel.htmlFor='admin-2fa-code';codeLabel.textContent=S.twoFactorSetup?'Código de 6 dígitos':'Código do Authenticator ou recuperação';panel.appendChild(codeLabel);
+  const code=document.createElement('input');code.id='admin-2fa-code';code.className='fi';code.type='text';code.autocomplete='one-time-code';code.inputMode=S.twoFactorSetup?'numeric':'text';code.maxLength=S.twoFactorSetup?6:32;panel.appendChild(code);
+  document.getElementById('lbtn').before(panel);
+  const button=document.getElementById('lbtn');button.setAttribute('onclick','doVerifyTwoFactor()');button.textContent=S.twoFactorSetup?'Ativar e entrar':'Verificar e entrar';
+  if(window.turnstile)window.turnstile.reset();
+  code.focus();
+}
+
+async function doVerifyTwoFactor(){
+  const code=document.getElementById('admin-2fa-code')?.value.trim()||'';
+  const button=document.getElementById('lbtn');const err=document.getElementById('lerr');err.style.display='none';
+  if(!code){err.textContent='Informe o código de autenticação.';err.style.display='block';return;}
+  button.disabled=true;button.innerHTML='<div class="spinner"></div> Verificando...';
+  try{
+    const response=await fetch('/api/admin/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challengeId:S.loginChallengeId,code})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok){err.textContent=data.erro||'Código inválido.';err.style.display='block';if(response.status===401&&String(data.erro||'').includes('Desafio'))resetAdminLoginFlow();return;}
+    S.csrfToken=data.csrfToken;S.user=data.user;S.loginChallengeId=null;
+    if(data.recoveryCodes?.length){showRecoveryCodes(data.recoveryCodes);return;}
+    resetAdminLoginFlow();showApp();
+    if(data.usedRecoveryCode)showAdminMessage('warning',`Código de recuperação utilizado. Restam ${data.remainingRecoveryCodes}.`);
+  }catch(e){err.textContent='Erro de conexão. Tente novamente.';err.style.display='block';}
+  finally{button.disabled=false;if(S.loginChallengeId)button.textContent=S.twoFactorSetup?'Ativar e entrar':'Verificar e entrar';}
+}
+
+function showRecoveryCodes(codes){
+  document.getElementById('admin-2fa-step')?.remove();
+  const panel=document.createElement('div');panel.id='admin-recovery-step';panel.className='fg';
+  const title=document.createElement('p');title.className='login-title';title.style.fontSize='18px';title.textContent='Salve seus códigos de recuperação';panel.appendChild(title);
+  const note=document.createElement('p');note.className='login-sub';note.textContent='Cada código funciona uma única vez. Guarde-os fora deste servidor; eles não serão exibidos novamente.';panel.appendChild(note);
+  const list=document.createElement('pre');list.style.cssText='padding:12px;border-radius:8px;background:var(--bg);color:var(--txt);text-align:center;line-height:1.7;user-select:all';list.textContent=codes.join('\n');panel.appendChild(list);
+  const copy=document.createElement('button');copy.type='button';copy.className='btn btn-outline btn-full';copy.textContent='Copiar códigos';copy.addEventListener('click',async()=>{await navigator.clipboard.writeText(codes.join('\n'));copy.textContent='Códigos copiados';});panel.appendChild(copy);
+  document.getElementById('lbtn').before(panel);
+  const button=document.getElementById('lbtn');button.setAttribute('onclick','finishAdminLogin()');button.textContent='Já salvei, entrar no painel';
+}
+
+function finishAdminLogin(){resetAdminLoginFlow();showApp();}
+
+function resetAdminLoginFlow(){
+  S.loginChallengeId=null;S.twoFactorSetup=false;
+  document.getElementById('admin-2fa-step')?.remove();document.getElementById('admin-recovery-step')?.remove();
+  const card=document.querySelector('#login-screen .login-card');card.querySelectorAll('.fg,.cf-turnstile').forEach(element=>element.style.display='');
+  const button=document.getElementById('lbtn');button.setAttribute('onclick','doLogin()');button.textContent='Entrar no Painel';
+  if(window.turnstile)window.turnstile.reset();
+}
 document.addEventListener('keydown',e=>{
-  if(e.key==='Enter'&&document.getElementById('login-screen').style.display!=='none')doLogin();
+  if(e.key==='Enter'&&document.getElementById('login-screen').style.display!=='none'){if(document.getElementById('admin-recovery-step'))finishAdminLogin();else if(S.loginChallengeId)doVerifyTwoFactor();else doLogin();}
   if(e.key==='Escape'&&document.querySelector('.modal-overlay.active')){if(adminConfirmResolver)resolveAdminConfirm(false);else closeModals();}
   if(e.key==='Tab'){
     const modal=document.querySelector('.modal-overlay.active');if(!modal)return;
@@ -1296,7 +1358,7 @@ document.addEventListener('click',e=>{
   requestAnimationFrame(()=>document.querySelector('.modal-overlay.active input:not([type="hidden"]),.modal-overlay.active select,.modal-overlay.active textarea,.modal-overlay.active button')?.focus());
 },true);
 document.addEventListener('click',e=>{const p=document.getElementById('ad-link-picker');if(p&&!p.contains(e.target))closeAdLinkDropdown();});
-function clearAdminSession(){localStorage.removeItem('premierAdmin');S.csrfToken=null;S.user=null;if(S.chart){S.chart.destroy();S.chart=null;}if(S.statusChart){S.statusChart.destroy();S.statusChart=null;}showLogin();}
+function clearAdminSession(){localStorage.removeItem('premierAdmin');S.csrfToken=null;S.user=null;if(S.chart){S.chart.destroy();S.chart=null;}if(S.statusChart){S.statusChart.destroy();S.statusChart=null;}resetAdminLoginFlow();showLogin();}
 async function doLogout(){if(hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja sair e descarta-las?'))return;try{await fetch(API+'/logout',{method:'POST',headers:hdrs()});}catch(e){}clearAdminSession();}
 function hdrs(){const headers={'Content-Type':'application/json'};if(S.csrfToken)headers['X-CSRF-Token']=S.csrfToken;return headers;}
 async function apiFetch(url){

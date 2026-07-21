@@ -33,6 +33,19 @@ if (args.Contains("--validate-configuration", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--validate-admin-security", StringComparer.Ordinal))
+{
+    if (!AdminTotpService.RunSelfTest())
+    {
+        Console.Error.WriteLine("ADMIN_SECURITY_VALIDATION=FAIL");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    Console.WriteLine("ADMIN_SECURITY_VALIDATION=PASS");
+    return;
+}
+
 var knownProxyAddress = IPAddress.Parse(builder.Configuration["ReverseProxy:KnownProxy"]!);
 
 // SEGURANÇA: Limita tamanho máximo do body (protege RAM do T8 Pro)
@@ -62,6 +75,7 @@ builder.Services.AddSingleton<PremierAPI.Services.AdPasswordProtectionService>()
 builder.Services.AddSingleton<PremierAPI.Services.AdAccountProvisioningService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdminMaintenanceService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdminSessionService>();
+builder.Services.AddSingleton<PremierAPI.Services.AdminTotpService>();
 builder.Services.AddHostedService<PremierAPI.Services.AdAccountProvisioningWorker>();
 builder.Services.AddHostedService<PremierAPI.Services.AdOrderExpirationWorker>();
 builder.Services.AddHostedService<PremierAPI.Services.EmailConfirmationReminderWorker>();

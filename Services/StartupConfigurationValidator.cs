@@ -22,6 +22,9 @@ public static class StartupConfigurationValidator
         "ActiveDirectory:WebsiteUsersOu",
         "AdminEmail",
         "AdminSecurity:SessionHours",
+        "AdminSecurity:LoginChallengeMinutes",
+        "AdminSecurity:TotpIssuer",
+        "AdminSecurity:TotpSecretPath",
         "AdminToken",
         "Asaas:ApiKey",
         "Asaas:ApiToken",
@@ -58,6 +61,7 @@ public static class StartupConfigurationValidator
 
         ValidatePositiveInteger(configuration, "ActiveDirectory:Port", invalid);
         ValidatePositiveInteger(configuration, "AdminSecurity:SessionHours", invalid);
+        ValidatePositiveInteger(configuration, "AdminSecurity:LoginChallengeMinutes", invalid);
         ValidatePositiveInteger(configuration, "Smtp:Port", invalid);
         ValidateBoolean(configuration, "Asaas:UseSandbox", invalid);
         ValidateBoolean(configuration, "Evolution:DryRun", invalid);
@@ -66,6 +70,7 @@ public static class StartupConfigurationValidator
         ValidateAbsoluteUri(configuration, "Evolution:BaseUrl", invalid);
         ValidateAbsoluteUri(configuration, "PremierConfig:BaseUrlFront", invalid);
         ValidateIpAddress(configuration, "ReverseProxy:KnownProxy", invalid);
+        ValidateAbsolutePath(configuration, "AdminSecurity:TotpSecretPath", invalid);
 
         if (!Enum.TryParse<LogLevel>(configuration["Telegram:MinimumLevel"], true, out _))
             invalid.Add("Telegram:MinimumLevel");
@@ -118,6 +123,15 @@ public static class StartupConfigurationValidator
         ISet<string> invalid)
     {
         if (!IPAddress.TryParse(configuration[key], out _))
+            invalid.Add(key);
+    }
+
+    private static void ValidateAbsolutePath(
+        IConfiguration configuration,
+        string key,
+        ISet<string> invalid)
+    {
+        if (!Path.IsPathRooted(configuration[key]))
             invalid.Add(key);
     }
 }
