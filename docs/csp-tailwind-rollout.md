@@ -114,6 +114,8 @@ CSP_BROWSER_PAGES=15
 CSP_BROWSER_VIOLATIONS=0
 CSP_BROWSER_RUNTIME_ERRORS=0
 CSP_BROWSER_INTERACTION_FAILURES=0
+ADMIN_SESSION_GATE_FAILURES=0
+ADMIN_SHELL_FAILURES=0
 ```
 
 Chromium e ChromeDriver devem possuir versões compatíveis. O servidor temporário
@@ -149,6 +151,13 @@ Use contas de teste e dados que possam ser restaurados:
 - Pedidos/Usuários/Testes grátis/Active Directory: abrir e fechar todos os
   modais, filtros, menus, tooltips, tabelas responsivas e confirmações, sem
   confirmar a ação destrutiva.
+- Ao navegar entre telas administrativas, deve aparecer somente o estado neutro
+  "Validando sessão administrativa..." até a resposta do servidor. O formulário
+  de login não deve piscar quando já existe uma sessão válida, e logo, menu
+  completo e botão de logout devem permanecer iguais em todas as telas.
+- Os links do menu devem permanecer nas rotas canônicas sem `.html`, sem resposta
+  301 intermediária. A requisição de sessão e o carregamento dos modais
+  compartilhados devem começar em paralelo.
 - Código de recuperação TOTP só deve ser testado em janela planejada: cada uso
   consome um código e exige atualizar o inventário guardado pelo proprietário.
 

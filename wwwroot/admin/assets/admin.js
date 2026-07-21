@@ -1060,7 +1060,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         if(r.ok) showAdminMessage('success', msg); else showAdminMessage('error', msg);
     }
 
-const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',trials:'/admin/testes-gratis.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html',logs:'/admin/logs.html'};
+const ADMIN_ROUTES={dashboard:'/admin/dashboard',financeiro:'/admin/financeiro',crm:'/admin/crm',trials:'/admin/testes-gratis',pedidos:'/admin/pedidos',usuarios:'/admin/usuarios',ad:'/admin/active-directory',notificacoes:'/admin/notificacoes',logs:'/admin/logs'};
 const S={csrfToken:null,user:null,loginChallengeId:null,twoFactorSetup:false,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
 
@@ -1072,7 +1072,7 @@ async function init(){
   localStorage.removeItem('premierAdmin');
   try{
     const response=await fetch(API+'/session',{cache:'no-store'});
-    if(response.ok){const data=await response.json();S.csrfToken=data.csrfToken;S.user=data.user;showApp();return;}
+    if(response.ok){const data=await response.json();S.csrfToken=data.csrfToken;S.user=data.user;await adminPartialsPromise;showApp();return;}
   }catch(e){}
   showLogin();
 }
@@ -1156,21 +1156,17 @@ function setupResponsiveTables(){
   });
   window._adminResponsiveObserver.observe(document.body,{childList:true,subtree:true});
 }
-function showLogin(){document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';}
+function completeAdminSessionGate(){document.body.classList.remove('admin-session-pending');document.body.removeAttribute('aria-busy');}
+function showLogin(){completeAdminSessionGate();document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';}
 function showApp(){
+  completeAdminSessionGate();
   document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='flex';
-  ensureFreeTrialNavigation();
   setupAdminMobileNavigation();
   const n=S.user?.name||'Admin';document.getElementById('sname').textContent=n;document.getElementById('savatar').textContent=n[0].toUpperCase();
   setupCurrentView();
   loadCurrentView();
   setupMaintenanceControls();
   resumeMaintenanceState();
-}
-function ensureFreeTrialNavigation(){
-  if(document.getElementById('nav-trials'))return;
-  const crm=document.getElementById('nav-crm');if(!crm)return;
-  const link=document.createElement('a');link.className='ni';link.id='nav-trials';link.href='/admin/testes-gratis.html';link.innerHTML='<span class="ni-icon">&#9201;</span>Testes gr&aacute;tis';crm.after(link);
 }
 function setupAdminMobileNavigation(){
   const header=document.querySelector('#main > header');
@@ -1210,7 +1206,7 @@ function setupMaintenanceControls(){
     const modal=document.createElement('div');
     modal.id='maintenance-result';
     modal.className='modal-overlay maintenance-result';
-    modal.innerHTML='<div class="modal-box maintenance-result-box"><div id="maintenance-result-icon" class="maintenance-result-icon" aria-hidden="true"></div><div id="maintenance-result-title" class="modal-title"></div><div class="modal-body"><p id="maintenance-result-message" class="modal-note"></p><pre id="maintenance-result-log" class="maintenance-result-log hidden"></pre></div><div class="modal-footer"><a id="maintenance-result-logs" class="btn btn-outline hidden" href="/admin/logs.html">Conferir logs</a><button type="button" class="btn btn-primary" data-admin-click="close-maintenance-result">Fechar</button></div></div>';
+    modal.innerHTML='<div class="modal-box maintenance-result-box"><div id="maintenance-result-icon" class="maintenance-result-icon" aria-hidden="true"></div><div id="maintenance-result-title" class="modal-title"></div><div class="modal-body"><p id="maintenance-result-message" class="modal-note"></p><pre id="maintenance-result-log" class="maintenance-result-log hidden"></pre></div><div class="modal-footer"><a id="maintenance-result-logs" class="btn btn-outline hidden" href="/admin/logs">Conferir logs</a><button type="button" class="btn btn-primary" data-admin-click="close-maintenance-result">Fechar</button></div></div>';
     document.body.appendChild(modal);
   }
 }
@@ -1873,7 +1869,8 @@ function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/<
 async function loadAdminPartials(){
   const target=document.getElementById('admin-modals-root');
   if(!target)return;
-  try{const r=await fetch('/admin/partials/modals.html',{cache:'no-store'});if(r.ok){target.innerHTML=await r.text();enhanceAdminModals();}}
+  try{const r=await fetch('/admin/partials/modals',{cache:'no-store'});if(r.ok){target.innerHTML=await r.text();enhanceAdminModals();}}
   catch(e){showAdminMessage('error','Nao foi possivel carregar os modais do admin.');}
 }
-loadAdminPartials().finally(init);
+const adminPartialsPromise=loadAdminPartials();
+init();

@@ -37,6 +37,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - A origem aceita a porta 5000 somente pelo loopback e pelo proxy exato configurado. Preserve a regra do nftables, valide o proxy antes de aceitar `CF-Connecting-IP` e mantenha o HSTS sem `includeSubDomains` e sem `preload`.
 - `AdminToken` é apenas o primeiro fator do admin. O navegador recebe uma sessão aleatória curta em cookie `HttpOnly`/`Secure`/`SameSite=Strict`, com CSRF nas mutações, e o login exige TOTP.
 - Tailwind 3.4 é compilado localmente; nunca reintroduza o Play CDN. A CSP não aceita `'unsafe-inline'`: não crie scripts, estilos, atributos `on*` ou `style` inline. Consulte `docs/csp-tailwind-rollout.md` para testes, implantação e rollback.
+- O shell do admin é uniforme e estático: logo, menu completo e logout existem em todas as telas. Preserve o estado neutro enquanto `/api/admin/session` valida a sessão; não volte a exibir o login nem a inserir **Testes grátis** depois do carregamento.
 
 ## Segurança operacional
 

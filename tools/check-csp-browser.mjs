@@ -46,20 +46,20 @@ const pricingFixture = {
 
 const pages = [
   '/',
-  '/confirmar.html',
-  '/painel.html',
-  '/privacidade.html',
-  '/recuperar-senha.html',
-  '/admin.html',
-  '/admin/active-directory.html',
-  '/admin/crm.html',
-  '/admin/dashboard.html',
-  '/admin/financeiro.html',
-  '/admin/logs.html',
-  '/admin/notificacoes.html',
-  '/admin/pedidos.html',
-  '/admin/testes-gratis.html',
-  '/admin/usuarios.html'
+  '/confirmar',
+  '/painel',
+  '/privacidade',
+  '/recuperar-senha',
+  '/admin',
+  '/admin/active-directory',
+  '/admin/crm',
+  '/admin/dashboard',
+  '/admin/financeiro',
+  '/admin/logs',
+  '/admin/notificacoes',
+  '/admin/pedidos',
+  '/admin/testes-gratis',
+  '/admin/usuarios'
 ];
 
 const contentTypes = new Map([
@@ -84,13 +84,31 @@ const server = http.createServer(async (request, response) => {
       response.end(JSON.stringify(pricingFixture));
       return;
     }
+    if (requestPath === '/api/admin/session') {
+      const authenticated = new URL(request.headers.referer || `http://${host}`).searchParams.has('authenticated-fixture');
+      setTimeout(() => {
+        response.writeHead(authenticated ? 200 : 401, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Security-Policy': csp,
+          'Cache-Control': 'no-store'
+        });
+        response.end(authenticated
+          ? '{"csrfToken":"fixture","user":{"name":"Admin Fixture"}}'
+          : '{"erro":"session fixture"}');
+      }, 1500);
+      return;
+    }
     const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '');
-    const filePath = path.resolve(webRoot, relativePath);
+    let filePath = path.resolve(webRoot, relativePath);
     if (filePath !== webRoot && !filePath.startsWith(`${webRoot}${path.sep}`)) {
       response.writeHead(403).end('Forbidden');
       return;
     }
 
+    if (!path.extname(filePath)) {
+      const htmlPath = `${filePath}.html`;
+      if ((await stat(htmlPath).catch(() => null))?.isFile()) filePath = htmlPath;
+    }
     if (!(await stat(filePath)).isFile()) throw new Error('not-found');
     const body = await readFile(filePath);
     response.writeHead(200, {
@@ -126,6 +144,8 @@ let sessionId;
 let cspFailuresTotal = 0;
 let runtimeFailures = 0;
 let interactionFailures = 0;
+let adminSessionGateFailures = 0;
+let adminShellFailures = 0;
 
 try {
   await new Promise((resolve, reject) => {
@@ -155,7 +175,44 @@ try {
       method: 'POST',
       body: { url: `http://${host}:${port}${page}` }
     });
-    await sleep(750);
+    const isAdminPage = page.startsWith('/admin/');
+    let gatePassed = true;
+    if (isAdminPage) {
+      gatePassed = await webdriver(`/session/${sessionId}/execute/sync`, {
+        method: 'POST',
+        body: {
+          script: `
+            const loading = document.getElementById('admin-session-loading');
+            const login = document.getElementById('login-screen');
+            const app = document.getElementById('app');
+            return document.body.classList.contains('admin-session-pending')
+              && getComputedStyle(loading).display === 'flex'
+              && getComputedStyle(login).display === 'none'
+              && getComputedStyle(app).display === 'none';
+          `,
+          args: []
+        }
+      });
+      if (!gatePassed) adminSessionGateFailures += 1;
+    }
+    await sleep(isAdminPage ? 1750 : 750);
+
+    let shellPassed = true;
+    if (isAdminPage) {
+      shellPassed = await webdriver(`/session/${sessionId}/execute/sync`, {
+        method: 'POST',
+        body: {
+          script: `
+            return !document.body.classList.contains('admin-session-pending')
+              && document.querySelectorAll('#nav-trials').length === 1
+              && Boolean(document.querySelector('.slogo svg'))
+              && document.querySelector('[title="Sair"]')?.classList.contains('csp-s006');
+          `,
+          args: []
+        }
+      });
+      if (!shellPassed) adminShellFailures += 1;
+    }
 
     const logs = await webdriver(`/session/${sessionId}/log`, {
       method: 'POST',
@@ -167,7 +224,8 @@ try {
     const pageRuntimeFailures = logs.filter(({ message }) => /uncaught(?: \(in promise\))? (?:type|reference|syntax)?error/i.test(message));
     cspFailuresTotal += cspFailures.length;
     runtimeFailures += pageRuntimeFailures.length;
-    console.log(`${cspFailures.length + pageRuntimeFailures.length === 0 ? 'PASS' : 'FAIL'}\t${page}\tCSP=${cspFailures.length}\tJS=${pageRuntimeFailures.length}`);
+    const pageFailed = cspFailures.length + pageRuntimeFailures.length > 0 || !gatePassed || !shellPassed;
+    console.log(`${pageFailed ? 'FAIL' : 'PASS'}\t${page}\tCSP=${cspFailures.length}\tJS=${pageRuntimeFailures.length}${isAdminPage ? `\tGATE=${gatePassed ? 0 : 1}\tSHELL=${shellPassed ? 0 : 1}` : ''}`);
     for (const failure of cspFailures) console.log(`  ${failure.message}`);
     for (const failure of pageRuntimeFailures) console.log(`  ${failure.message}`);
   }
@@ -190,13 +248,26 @@ try {
     },
     {
       name: 'panel-help-modal',
-      page: '/painel.html',
+      page: '/painel',
       script: `
         document.querySelector('[data-csp-click="h092"]').click();
         const opened = !document.getElementById('ajudaModal').classList.contains('hidden');
         document.querySelector('[data-csp-click="h101"]').click();
         const closed = document.getElementById('ajudaModal').classList.contains('hidden');
         return opened && closed;
+      `
+    },
+    {
+      name: 'admin-authenticated-shell',
+      page: '/admin/testes-gratis?authenticated-fixture=1',
+      wait: 1750,
+      script: `
+        return getComputedStyle(document.getElementById('app')).display === 'flex'
+          && getComputedStyle(document.getElementById('login-screen')).display === 'none'
+          && document.getElementById('nav-trials').classList.contains('active')
+          && document.getElementById('sname').textContent === 'Admin Fixture'
+          && Boolean(document.querySelector('.slogo svg'))
+          && document.querySelector('[title="Sair"]')?.classList.contains('csp-s006');
       `
     }
   ];
@@ -206,7 +277,7 @@ try {
       method: 'POST',
       body: { url: `http://${host}:${port}${interaction.page}` }
     });
-    await sleep(750);
+    await sleep(interaction.wait || 750);
     const passed = await webdriver(`/session/${sessionId}/execute/sync`, {
       method: 'POST',
       body: { script: interaction.script, args: [] }
@@ -225,4 +296,6 @@ console.log(`CSP_BROWSER_PAGES=${pages.length}`);
 console.log(`CSP_BROWSER_VIOLATIONS=${cspFailuresTotal}`);
 console.log(`CSP_BROWSER_RUNTIME_ERRORS=${runtimeFailures}`);
 console.log(`CSP_BROWSER_INTERACTION_FAILURES=${interactionFailures}`);
-process.exitCode = cspFailuresTotal + runtimeFailures + interactionFailures === 0 ? 0 : 1;
+console.log(`ADMIN_SESSION_GATE_FAILURES=${adminSessionGateFailures}`);
+console.log(`ADMIN_SHELL_FAILURES=${adminShellFailures}`);
+process.exitCode = cspFailuresTotal + runtimeFailures + interactionFailures + adminSessionGateFailures + adminShellFailures === 0 ? 0 : 1;

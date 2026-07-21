@@ -138,3 +138,8 @@
 .csp-d032 { padding:4px 8px;font-size:12px;color:var(--err);border-color:var(--err) }
 .csp-d033 { padding:4px 8px }
 .csp-d034 { color:var(--txt2);line-height:30px;padding:0 2px }
+
+#admin-session-loading{display:none;min-height:100vh;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse at 50% 0%,rgba(59,130,246,.12) 0%,transparent 70%)}
+.admin-session-loading-card{display:flex;align-items:center;gap:10px;color:var(--txt2);font-size:13px}
+body.admin-session-pending #admin-session-loading{display:flex}
+body.admin-session-pending #login-screen,body.admin-session-pending #app{display:none}

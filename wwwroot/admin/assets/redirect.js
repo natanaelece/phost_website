@@ -1,1 +1,1 @@
-window.location.replace("/admin/dashboard.html");
+window.location.replace("/admin/dashboard");
