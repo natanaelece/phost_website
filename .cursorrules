@@ -14,5 +14,7 @@ Regras essenciais:
 - Tabelas responsivas nao ocultam dados e exibem uma unica seta somente na coluna ordenada.
 - Analytics first-party nao recebe PII; nao ha GA4 ou Meta Pixel.
 - Preserve a indexacao publica definida em `robots.txt` e `sitemap.xml`.
+- `AdminToken` e somente o primeiro fator administrativo. Preserve TOTP, sessao curta em cookie `HttpOnly` e CSRF; nunca persista a chave permanente no frontend.
+- Preserve o proxy exato da origem, o HSTS sem subdominios/preload e as diretivas CSP seguras. Rode `node tools/check-csp.mjs` antes de alterar a CSP.
 
 Antes de concluir, rode build, validacao de JavaScript e `git diff --check` conforme comandos documentados no README.

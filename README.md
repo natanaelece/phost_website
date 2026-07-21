@@ -71,7 +71,7 @@ O servidor também possui **Node.js 18** somente para validar a sintaxe dos Java
 ### Passo a Passo
 
 1. **Clonar o Repositório** e navegar até a pasta do projeto.
-2. **Configuração de Ambiente:** Copie e configure o arquivo `appsettings.json` com suas variáveis de banco de dados, chaves do Asaas e Active Directory. **Nota Importante:** É obrigatório definir as Variáveis de Ambiente `AdminEmail` e `AdminToken` no servidor (LXC/Docker) ou no appsettings para habilitar e proteger o acesso ao Painel Admin.
+2. **Configuração de Ambiente:** Copie e configure o arquivo `appsettings.json` com suas variáveis de banco de dados, chaves do Asaas e Active Directory. **Nota Importante:** É obrigatório definir as Variáveis de Ambiente `AdminEmail` e `AdminToken` no servidor (LXC/Docker) para habilitar o primeiro fator do Painel Admin. O `AdminToken` nunca é devolvido ao navegador nem usado diretamente como sessão.
 3. **Restaurar e Compilar:**
    ```bash
    dotnet restore
@@ -127,9 +127,14 @@ Ao cancelar, `orders.canceled_was_paid` registra se o pedido estava efetivamente
 
 - As rotas da pasta `wwwroot/` servem HTML de maneira estática. As requisições à API de clientes são feitas em tempo real e protegidas via JWT Header `Authorization: Bearer <token>`.
 - Hashes de senha utilizando Bcrypt (via `BCrypt.Net-Next`).
-- **Painel Admin:** A autenticação administrativa (`ValidateAdmin`) não depende mais do banco de dados (estateless). O login é feito com validação estrita baseada nas chaves de ambiente secretas do servidor (`AdminToken`).
+- **Segurança administrativa atual:** `AdminToken` é somente o primeiro fator. Depois do Turnstile, o backend exige TOTP RFC 6238 compatível com aplicativos Authenticator e emite uma sessão aleatória de oito horas em cookie `HttpOnly`, `Secure` e `SameSite=Strict`, com CSRF nas mutações.
+- A sessão administrativa fica somente em memória, é revogada no logout e termina em qualquer reinicialização do serviço; a chave permanente nunca é devolvida pela API nem fica em `localStorage`.
+- O segredo TOTP e os hashes dos dez códigos de recuperação de uso único ficam protegidos pelo ASP.NET Data Protection em `/var/lib/premierapi/admin-totp.protected`, com diretório `0700` e arquivo `0600`. O arquivo deve acompanhar o key ring e o certificado nos backups.
 - Proteção nativa no formulário de acesso com **Cloudflare Turnstile** anti-bot.
-- A Content Security Policy de `Program.cs` declara separadamente scripts, estilos, imagens, frames, conexões e mídia. Vídeos locais devem usar URL da própria origem, como `/vid/comofunciona.mp4`; novos provedores externos precisam ser adicionados explicitamente à diretiva `media-src`.
+- A Content Security Policy de `Program.cs` declara separadamente scripts, estilos, imagens, frames, conexões e mídia, bloqueia objetos, `<base>`, formulários externos e enquadramento por terceiros. Vídeos locais devem usar URL da própria origem, como `/vid/comofunciona.mp4`; novos provedores externos precisam ser adicionados explicitamente à diretiva `media-src`.
+- A CSP ainda preserva `'unsafe-inline'` porque os HTMLs estáticos possuem scripts, eventos e estilos inline. Execute `node tools/check-csp.mjs` antes de endurecê-la; remover essa permissão sem refatoração quebra a interface.
+- HSTS é emitido pela aplicação por 180 dias, sem `includeSubDomains` e sem `preload`. Assim, `phost.pro` e `www.phost.pro` passam a exigir HTTPS depois da primeira resposta segura, sem alcançar as APIs hospedadas em outros subdomínios.
+- A origem Kestrel aceita chamadas somente do proxy reverso configurado em `ReverseProxy:KnownProxy` e do loopback. No host atual, o firewall permite a porta 5000 apenas para `172.31.2.1` e `lo`; não amplie essa regra para toda a sub-rede.
 
 ## 🌐 Landing page e Painel do Cliente
 
@@ -234,7 +239,9 @@ O `DatabaseInitializer.cs` valida o encoding na inicializacao e emite um aviso c
 
 O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo e Vanilla JavaScript. Cada area principal tem seu proprio `.html`, enquanto `admin/assets/admin.css`, `admin/assets/admin.js` e `admin/partials/modals.html` concentram estilos, logica compartilhada e modais. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.
 
-Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Assim, builds e reinicializações não dependem de limpeza manual do cache da Cloudflare. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
+Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Isso é especialmente importante para respostas de login, chave TOTP e códigos de recuperação. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
+
+O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
 
 O rodapé da barra lateral administrativa possui o menu recolhido **Manutenção**. **Compilar e reiniciar website** executa build `Release` sem restore e só reinicia `premierapi` quando a compilação termina com sucesso; **Reiniciar serviço** ignora o build. As duas operações exigem sessão administrativa e confirmação, são mutuamente exclusivas e usam apenas comandos allowlisted. Um job systemd transitório executa `scripts/admin-maintenance.sh` fora do processo da API e persiste o andamento em `/run/premierapi-maintenance`, permitindo que o Admin bloqueie a interface, atravesse a indisponibilidade, retome o polling e recarregue sozinho quando a API voltar. O resultado é verde quando o build não tem avisos e o health check responde, amarelo quando a compilação tem warnings e vermelho em falhas. O acompanhamento usa consultas limitadas; nunca mantém `journalctl -f` preso a uma requisição HTTP.
 
@@ -267,8 +274,11 @@ Não existe atualmente um projeto de testes automatizados. Execute verificaçõe
 dotnet build --no-restore
 for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
 node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')
+node tools/check-csp.mjs
 git diff --check
 ```
+
+Com as variáveis protegidas carregadas, `dotnet PremierAPI.dll --validate-admin-security` confere o algoritmo TOTP contra os vetores oficiais do RFC 6238 sem criar ou exibir segredos. `--validate-configuration` continua validando apenas nomes e formatos das configurações.
 
 Essas verificações são locais. Não gere cobranças reais no Asaas e não altere objetos de produção no AD para validar código sem autorização explícita.
 

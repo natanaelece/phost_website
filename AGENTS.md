@@ -73,3 +73,10 @@ chaves ausentes ou inválidas.
 
 Qualquer rotação de credenciais, alteração dos arquivos protegidos, mudança da
 unit ou reinicialização exige autorização explícita e janela operacional.
+
+O estado do segundo fator administrativo fica em
+`/var/lib/premierapi/admin-totp.protected`, pertencente a `root` e com modo
+`0600`. Nunca exiba ou registre a chave TOTP, a URI `otpauth` nem os códigos de
+recuperação. O arquivo só é recuperável junto com o key ring e o certificado do
+Data Protection; redefini-lo ou removê-lo exige autorização explícita e janela
+operacional.

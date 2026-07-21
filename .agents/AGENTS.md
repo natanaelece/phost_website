@@ -34,11 +34,14 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
 - Arquivos de aplicação são entregues com `no-store` no navegador e na Cloudflare; não remova os cabeçalhos específicos da CDN nem aplique Cache Rule que os sobreponha. Imagens e vídeos podem continuar cacheáveis.
+- A origem aceita a porta 5000 somente pelo loopback e pelo proxy exato configurado. Preserve a regra do nftables, valide o proxy antes de aceitar `CF-Connecting-IP` e mantenha o HSTS sem `includeSubDomains` e sem `preload`.
+- `AdminToken` é apenas o primeiro fator do admin. O navegador recebe uma sessão aleatória curta em cookie `HttpOnly`/`Secure`/`SameSite=Strict`, com CSRF nas mutações, e o login exige TOTP.
 
 ## Segurança operacional
 
 Não faça chamadas com efeitos reais no Asaas nem mutações no AD para testar sem autorização expressa. Não exponha segredos, tokens ou configurações privadas em logs, diffs ou respostas.
 O key ring do Data Protection é persistente e protegido por certificado; preserve `DataProtectionConfiguration` e nunca versione `.data-protection-keys`.
+O estado TOTP protegido fica em `/var/lib/premierapi/admin-totp.protected`, com arquivo `0600`. Nunca exponha chave, URI `otpauth` ou códigos de recuperação; faça backup dele junto do key ring e do certificado, pois o arquivo isolado não é recuperável.
 
 ## Checagens rápidas
 
@@ -46,5 +49,6 @@ O key ring do Data Protection é persistente e protegido por certificado; preser
 dotnet build --no-restore
 for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
 node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')
+node tools/check-csp.mjs
 git diff --check
 ```
