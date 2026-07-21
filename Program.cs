@@ -214,6 +214,10 @@ app.Use(async (context, next) =>
     // CSP: bloqueia scripts/estilos externos não autorizados
     context.Response.Headers["Content-Security-Policy"] =
         "default-src 'self'; " +
+        "object-src 'none'; " +
+        "base-uri 'none'; " +
+        "form-action 'self'; " +
+        "frame-ancestors 'none'; " +
         "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://fonts.googleapis.com; " +
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.tailwindcss.com; " +
         "font-src 'self' https://fonts.gstatic.com; " +
