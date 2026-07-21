@@ -1,0 +1,11 @@
+{
+  "name": "premierapi-assets",
+  "private": true,
+  "scripts": {
+    "css:build": "tailwindcss -i ./assets/tailwind.css -o ./wwwroot/css/tailwind.css --minify",
+    "css:watch": "tailwindcss -i ./assets/tailwind.css -o ./wwwroot/css/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.19"
+  }
+}

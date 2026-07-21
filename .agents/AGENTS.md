@@ -8,12 +8,12 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - `Services/PricingRules.cs`: autoridade única de preços, limites, descontos e arredondamentos.
 - `Services/ActiveDirectoryService.cs`: única fronteira LDAP/LDAPS.
 - `Services/DatabaseInitializer.cs`: evolução idempotente do schema PostgreSQL.
-- `wwwroot/index.html` e `wwwroot/painel.html`: cliente em HTML/Vanilla JS com Tailwind CDN.
+- `wwwroot/index.html` e `wwwroot/painel.html`: cliente em HTML/Vanilla JS com Tailwind 3.4 compilado localmente.
 - `wwwroot/admin/`: telas administrativas separadas, CSS nativo e JS compartilhado.
 
 ## Não redescubra nem reverta
 
-- Sem NPM ou framework frontend. Node 18 é ferramenta de validação, não dependência do projeto.
+- NPM existe somente para o build fixado do Tailwind; não introduza bundler ou framework frontend. Node 18 também é ferramenta de validação.
 - QR Pix é estático para evitar CPF/CNPJ. Concilie compras atuais por `pixQrCodeId`; mantenha o fallback legado pela descrição `Licença`.
 - Pedido administrativo nasce pendente com `created_manually`, não pago. O cliente pode gerar ou renovar o QR depois.
 - Regras comerciais não podem ser copiadas para JS/controladores: use `PricingRules` e os endpoints de regras/cotação.
@@ -46,6 +46,7 @@ O estado TOTP protegido fica em `/var/lib/premierapi/admin-totp.protected`, com 
 ## Checagens rápidas
 
 ```bash
+npm run css:build
 dotnet build --no-restore
 for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
 node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')

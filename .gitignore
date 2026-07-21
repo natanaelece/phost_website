@@ -8,6 +8,7 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+node_modules/
 .vs/
 .vscode/
 *.user

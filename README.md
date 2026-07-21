@@ -18,7 +18,7 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 - **Integrações Externas:** 
   - Asaas API (Geração de PIX, Webhooks, Reembolso)
   - Active Directory / LDAP (Criação de usuários, troca de senha, grupos)
-- **Frontend (Integrado em `wwwroot/`):** HTML5, Vanilla JavaScript, CSS Nativo UI (no admin) e **Tailwind CSS** via CDN (usado extensamente no Painel do Cliente, Login e Recuperação de senha).
+- **Frontend (Integrado em `wwwroot/`):** HTML5, Vanilla JavaScript, CSS Nativo UI (no admin) e **Tailwind CSS 3.4** compilado localmente (usado extensamente no Painel do Cliente, Login e Recuperação de senha).
 - **Autenticação:** JWT (JSON Web Tokens)
 
 ## 📦 Estrutura do Projeto
@@ -66,7 +66,7 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 3. Servidor Windows (ou permissão de delegação LDAP) para acesso ao **Active Directory**.
 4. Chaves da API do **Asaas** (Produção e Sandbox).
 
-O servidor também possui **Node.js 18** somente para validar a sintaxe dos JavaScripts estáticos. O projeto não usa NPM, `package.json`, bundler ou framework frontend.
+O servidor também possui **Node.js 18** e npm. O npm é usado somente para fixar e compilar o Tailwind local; o frontend continua sem bundler ou framework. `wwwroot/css/tailwind.css` é versionado para que a aplicação possa servir o CSS sem runtime JavaScript e sem depender de CDN.
 
 ### Passo a Passo
 
@@ -74,6 +74,8 @@ O servidor também possui **Node.js 18** somente para validar a sintaxe dos Java
 2. **Configuração de Ambiente:** Copie e configure o arquivo `appsettings.json` com suas variáveis de banco de dados, chaves do Asaas e Active Directory. **Nota Importante:** É obrigatório definir as Variáveis de Ambiente `AdminEmail` e `AdminToken` no servidor (LXC/Docker) para habilitar o primeiro fator do Painel Admin. O `AdminToken` nunca é devolvido ao navegador nem usado diretamente como sessão.
 3. **Restaurar e Compilar:**
    ```bash
+   npm ci
+   npm run css:build
    dotnet restore
    dotnet build
    ```
@@ -239,6 +241,8 @@ O `DatabaseInitializer.cs` valida o encoding na inicializacao e emite um aviso c
 
 O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo e Vanilla JavaScript. Cada area principal tem seu proprio `.html`, enquanto `admin/assets/admin.css`, `admin/assets/admin.js` e `admin/partials/modals.html` concentram estilos, logica compartilhada e modais. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.
 
+As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwind.css`, compilado a partir de `assets/tailwind.css` e das classes encontradas em `wwwroot/**/*.html` e `wwwroot/**/*.js`. A versão está fixada no `package-lock.json`. Depois de adicionar ou alterar classes, execute `npm run css:build` e versione o CSS gerado. Em uma instalação nova, rode primeiro `npm ci`. O comando de manutenção **Compilar e reiniciar website** também recompila o CSS e aborta o restart se essa etapa falhar.
+
 Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Isso é especialmente importante para respostas de login, chave TOTP e códigos de recuperação. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
@@ -271,6 +275,7 @@ Ao vincular um computador a um usuário, descrições no padrão `SRV01_01` corr
 Não existe atualmente um projeto de testes automatizados. Execute verificações proporcionais à mudança e, antes de commits de código, prefira o conjunto abaixo:
 
 ```bash
+npm run css:build
 dotnet build --no-restore
 for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
 node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')

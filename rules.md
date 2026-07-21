@@ -7,8 +7,8 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - Backend ASP.NET Core/.NET 8, API stateless com JWT, PostgreSQL e Dapper. Não introduza Entity Framework.
 - Use aliases explícitos (`AS NomePropriedade`) ao mapear `snake_case` do PostgreSQL para PascalCase do C#.
 - Alterações idempotentes de schema pertencem a `Services/DatabaseInitializer.cs`. Nunca recrie ou apague automaticamente o banco para corrigir encoding; migração para UTF-8 exige dump/restore planejado.
-- Frontend em HTML estático e Vanilla JavaScript. Não introduza NPM, bundler, React ou Vue. Node.js 18 existe apenas para checagem de sintaxe.
-- `index.html` e `painel.html` usam Tailwind via CDN. O admin fica em `wwwroot/admin/`, usa CSS nativo/Vanilla JS compartilhado e não deve receber Tailwind sem autorização. `wwwroot/admin.html` é só redirecionamento compatível.
+- Frontend em HTML estático e Vanilla JavaScript. NPM é permitido somente para o build fixado do Tailwind; não introduza bundler, React ou Vue. Node.js 18 também é usado nas checagens de sintaxe.
+- As páginas públicas usam Tailwind 3.4 compilado em `wwwroot/css/tailwind.css`; não reintroduza o Play CDN. O admin fica em `wwwroot/admin/`, usa CSS nativo/Vanilla JS compartilhado e não deve receber Tailwind sem autorização. `wwwroot/admin.html` é só redirecionamento compatível.
 - Preserve cores, componentes e linguagem visual existentes. Tabelas responsivas viram cartões sem ocultar dados. Ordenação usa cabeçalho clicável com uma única seta na coluna ativa.
 
 ## Regras comerciais e pedidos
@@ -70,6 +70,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 Antes de concluir alterações de código, execute:
 
 ```bash
+npm run css:build
 dotnet build --no-restore
 for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
 node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')

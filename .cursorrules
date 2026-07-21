@@ -2,8 +2,8 @@ Antes de qualquer tarefa, leia integralmente `README.md`, `rules.md` e `.agents/
 
 Regras essenciais:
 - ASP.NET Core .NET 8, PostgreSQL e Dapper; sem Entity Framework.
-- HTML estatico e Vanilla JavaScript; sem NPM ou frameworks. Node 18 serve apenas para validar sintaxe.
-- Tailwind CDN somente na landing/painel. O admin em `wwwroot/admin/` usa CSS nativo.
+- HTML estatico e Vanilla JavaScript; NPM somente para compilar o Tailwind fixado, sem bundler ou frameworks. Node 18 tambem valida sintaxe.
+- Tailwind 3.4 local nas paginas publicas; nao reintroduza o Play CDN. O admin em `wwwroot/admin/` usa CSS nativo.
 - `Services/PricingRules.cs` e a unica autoridade de precos, limites, descontos e arredondamentos.
 - Cadastro no site e apenas local; usuario AD e criado e vinculado somente depois que um pedido fica pago, com reconciliacao automatica de falhas.
 - Licenca vence no fim da data exibida; as 01:00 do dia seguinte a conta sem outro pedido ativo vai para USUARIOS_EXPIRADOS.
