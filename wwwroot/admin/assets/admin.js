@@ -20,6 +20,66 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     let adminLastModalTrigger = null;
     let adminLogsRefreshTimer = null;
 
+    const adminDeclarativeActions = Object.freeze({
+        'admin-login': () => document.getElementById('admin-recovery-step') ? finishAdminLogin() : S.loginChallengeId ? doVerifyTwoFactor() : doLogin(),
+        'select-ad-link-user': (_event, element) => selectAdLinkUser(element.dataset.username),
+        'close-modals': () => closeModals(),
+        'execute-delete-user': (_event, element) => executeDeleteUser(element.dataset.deleteAd === 'true'),
+        'open-ad-access': (_event, element) => openAdAccessModal(element.dataset.username, element.dataset.computers, element.dataset.allowAll === 'true'),
+        'toggle-ad-never': (_event, element) => toggleAdNever(element.dataset.username),
+        'set-ad-expire': (_event, element) => setAdExpire(element.dataset.username),
+        'open-ad-edit': (_event, element) => openAdEditModal(element.dataset.username),
+        'open-ad-password': (_event, element) => openAdPasswordModal(element.dataset.username),
+        'open-duplicate': (_event, element) => openDuplicateModal(element.dataset.username, element.dataset.fullName),
+        'move-ou': (_event, element) => moveOu(element.dataset.username, element.dataset.archive === 'true'),
+        'delete-ad-user': (_event, element) => deleteAdUser(element.dataset.username),
+        'open-ad-computer-groups': (_event, element) => openAdComputerGroupsModal(element.dataset.computer),
+        'edit-ad-computer': (_event, element) => editAdComputer(element.dataset.computer),
+        'duplicate-ad-computer': (_event, element) => duplicateAdComputer(element.dataset.computer),
+        'delete-ad-computer': (_event, element) => deleteAdComputer(element.dataset.computer),
+        'edit-ad-group': (_event, element) => editAdGroup(element.dataset.group),
+        'duplicate-ad-group': (_event, element) => duplicateAdGroup(element.dataset.group),
+        'delete-ad-group': (_event, element) => deleteAdGroup(element.dataset.group),
+        'load-ad': () => loadAd(),
+        'set-ad-filter': (_event, element) => setAdFilter(element.dataset.filter, element),
+        'toggle-ad-all': () => toggleAdAllComputers(),
+        'sort-ad-access': (_event, element) => sortAdAccessComputers(element.dataset.field),
+        'toggle-ad-computer': (_event, element) => toggleAdComputer(element),
+        'start-maintenance': (_event, element) => startAdminMaintenance(element.dataset.operation),
+        'close-maintenance-result': () => closeMaintenanceResult(),
+        'toggle-order-delivery': (_event, element) => toggleOrderDelivery(element.dataset.orderId, element.checked, element),
+        'mark-order-paid': (_event, element) => markOrderPaid(element.dataset.orderId),
+        'delete-order': (_event, element) => deleteOrder(element.dataset.orderId),
+        'open-cancel-order': (_event, element) => openCancelOrderModal(element.dataset.orderId, element.dataset.paid === 'true'),
+        'show-registration-info': (_event, element) => showRegistrationInfo(element),
+        'hide-registration-info': () => hideRegistrationInfo(),
+        'open-ad-link': (_event, element) => openAdLinkModal(element.dataset.userId),
+        'confirm-email': (_event, element) => confirmEmailFromCheckbox(element),
+        'resend-email': (_event, element) => resendEmailConfirmation(element.dataset.userId, element),
+        'open-local-user': (_event, element) => openUserModal(element.dataset.userId),
+        'toggle-local-user': (_event, element) => toggleLocalUser(element.dataset.userId, element.dataset.activate === 'true', element),
+        'delete-local-user': (_event, element) => deleteLocalUser(element.dataset.userId, element.dataset.hasAd === 'true'),
+        'release-free-trial': (_event, element) => releaseFreeTrialManually(element.dataset.userId),
+        'update-free-trial': (_event, element) => updateFreeTrial(element.dataset.requestId, element.dataset.updateAction, element.dataset.confirm),
+        'delete-free-trial': (_event, element) => deleteFreeTrial(element.dataset.requestId, element.dataset.status),
+        'load-page': (_event, element) => element.dataset.pageType === 'orders' ? loadOrders(Number(element.dataset.page)) : element.dataset.pageType === 'users' ? loadUsers(Number(element.dataset.page)) : loadFreeTrials(Number(element.dataset.page)),
+        'select-whatsapp-template': (_event, element) => selectWhatsAppTemplate(element.dataset.templateKey),
+        'insert-whatsapp-variable': (_event, element) => insertWhatsAppVariable(element.dataset.variable)
+    });
+
+    function dispatchAdminDeclarativeAction(eventType, event) {
+        const origin = event.target instanceof Element ? event.target : null;
+        const element = origin?.closest(`[data-admin-${eventType}]`);
+        if (!element) return;
+        const action = adminDeclarativeActions[element.getAttribute(`data-admin-${eventType}`)];
+        if (action) action(event, element);
+    }
+
+    for (const eventType of ['click', 'change', 'input', 'focus', 'blur', 'mouseenter', 'mouseleave']) {
+        const capture = ['focus', 'blur', 'mouseenter', 'mouseleave'].includes(eventType);
+        document.addEventListener(eventType, (event) => dispatchAdminDeclarativeAction(eventType, event), capture);
+    }
+
     function showAdminMessage(type, message) {
         const toast = document.getElementById('adminToast');
         if (!toast) return;
@@ -437,7 +497,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             menu.innerHTML = list.map(x => {
                 const folder = ({USUARIOS:'Ativos',USUARIOS_EXPIRADOS:'Expirados',USUARIOS_WEBSITE:'Website'})[x.ouPath] || x.ouPath || 'AD';
                 const label = (x.fullName || x.username) + ' · ' + folder;
-                return `<button type="button" class="ad-link-option" data-username="${esc(x.username)}" onclick="selectAdLinkUser(this.dataset.username)">
+                return `<button type="button" class="ad-link-option" data-username="${esc(x.username)}" data-admin-click="select-ad-link-user">
                     <span class="ad-link-option-main">${esc(x.username)}</span>
                     <span class="ad-link-option-sub">${esc(label)}</span>
                 </button>`;
@@ -504,14 +564,14 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const footer = document.getElementById('delete-user-footer');
         if (hasAd) {
             footer.innerHTML = `
-                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
-                <button class="btn btn-outline" style="color:var(--txt);border-color:var(--border)" onclick="executeDeleteUser(false)">Excluir apenas do Site</button>
-                <button class="btn btn-outline" style="color:var(--err);border-color:var(--err)" onclick="executeDeleteUser(true)">Excluir do Site e AD</button>
+                <button class="btn btn-outline" data-admin-click="close-modals">Cancelar</button>
+                <button class="btn btn-outline csp-d001" data-admin-click="execute-delete-user" data-delete-ad="false">Excluir apenas do Site</button>
+                <button class="btn btn-outline csp-d002" data-admin-click="execute-delete-user" data-delete-ad="true">Excluir do Site e AD</button>
             `;
         } else {
             footer.innerHTML = `
-                <button class="btn btn-outline" onclick="closeModals()">Cancelar</button>
-                <button class="btn btn-outline" style="color:var(--err);border-color:var(--err)" onclick="executeDeleteUser(false)">Excluir Usuário</button>
+                <button class="btn btn-outline" data-admin-click="close-modals">Cancelar</button>
+                <button class="btn btn-outline csp-d002" data-admin-click="execute-delete-user" data-delete-ad="false">Excluir Usuário</button>
             `;
         }
         
@@ -666,20 +726,20 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const computers=Array.isArray(u.computers)?u.computers:[];
         const computersCsv=computers.join(',');
         const computerText=u.allowAllComputers
-            ? '<span style="color:#60a5fa">&#127760; Todos os computadores</span>'
+            ? '<span class="csp-d003">&#127760; Todos os computadores</span>'
             : (computers.length?computers.map(esc).join(', '):'Nenhum PC');
         const expiresValue=u.expiresAt?u.expiresAt.substring(0,10):'';
         return `<tr>
             <td>${esc(u.username)}</td><td>${esc(u.fullName)}</td>
-            <td>${u.isActive?'<span style="color:#4ade80">Ativo</span>':'<span style="color:red">Desativado</span>'}</td>
-            <td style="max-width:240px"><button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="openAdAccessModal('${u.username}', '${computersCsv}', ${u.allowAllComputers})">&#128187; Gerenciar Acessos</button><div style="font-size:10px;margin-top:4px;color:var(--txt2);white-space:normal">${computerText}</div></td>
-            <td><div class="date-tools"><label class="inline-check"><input type="checkbox" id="never_${u.username}" ${expiresValue?'':'checked'} onchange="toggleAdNever('${u.username}')"> Nunca</label><input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled'}><button class="btn btn-outline" style="padding:4px 8px;font-size:10px" onclick="setAdExpire('${u.username}')">&#10004;</button></div></td>
+            <td>${u.isActive?'<span class="csp-d004">Ativo</span>':'<span class="csp-d005">Desativado</span>'}</td>
+            <td class="csp-d006"><button class="btn btn-outline csp-d007" data-admin-click="open-ad-access" data-username="${esc(u.username)}" data-computers="${esc(computersCsv)}" data-allow-all="${u.allowAllComputers}">&#128187; Gerenciar Acessos</button><div class="csp-d008">${computerText}</div></td>
+            <td><div class="date-tools"><label class="inline-check"><input type="checkbox" id="never_${u.username}" data-admin-change="toggle-ad-never" data-username="${esc(u.username)}" ${expiresValue?'':'checked'}> Nunca</label><input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled'}><button class="btn btn-outline csp-d007" data-admin-click="set-ad-expire" data-username="${esc(u.username)}">&#10004;</button></div></td>
             <td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
-                <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#3b82f6;border-color:#3b82f6" onclick="openAdEditModal('${u.username}')">&#9998; Editar</button>
-                <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#60a5fa;border-color:#60a5fa" onclick="openAdPasswordModal('${u.username}')">&#128274; Senha</button>
-                <button class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#a78bfa;border-color:#a78bfa" onclick="openDuplicateModal('${u.username}', '${esc(u.fullName)}')">&#128203; Duplicar</button>
-                ${u.ouPath==='USUARIOS'?`<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#fbbf24;border-color:#fbbf24" onclick="moveOu('${u.username}', true)">Arquivar</button>`:`<button class="btn btn-outline" style="padding:4px;font-size:10px;color:#4ade80;border-color:#4ade80" onclick="moveOu('${u.username}', false)">${u.ouPath==='USUARIOS_WEBSITE'?'Mover para ativos':'Reativar'}</button>`}
-                <button class="btn btn-outline" style="padding:4px;font-size:10px;color:red;border-color:red" onclick="deleteAdUser('${u.username}')">Excluir</button>
+                <button class="btn btn-outline csp-d009" data-admin-click="open-ad-edit" data-username="${esc(u.username)}">&#9998; Editar</button>
+                <button class="btn btn-outline csp-d010" data-admin-click="open-ad-password" data-username="${esc(u.username)}">&#128274; Senha</button>
+                <button class="btn btn-outline csp-d011" data-admin-click="open-duplicate" data-username="${esc(u.username)}" data-full-name="${esc(u.fullName)}">&#128203; Duplicar</button>
+                ${u.ouPath==='USUARIOS'?`<button class="btn btn-outline csp-d012" data-admin-click="move-ou" data-username="${esc(u.username)}" data-archive="true">Arquivar</button>`:`<button class="btn btn-outline csp-d013" data-admin-click="move-ou" data-username="${esc(u.username)}" data-archive="false">${u.ouPath==='USUARIOS_WEBSITE'?'Mover para ativos':'Reativar'}</button>`}
+                <button class="btn btn-outline csp-d014" data-admin-click="delete-ad-user" data-username="${esc(u.username)}">Excluir</button>
             </div></details></td>
         </tr>`;
     }
@@ -691,9 +751,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-website-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_WEBSITE').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário de website encontrado.</td></tr>';
         document.getElementById('ad-expired-body').innerHTML=users.filter(x=>x.ouPath==='USUARIOS_EXPIRADOS').map(renderAdUserRow).join('')||'<tr><td colspan="6" class="empty">Nenhum usuário expirado encontrado.</td></tr>';
         const computers=sortAdItems(_adComputers,['name','description','operatingSystem','isActive','groups'],'description');
-        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><div class="computer-groups">${(c.groups||[]).length?(c.groups||[]).map(group=>`<span class="badge b-accent">${esc(group)}</span>`).join(''):'<span class="muted">Nenhum</span>'}<button class="btn btn-outline ad-table-action" onclick="openAdComputerGroupsModal('${c.name}')">Gerenciar</button></div></td><td><button class="btn btn-outline ad-table-action" onclick="editAdComputer('${c.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdComputer('${c.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdComputer('${c.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty">Nenhum computador encontrado.</td></tr>';
+        document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><div class="computer-groups">${(c.groups||[]).length?(c.groups||[]).map(group=>`<span class="badge b-accent">${esc(group)}</span>`).join(''):'<span class="muted">Nenhum</span>'}<button class="btn btn-outline ad-table-action" data-admin-click="open-ad-computer-groups" data-computer="${esc(c.name)}">Gerenciar</button></div></td><td><button class="btn btn-outline ad-table-action" data-admin-click="edit-ad-computer" data-computer="${esc(c.name)}">Editar</button></td><td><button class="btn btn-outline ad-table-action" data-admin-click="duplicate-ad-computer" data-computer="${esc(c.name)}">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" data-admin-click="delete-ad-computer" data-computer="${esc(c.name)}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty">Nenhum computador encontrado.</td></tr>';
         const groups=sortAdItems(_adGroups,['name','description'],'name');
-        document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><button class="btn btn-outline ad-table-action" onclick="editAdGroup('${g.name}')">Editar</button></td><td><button class="btn btn-outline ad-table-action" onclick="duplicateAdGroup('${g.name}')">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" onclick="deleteAdGroup('${g.name}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum grupo encontrado.</td></tr>';
+        document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><button class="btn btn-outline ad-table-action" data-admin-click="edit-ad-group" data-group="${esc(g.name)}">Editar</button></td><td><button class="btn btn-outline ad-table-action" data-admin-click="duplicate-ad-group" data-group="${esc(g.name)}">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" data-admin-click="delete-ad-group" data-group="${esc(g.name)}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum grupo encontrado.</td></tr>';
     }
 
     async function loadAd() {
@@ -703,19 +763,19 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         sts.innerHTML = 'Conectando ao servidor 172.31.2.3...';
         const r = await apiFetch('/api/admin/ad/status');
         if(!r || !r.online) {
-            sts.innerHTML = '<span style="color:red">Desconectado</span>';
+            sts.innerHTML = '<span class="csp-d005">Desconectado</span>';
             document.getElementById('ad-actions').classList.add('hidden');
             cont.innerHTML = `<div class="offline-banner">
-                <span style="font-size:40px;margin-bottom:10px;">&#128268;</span>
-                <h3 style="font-size:18px;font-weight:bold;color:#f87171;">Servidor Active Directory Desligado</h3>
-                <p style="color:var(--txt2);max-width:400px;margin-top:10px;">O servidor Windows Server (172.31.2.3) n&atilde;o respondeu no porto 389. Esta vis&atilde;o est&aacute; restrita para economia de energia.</p>
-                <button class="btn btn-outline" style="margin-top:20px;" onclick="loadAd()">&#128260; Tentar Novamente</button>
+                <span class="csp-d015">&#128268;</span>
+                <h3 class="csp-d016">Servidor Active Directory Desligado</h3>
+                <p class="csp-d017">O servidor Windows Server (172.31.2.3) n&atilde;o respondeu no porto 389. Esta vis&atilde;o est&aacute; restrita para economia de energia.</p>
+                <button class="btn btn-outline csp-d018" data-admin-click="load-ad">&#128260; Tentar Novamente</button>
             </div>`;
             cont.classList.remove('hidden');
             return;
         }
 
-        sts.innerHTML = '<span style="color:#4ade80">Online (172.31.2.3)</span>';
+        sts.innerHTML = '<span class="csp-d004">Online (172.31.2.3)</span>';
         document.getElementById('ad-actions').classList.remove('hidden');
         syncAdCreationActions();
         
@@ -724,11 +784,11 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             currentAdFilter = 'users';
             cont.innerHTML = `
                 <div class="filter-bar" id="ad-fbar">
-                    <button class="fb active" onclick="setAdFilter('users',this)">Usu&aacute;rios Ativos</button>
-                    <button class="fb" onclick="setAdFilter('website',this)">Website Users</button>
-                    <button class="fb" onclick="setAdFilter('expired',this)">Usu&aacute;rios Expirados</button>
-                    <button class="fb" onclick="setAdFilter('groups',this)">Grupos</button>
-                    <button class="fb" onclick="setAdFilter('computers',this)">Computadores</button>
+                    <button class="fb active" data-admin-click="set-ad-filter" data-filter="users">Usu&aacute;rios Ativos</button>
+                    <button class="fb" data-admin-click="set-ad-filter" data-filter="website">Website Users</button>
+                    <button class="fb" data-admin-click="set-ad-filter" data-filter="expired">Usu&aacute;rios Expirados</button>
+                    <button class="fb" data-admin-click="set-ad-filter" data-filter="groups">Grupos</button>
+                    <button class="fb" data-admin-click="set-ad-filter" data-filter="computers">Computadores</button>
                 </div>
                 <div class="tbl-card" id="ad-users-tbl">
                     <div class="tbl-wrap"><table><thead><tr><th>Usu&aacute;rio</th><th>Nome Completo</th><th>Status</th><th>Acessos (Computadores e Grupos)</th><th>Vencimento</th><th>A&ccedil;&otilde;es</th></tr></thead><tbody id="ad-users-body"></tbody></table></div>
@@ -815,21 +875,21 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             return;
         }
 
-        let html = `<label class="check-row" style="margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:12px; display:block">
-            <input type="checkbox" id="ad-check-all" onchange="toggleAdAllComputers()" ${ _adAllowAllComputers ? 'checked' : '' }>
-            <span style="color:#60a5fa;font-weight:600;margin-left:8px">&#127760; Liberar todos os computadores</span>
+        let html = `<label class="check-row csp-d019">
+            <input type="checkbox" id="ad-check-all" data-admin-change="toggle-ad-all" ${ _adAllowAllComputers ? 'checked' : '' }>
+            <span class="csp-d020">&#127760; Liberar todos os computadores</span>
         </label>`;
 
         const computerArrow = _adAccessSortField === 'computer' ? (_adAccessSortDirection === 'asc' ? '↑' : '↓') : '';
         const statusArrow = _adAccessSortField === 'status' ? (_adAccessSortDirection === 'asc' ? '↑' : '↓') : '';
-        html += `<div class="check-list-header" role="row"><span aria-hidden="true"></span><button type="button" onclick="sortAdAccessComputers('computer')">Computadores <span class="sort-indicator">${computerArrow}</span></button><button type="button" onclick="sortAdAccessComputers('status')">Status <span class="sort-indicator">${statusArrow}</span></button></div>`;
+        html += `<div class="check-list-header" role="row"><span aria-hidden="true"></span><button type="button" data-admin-click="sort-ad-access" data-field="computer">Computadores <span class="sort-indicator">${computerArrow}</span></button><button type="button" data-admin-click="sort-ad-access" data-field="status">Status <span class="sort-indicator">${statusArrow}</span></button></div>`;
 
         html += list.map(c => {
             const name = normalizeComputerName(c.name);
             const checked = _adSelectedComputers.has(name) ? 'checked' : '';
             const desc = c.description || c.operatingSystem || 'Sem descricao';
             return `<label class="check-row">
-                <input type="checkbox" value="${esc(name)}" ${checked} onchange="toggleAdComputer(this)" class="ad-comp-cb">
+                <input type="checkbox" value="${esc(name)}" ${checked} data-admin-change="toggle-ad-computer" class="ad-comp-cb">
                 <div class="check-main"><div class="check-name">${esc(name)}</div><div class="check-desc">${esc(desc)}</div></div>
                 ${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}
             </label>`;
@@ -1134,7 +1194,7 @@ function setupMaintenanceControls(){
     const menu=document.createElement('details');
     menu.id='maintenance-menu';
     menu.className='maintenance-menu';
-    menu.innerHTML=`<summary><span aria-hidden="true">&#9881;</span><span>Manuten&ccedil;&atilde;o</span><span class="maintenance-chevron" aria-hidden="true">&#9662;</span></summary><div class="maintenance-actions"><button type="button" onclick="startAdminMaintenance('publish')">Compilar e reiniciar website</button><button type="button" onclick="startAdminMaintenance('restart')">Reiniciar servi&ccedil;o</button></div>`;
+    menu.innerHTML=`<summary><span aria-hidden="true">&#9881;</span><span>Manuten&ccedil;&atilde;o</span><span class="maintenance-chevron" aria-hidden="true">&#9662;</span></summary><div class="maintenance-actions"><button type="button" data-admin-click="start-maintenance" data-operation="publish">Compilar e reiniciar website</button><button type="button" data-admin-click="start-maintenance" data-operation="restart">Reiniciar servi&ccedil;o</button></div>`;
     footer.prepend(menu);
   }
   if(!document.getElementById('maintenance-blocker')){
@@ -1150,7 +1210,7 @@ function setupMaintenanceControls(){
     const modal=document.createElement('div');
     modal.id='maintenance-result';
     modal.className='modal-overlay maintenance-result';
-    modal.innerHTML='<div class="modal-box maintenance-result-box"><div id="maintenance-result-icon" class="maintenance-result-icon" aria-hidden="true"></div><div id="maintenance-result-title" class="modal-title"></div><div class="modal-body"><p id="maintenance-result-message" class="modal-note"></p><pre id="maintenance-result-log" class="maintenance-result-log hidden"></pre></div><div class="modal-footer"><a id="maintenance-result-logs" class="btn btn-outline hidden" href="/admin/logs.html">Conferir logs</a><button type="button" class="btn btn-primary" onclick="closeMaintenanceResult()">Fechar</button></div></div>';
+    modal.innerHTML='<div class="modal-box maintenance-result-box"><div id="maintenance-result-icon" class="maintenance-result-icon" aria-hidden="true"></div><div id="maintenance-result-title" class="modal-title"></div><div class="modal-body"><p id="maintenance-result-message" class="modal-note"></p><pre id="maintenance-result-log" class="maintenance-result-log hidden"></pre></div><div class="modal-footer"><a id="maintenance-result-logs" class="btn btn-outline hidden" href="/admin/logs.html">Conferir logs</a><button type="button" class="btn btn-primary" data-admin-click="close-maintenance-result">Fechar</button></div></div>';
     document.body.appendChild(modal);
   }
 }
@@ -1300,7 +1360,7 @@ function showTwoFactorStep(data){
   const codeLabel=document.createElement('label');codeLabel.className='fl';codeLabel.htmlFor='admin-2fa-code';codeLabel.textContent=S.twoFactorSetup?'Código de 6 dígitos':'Código do Authenticator ou recuperação';panel.appendChild(codeLabel);
   const code=document.createElement('input');code.id='admin-2fa-code';code.className='fi';code.type='text';code.autocomplete='one-time-code';code.inputMode=S.twoFactorSetup?'numeric':'text';code.maxLength=S.twoFactorSetup?6:32;panel.appendChild(code);
   document.getElementById('lbtn').before(panel);
-  const button=document.getElementById('lbtn');button.setAttribute('onclick','doVerifyTwoFactor()');button.textContent=S.twoFactorSetup?'Ativar e entrar':'Verificar e entrar';
+  const button=document.getElementById('lbtn');button.textContent=S.twoFactorSetup?'Ativar e entrar':'Verificar e entrar';
   if(window.turnstile)window.turnstile.reset();
   code.focus();
 }
@@ -1330,7 +1390,7 @@ function showRecoveryCodes(codes){
   const list=document.createElement('pre');list.style.cssText='padding:12px;border-radius:8px;background:var(--bg);color:var(--txt);text-align:center;line-height:1.7;user-select:all';list.textContent=codes.join('\n');panel.appendChild(list);
   const copy=document.createElement('button');copy.type='button';copy.className='btn btn-outline btn-full';copy.textContent='Copiar códigos';copy.addEventListener('click',async()=>{await navigator.clipboard.writeText(codes.join('\n'));copy.textContent='Códigos copiados';});panel.appendChild(copy);
   document.getElementById('lbtn').before(panel);
-  const button=document.getElementById('lbtn');button.setAttribute('onclick','finishAdminLogin()');button.textContent='Já salvei, entrar no painel';
+  const button=document.getElementById('lbtn');button.textContent='Já salvei, entrar no painel';
 }
 
 function finishAdminLogin(){resetAdminLoginFlow();showApp();}
@@ -1339,7 +1399,7 @@ function resetAdminLoginFlow(){
   S.loginChallengeId=null;S.twoFactorSetup=false;
   document.getElementById('admin-2fa-step')?.remove();document.getElementById('admin-recovery-step')?.remove();
   const card=document.querySelector('#login-screen .login-card');card.querySelectorAll('.fg,.cf-turnstile').forEach(element=>element.style.display='');
-  const button=document.getElementById('lbtn');button.setAttribute('onclick','doLogin()');button.textContent='Entrar no Painel';
+  const button=document.getElementById('lbtn');button.textContent='Entrar no Painel';
   if(window.turnstile)window.turnstile.reset();
 }
 document.addEventListener('keydown',e=>{
@@ -1516,7 +1576,7 @@ async function loadDash(){
 function renderRecent(rows){
   const rb=document.getElementById('recent-body');
   if(!rows.length){rb.innerHTML='<tr><td colspan="7" class="empty">Nenhum pedido ainda.</td></tr>';return;}
-  rb.innerHTML=rows.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td>${esc(o.period)}</td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td>${sbadge(o.status,o.isActive)}</td><td>${o.isActive?'<span style="color:var(--ok);font-size:12px">'+fmtDate(o.expiresAt)+'</span>':'<span class="muted">'+fmtDate(o.expiresAt)+'</span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td></tr>`).join('');
+  rb.innerHTML=rows.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td>${esc(o.period)}</td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td class="csp-d021">${fmtCur(o.totalPrice)}</td><td>${sbadge(o.status,o.isActive)}</td><td>${o.isActive?'<span class="csp-d022">'+fmtDate(o.expiresAt)+'</span>':'<span class="muted">'+fmtDate(o.expiresAt)+'</span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td></tr>`).join('');
 }
 function renderAnalyticsFunnel(rows){
   const el=document.getElementById('analytics-funnel');if(!el)return;
@@ -1550,7 +1610,7 @@ function renderFinanceiro(data){
   renderBreakdownList('plan-list',data.planBreakdown||[],x=>esc(x.period),x=>`${x.count} pedidos | ${x.computers} PCs | ${x.slots} slots`,x=>fmtCur(x.revenue));
   renderBreakdownList('type-list',data.orderTypeBreakdown||[],x=>esc(x.type),x=>`${x.count} pedidos`,x=>fmtCur(x.revenue));
   const body=document.getElementById('status-body');
-  if(body)body.innerHTML=(data.statusBreakdown||[]).length?(data.statusBreakdown||[]).map(x=>`<tr><td>${sbadge(x.status,x.status==='pago')}</td><td>${x.count}</td><td style="font-weight:600">${fmtCur(x.revenue)}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">Sem pedidos no periodo.</td></tr>';
+  if(body)body.innerHTML=(data.statusBreakdown||[]).length?(data.statusBreakdown||[]).map(x=>`<tr><td>${sbadge(x.status,x.status==='pago')}</td><td>${x.count}</td><td class="csp-d021">${fmtCur(x.revenue)}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">Sem pedidos no periodo.</td></tr>';
 }
 function renderCrm(data){
   const st=data.stats||{};
@@ -1560,20 +1620,21 @@ function renderCrm(data){
   setText('crm-new',st.newUsers||0);
   renderActionList('crm-actions',data.actionQueue||[]);
   const upcoming=document.getElementById('upcoming-body');
-  if(upcoming)upcoming.innerHTML=(data.upcomingExpirations||[]).length?(data.upcomingExpirations||[]).map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td>${esc(o.period)} <span class="muted">${o.computers}PC/${o.wydsPerComputer}sl</span></td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td>${daysUntil(o.expiresAt)}</td><td class="muted">${esc(o.whatsapp||'-')}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Nenhuma licenca ativa encontrada.</td></tr>';
+  if(upcoming)upcoming.innerHTML=(data.upcomingExpirations||[]).length?(data.upcomingExpirations||[]).map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td>${esc(o.period)} <span class="muted">${o.computers}PC/${o.wydsPerComputer}sl</span></td><td class="csp-d021">${fmtCur(o.totalPrice)}</td><td>${daysUntil(o.expiresAt)}</td><td class="muted">${esc(o.whatsapp||'-')}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Nenhuma licenca ativa encontrada.</td></tr>';
   const top=document.getElementById('top-customers-body');
-  if(top)top.innerHTML=(data.topCustomers||[]).length?(data.topCustomers||[]).map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td>${o.orders}</td><td style="font-weight:600;color:var(--ok)">${fmtCur(o.revenue)}</td><td class="muted">${fmtDate(o.lastOrderAt)}</td><td class="muted">${esc(o.whatsapp||'-')}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Sem clientes pagantes neste periodo.</td></tr>';
+  if(top)top.innerHTML=(data.topCustomers||[]).length?(data.topCustomers||[]).map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div><div class="ucell-name">${esc(o.userName)}</div><div class="ucell-email">${esc(o.email)}</div></div></div></td><td>${o.orders}</td><td class="csp-d023">${fmtCur(o.revenue)}</td><td class="muted">${fmtDate(o.lastOrderAt)}</td><td class="muted">${esc(o.whatsapp||'-')}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Sem clientes pagantes neste periodo.</td></tr>';
 }
 function renderBreakdownList(id,rows,title,sub,value){
   const el=document.getElementById(id);if(!el)return;
   if(!rows.length){el.innerHTML='<div class="empty">Sem dados no periodo.</div>';return;}
   const max=Math.max(...rows.map(x=>parseFloat(x.revenue||x.count||0)),1);
-  el.innerHTML=rows.map(x=>{const v=parseFloat(x.revenue||x.count||0);return `<div class="insight-item"><div class="insight-main"><div class="insight-title">${title(x)}</div><div class="insight-sub">${sub(x)}</div><div class="progress"><span style="width:${Math.max(6,Math.round(v/max*100))}%"></span></div></div><div class="insight-val">${value(x)}</div></div>`;}).join('');
+  el.innerHTML=rows.map(x=>{const v=parseFloat(x.revenue||x.count||0);return `<div class="insight-item"><div class="insight-main"><div class="insight-title">${title(x)}</div><div class="insight-sub">${sub(x)}</div><div class="progress"><span data-progress="${Math.max(6,Math.round(v/max*100))}"></span></div></div><div class="insight-val">${value(x)}</div></div>`;}).join('');
+  el.querySelectorAll('[data-progress]').forEach(bar=>{bar.style.width=`${bar.dataset.progress}%`;});
 }
 function renderActionList(id,rows){
   const el=document.getElementById(id);if(!el)return;
   if(!rows.length){el.innerHTML='<div class="empty">Nenhuma acao urgente agora.</div>';return;}
-  el.innerHTML=rows.map(x=>`<div class="insight-item"><div class="insight-main"><div class="kpi-note"><span class="action-chip">${esc(x.type)}</span><span class="muted">${fmtDate(x.eventAt)}</span></div><div class="insight-title" style="margin-top:6px">${esc(x.userName)}</div><div class="insight-sub">${esc(x.email)}${x.whatsapp?' | '+esc(x.whatsapp):''}</div></div><div class="insight-val">${fmtCur(x.totalPrice)}</div></div>`).join('');
+  el.innerHTML=rows.map(x=>`<div class="insight-item"><div class="insight-main"><div class="kpi-note"><span class="action-chip">${esc(x.type)}</span><span class="muted">${fmtDate(x.eventAt)}</span></div><div class="insight-title csp-d024">${esc(x.userName)}</div><div class="insight-sub">${esc(x.email)}${x.whatsapp?' | '+esc(x.whatsapp):''}</div></div><div class="insight-val">${fmtCur(x.totalPrice)}</div></div>`).join('');
 }
 function renderTopMini(rows){
   const el=document.getElementById('top-customers-mini');if(!el)return;
@@ -1604,7 +1665,7 @@ async function loadOrders(p){
   const qs=new URLSearchParams({status:S.ordFilter,page:S.ordPage,limit:20,sortBy:S.ordSort,sortDir:S.ordSortDir});
   const data=await apiFetch(`${API}/orders?${qs}`);if(!data)return;
   if(!data.orders?.length){body.innerHTML='<tr><td colspan="13" class="empty">Nenhum pedido encontrado.</td></tr>';}
-  else{body.innerHTML=data.orders.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div class="cell-shrink"><div class="ucell-name cell-ellipsis" title="${esc(o.userName)}">${esc(o.userName)}</div><div class="ucell-email cell-ellipsis" title="${esc(o.email)}">${esc(o.email)}</div></div></div></td><td class="muted"><span class="cell-ellipsis" title="${esc(o.whatsapp||'Não informado')}">${esc(o.whatsapp||'&#8212;')}</span></td><td><span class="cell-ellipsis" title="${esc(o.wydServerName||'Não informado')}">${esc(o.wydServerName||'&#8212;')}</span></td><td>${esc(o.period)} <span class="muted">(${o.days}d)</span></td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td style="font-weight:600">${fmtCur(o.totalPrice)}</td><td class="payment-id-cell">${renderPaymentId(o.asaasPaymentId,o.paidManually,o.createdManually)}</td><td>${sbadge(o.status,o.isActive)}</td><td><label class="inline-check compact-check" title="${o.delivered?'Marcar como não entregue':'Marcar como entregue'}"><input type="checkbox" aria-label="Pedido entregue" ${o.status!=='pago'?'disabled':''} ${o.delivered?'checked':''} onchange="toggleOrderDelivery('${o.id}', this.checked, this)"></label></td><td>${o.isActive?'<span class="license-state active"><strong>Ativa</strong><small>até '+fmtDate(o.expiresAt)+'</small></span>':'<span class="license-state muted"><strong>Expirada</strong><small>'+fmtDate(o.expiresAt)+'</small></span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td><td>${o.canceledAt?'<span class="muted" style="color:var(--err)">'+(o.canceledWasPaid&&!o.paidManually&&!(o.asaasPaymentId||'').startsWith('MANUAL_')?(o.refunded?'C/R ':'S/R '):'')+fmtDate(o.canceledAt)+'</span>':'<span class="muted">&#8212;</span>'}</td><td><div class="action-row">${(o.status==='pendente'||o.status==='expirado')?`<button class="btn btn-outline" title="Marcar como pago manualmente" style="color:var(--ok);border-color:var(--ok);padding:4px 8px;font-size:11px;margin-right:4px;" onclick="markOrderPaid('${o.id}')">Pago manual</button>`:''}${o.createdManually&&o.status==='pendente'&&!o.asaasPaymentId?`<button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="deleteOrder('${o.id}')" title="Excluir pedido manual">&#128465;</button>`:(o.status==='pago'||o.status==='pendente')?`<button class="btn btn-outline" style="color:var(--err);border-color:var(--err);padding:4px 8px;font-size:11px" onclick="openCancelOrderModal('${o.id}', ${o.status==='pago' && !o.paidManually && !(o.asaasPaymentId||'').startsWith('MANUAL_')})">Cancelar</button>`:''}${o.status==='cancelado'?`<button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="deleteOrder('${o.id}')" title="Excluir">&#128465;</button>`:''}</div></td></tr>`).join('');}
+  else{body.innerHTML=data.orders.map(o=>`<tr><td><div class="ucell"><div class="avatar">${initial(o.userName)}</div><div class="cell-shrink"><div class="ucell-name cell-ellipsis" title="${esc(o.userName)}">${esc(o.userName)}</div><div class="ucell-email cell-ellipsis" title="${esc(o.email)}">${esc(o.email)}</div></div></div></td><td class="muted"><span class="cell-ellipsis" title="${esc(o.whatsapp||'Não informado')}">${esc(o.whatsapp||'&#8212;')}</span></td><td><span class="cell-ellipsis" title="${esc(o.wydServerName||'Não informado')}">${esc(o.wydServerName||'&#8212;')}</span></td><td>${esc(o.period)} <span class="muted">(${o.days}d)</span></td><td>${o.computers}PC/${o.wydsPerComputer}sl</td><td class="csp-d021">${fmtCur(o.totalPrice)}</td><td class="payment-id-cell">${renderPaymentId(o.asaasPaymentId,o.paidManually,o.createdManually)}</td><td>${sbadge(o.status,o.isActive)}</td><td><label class="inline-check compact-check" title="${o.delivered?'Marcar como não entregue':'Marcar como entregue'}"><input type="checkbox" aria-label="Pedido entregue" data-admin-change="toggle-order-delivery" data-order-id="${esc(o.id)}" ${o.status!=='pago'?'disabled':''} ${o.delivered?'checked':''}></label></td><td>${o.isActive?'<span class="license-state active"><strong>Ativa</strong><small>até '+fmtDate(o.expiresAt)+'</small></span>':'<span class="license-state muted"><strong>Expirada</strong><small>'+fmtDate(o.expiresAt)+'</small></span>'}</td><td class="muted">${fmtDate(o.createdAt)}</td><td>${o.canceledAt?'<span class="muted csp-d025">'+(o.canceledWasPaid&&!o.paidManually&&!(o.asaasPaymentId||'').startsWith('MANUAL_')?(o.refunded?'C/R ':'S/R '):'')+fmtDate(o.canceledAt)+'</span>':'<span class="muted">&#8212;</span>'}</td><td><div class="action-row">${(o.status==='pendente'||o.status==='expirado')?`<button class="btn btn-outline csp-d026" title="Marcar como pago manualmente" data-admin-click="mark-order-paid" data-order-id="${esc(o.id)}">Pago manual</button>`:''}${o.createdManually&&o.status==='pendente'&&!o.asaasPaymentId?`<button class="btn btn-outline csp-d027" data-admin-click="delete-order" data-order-id="${esc(o.id)}" title="Excluir pedido manual">&#128465;</button>`:(o.status==='pago'||o.status==='pendente')?`<button class="btn btn-outline csp-d028" data-admin-click="open-cancel-order" data-order-id="${esc(o.id)}" data-paid="${o.status==='pago' && !o.paidManually && !(o.asaasPaymentId||'').startsWith('MANUAL_')}">Cancelar</button>`:''}${o.status==='cancelado'?`<button class="btn btn-outline csp-d027" data-admin-click="delete-order" data-order-id="${esc(o.id)}" title="Excluir">&#128465;</button>`:''}</div></td></tr>`).join('');}
   renderPag('orders',data.total,S.ordPage,20);
 }
 function setFilter(f,btn){S.ordFilter=f;S.ordPage=1;document.querySelectorAll('#fbar .fb').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadOrders();}
@@ -1657,7 +1718,7 @@ function registrationInfo(u){
   if(u.registrationSource){const sourceLabel={admin:'Criado no Admin',site:'Cadastro no site',login_recovery:'Recuperado no login'}[u.registrationSource]||u.registrationSource;lines.push(`Canal: ${sourceLabel}`);}
   if(!lines.length)lines.push('Metadados indisponíveis: cadastro anterior à coleta.');
   const text=lines.join('\n');
-  return `<button type="button" class="registration-info" data-tooltip="${esc(text)}" aria-label="Informações técnicas do cadastro: ${esc(text)}" onmouseenter="showRegistrationInfo(this)" onmouseleave="hideRegistrationInfo()" onfocus="showRegistrationInfo(this)" onblur="hideRegistrationInfo()">i</button>`;
+  return `<button type="button" class="registration-info" data-tooltip="${esc(text)}" aria-label="Informações técnicas do cadastro: ${esc(text)}" data-admin-mouseenter="show-registration-info" data-admin-mouseleave="hide-registration-info" data-admin-focus="show-registration-info" data-admin-blur="hide-registration-info">i</button>`;
 }
 
 async function loadUsers(p){
@@ -1673,17 +1734,17 @@ async function loadUsers(p){
           <td><div class="ucell"><div class="avatar avatar-lg">${initial(u.name)}</div><div><div class="ucell-name">${esc(u.name)}</div><div class="ucell-email">${esc(u.email)}</div></div></div></td>
           <td class="muted">${esc(u.whatsapp||'-')}</td>
           <td>${u.isActive?'<span class="badge b-ok">Ativa</span>':'<span class="badge b-err">Inativa</span>'}</td>
-          <td><button class="btn btn-outline" style="padding:4px 8px;font-size:11px" onclick="openAdLinkModal('${u.id}')">${u.adUsername?esc(u.adUsername):'Vincular'}</button></td>
-          <td style="text-align:center;font-weight:500">${u.totalOrders}</td>
-          <td style="font-weight:600;color:var(--ok)">${fmtCur(u.totalSpent)}</td>
-          <td style="text-align:center">${u.activeLicenses>0?'<span class="badge b-ok">'+u.activeLicenses+' ativa'+(u.activeLicenses>1?'s':'')+'</span>':'<span class="muted">&#8212;</span>'}</td>
-          <td>${u.emailConfirmed?'<label class="inline-check"><input type="checkbox" checked disabled><span>Confirmado</span></label>':`<div class="email-confirmation-actions"><input type="checkbox" data-user-id="${u.id}" aria-label="Confirmar e-mail manualmente" title="Confirmar e-mail manualmente" onchange="confirmEmailFromCheckbox(this)"><button class="btn btn-outline" onclick="resendEmailConfirmation('${u.id}',this)">Reenviar</button></div>`}</td>
+          <td><button class="btn btn-outline csp-d027" data-admin-click="open-ad-link" data-user-id="${esc(u.id)}">${u.adUsername?esc(u.adUsername):'Vincular'}</button></td>
+          <td class="csp-d029">${u.totalOrders}</td>
+          <td class="csp-d023">${fmtCur(u.totalSpent)}</td>
+          <td class="csp-d030">${u.activeLicenses>0?'<span class="badge b-ok">'+u.activeLicenses+' ativa'+(u.activeLicenses>1?'s':'')+'</span>':'<span class="muted">&#8212;</span>'}</td>
+          <td>${u.emailConfirmed?'<label class="inline-check"><input type="checkbox" checked disabled><span>Confirmado</span></label>':`<div class="email-confirmation-actions"><input type="checkbox" data-user-id="${esc(u.id)}" data-admin-change="confirm-email" aria-label="Confirmar e-mail manualmente" title="Confirmar e-mail manualmente"><button class="btn btn-outline" data-admin-click="resend-email" data-user-id="${esc(u.id)}">Reenviar</button></div>`}</td>
           <td class="muted"><span class="registration-date">${fmtDate(u.createdAt)} ${registrationInfo(u)}</span></td>
           <td>
               <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
-                  <button class="btn btn-outline" style="padding:4px 8px;font-size:12px" title="Editar" onclick="openUserModal('${u.id}')">Editar</button>
-                  <button class="btn btn-outline" style="padding:4px 8px;font-size:12px;color:${u.isActive?'var(--warn)':'var(--ok)'};border-color:${u.isActive?'var(--warn)':'var(--ok)'}" title="${u.id === S.user?.id ? 'Voc&ecirc; n&atilde;o pode inativar sua pr&oacute;pria conta' : (u.isActive?'Inativar cadastro':'Ativar cadastro')}" ${u.id === S.user?.id && u.isActive ? 'disabled' : `onclick="toggleLocalUser('${u.id}', ${u.isActive?'false':'true'}, this)"`}>${u.isActive?'Inativar':'Ativar'}</button>
-                  <button class="btn btn-outline" style="padding:4px 8px;font-size:12px;color:var(--err);border-color:var(--err)" title="Excluir" onclick="deleteLocalUser('${u.id}', ${u.adUsername ? 'true' : 'false'})">Excluir</button>
+                  <button class="btn btn-outline csp-d031" title="Editar" data-admin-click="open-local-user" data-user-id="${esc(u.id)}">Editar</button>
+                  <button class="btn btn-outline local-user-toggle ${u.isActive?'is-deactivate':'is-activate'}" data-admin-click="toggle-local-user" data-user-id="${esc(u.id)}" data-activate="${!u.isActive}" title="${u.id === S.user?.id ? 'Voc&ecirc; n&atilde;o pode inativar sua pr&oacute;pria conta' : (u.isActive?'Inativar cadastro':'Ativar cadastro')}" ${u.id === S.user?.id && u.isActive ? 'disabled' : ''}>${u.isActive?'Inativar':'Ativar'}</button>
+                  <button class="btn btn-outline csp-d032" title="Excluir" data-admin-click="delete-local-user" data-user-id="${esc(u.id)}" data-has-ad="${!!u.adUsername}">Excluir</button>
               </div></details>
           </td>
       </tr>`).join('');
@@ -1699,20 +1760,20 @@ function trialBadge(status){
 function trialActions(u){
   const buttons=[];
   if(!u.requestId&&!u.hasPaidOrder){
-    buttons.push(`<button class="btn btn-outline trial-release" onclick="releaseFreeTrialManually('${u.userId}')">Liberar teste</button>`);
+    buttons.push(`<button class="btn btn-outline trial-release" data-admin-click="release-free-trial" data-user-id="${esc(u.userId)}">Liberar teste</button>`);
   }
   if(u.status==='solicitado'){
-    if(!u.hasPaidOrder)buttons.push(`<button class="btn btn-outline trial-release" onclick="updateFreeTrial('${u.requestId}','release','Liberar este teste grátis?')">Liberar</button>`);
-    buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','reject','Recusar esta solicitação?')">Recusar</button>`);
+    if(!u.hasPaidOrder)buttons.push(`<button class="btn btn-outline trial-release" data-admin-click="update-free-trial" data-request-id="${esc(u.requestId)}" data-update-action="release" data-confirm="Liberar este teste grátis?">Liberar</button>`);
+    buttons.push(`<button class="btn btn-outline danger-action" data-admin-click="update-free-trial" data-request-id="${esc(u.requestId)}" data-update-action="reject" data-confirm="Recusar esta solicitação?">Recusar</button>`);
   }
   if(u.status==='liberado'){
-    buttons.push(`<button class="btn btn-outline trial-used" onclick="updateFreeTrial('${u.requestId}','mark-used','Confirmar que o teste foi realmente utilizado?')">Marcar utilizado</button>`);
-    buttons.push(`<button class="btn btn-outline danger-action" onclick="updateFreeTrial('${u.requestId}','cancel','Cancelar esta liberação sem marcar uso?')">Cancelar</button>`);
+    buttons.push(`<button class="btn btn-outline trial-used" data-admin-click="update-free-trial" data-request-id="${esc(u.requestId)}" data-update-action="mark-used" data-confirm="Confirmar que o teste foi realmente utilizado?">Marcar utilizado</button>`);
+    buttons.push(`<button class="btn btn-outline danger-action" data-admin-click="update-free-trial" data-request-id="${esc(u.requestId)}" data-update-action="cancel" data-confirm="Cancelar esta liberação sem marcar uso?">Cancelar</button>`);
   }
   if(u.whatsapp){const phone=u.whatsapp.replace(/\D/g,'');buttons.push(`<a class="btn btn-outline" target="_blank" rel="noopener" href="https://wa.me/55${phone.replace(/^55/,'')}">WhatsApp</a>`);}
   if(u.status==='recusado'||u.status==='utilizado'){
     const description=u.status==='utilizado'?'teste utilizado':'solicitação recusada';
-    buttons.push(`<button class="btn btn-outline danger-action" style="padding:4px 8px" onclick="deleteFreeTrial('${u.requestId}','${u.status}')" title="Excluir ${description}" aria-label="Excluir ${description}">&#128465;</button>`);
+    buttons.push(`<button class="btn btn-outline danger-action csp-d033" data-admin-click="delete-free-trial" data-request-id="${esc(u.requestId)}" data-status="${esc(u.status)}" title="Excluir ${description}" aria-label="Excluir ${description}">&#128465;</button>`);
   }
   return buttons.length?`<div class="action-row">${buttons.join('')}</div>`:'<span class="muted">Sem ação</span>';
 }
@@ -1736,9 +1797,9 @@ function renderTrialPagination(total,current,limit){
   const count=document.getElementById('trials-count'),buttons=document.getElementById('trials-pag');const pages=Math.ceil(total/limit);
   count.textContent=total?`${(current-1)*limit+1}-${Math.min(current*limit,total)} de ${total}`:'0 resultados';
   if(pages<=1){buttons.innerHTML='';return;}
-  let html=`<button class="pb" onclick="loadFreeTrials(${current-1})" ${current===1?'disabled':''}>&lsaquo;</button>`;
-  for(let i=1;i<=pages;i++){if(i===1||i===pages||(i>=current-1&&i<=current+1))html+=`<button class="pb ${i===current?'active':''}" onclick="loadFreeTrials(${i})">${i}</button>`;else if(i===current-2||i===current+2)html+='<span class="muted">…</span>';}
-  html+=`<button class="pb" onclick="loadFreeTrials(${current+1})" ${current===pages?'disabled':''}>&rsaquo;</button>`;buttons.innerHTML=html;
+  let html=`<button class="pb" data-admin-click="load-page" data-page-type="trials" data-page="${current-1}" ${current===1?'disabled':''}>&lsaquo;</button>`;
+  for(let i=1;i<=pages;i++){if(i===1||i===pages||(i>=current-1&&i<=current+1))html+=`<button class="pb ${i===current?'active':''}" data-admin-click="load-page" data-page-type="trials" data-page="${i}">${i}</button>`;else if(i===current-2||i===current+2)html+='<span class="muted">…</span>';}
+  html+=`<button class="pb" data-admin-click="load-page" data-page-type="trials" data-page="${current+1}" ${current===pages?'disabled':''}>&rsaquo;</button>`;buttons.innerHTML=html;
 }
 async function updateFreeTrial(id,action,message){
   if(!await askAdminConfirm(message,{title:'Teste grátis',confirmText:'Confirmar'}))return;
@@ -1767,10 +1828,9 @@ function renderPag(type,total,cur,limit){
   const pages=Math.ceil(total/limit);const cnt=document.getElementById(type+'-count');const btns=document.getElementById(type+'-pag');
   if(total>0){const s=(cur-1)*limit+1;const e=Math.min(cur*limit,total);cnt.textContent=s+'-'+e+' de '+total;}else{cnt.textContent='0 resultados';}
   if(pages<=1){btns.innerHTML='';return;}
-  const fn=type==='orders'?'loadOrders':'loadUsers';
-  let h=`<button class="pb" onclick="${fn}(${cur-1})" ${cur===1?'disabled':''}>&lsaquo;</button>`;
-  for(let i=1;i<=pages;i++){if(i===1||i===pages||(i>=cur-1&&i<=cur+1))h+=`<button class="pb ${i===cur?'active':''}" onclick="${fn}(${i})">${i}</button>`;else if(i===cur-2||i===cur+2)h+=`<span style="color:var(--txt2);line-height:30px;padding:0 2px">&hellip;</span>`;}
-  h+=`<button class="pb" onclick="${fn}(${cur+1})" ${cur===pages?'disabled':''}>&rsaquo;</button>`;
+  let h=`<button class="pb" data-admin-click="load-page" data-page-type="${type}" data-page="${cur-1}" ${cur===1?'disabled':''}>&lsaquo;</button>`;
+  for(let i=1;i<=pages;i++){if(i===1||i===pages||(i>=cur-1&&i<=cur+1))h+=`<button class="pb ${i===cur?'active':''}" data-admin-click="load-page" data-page-type="${type}" data-page="${i}">${i}</button>`;else if(i===cur-2||i===cur+2)h+=`<span class="csp-d034">&hellip;</span>`;}
+  h+=`<button class="pb" data-admin-click="load-page" data-page-type="${type}" data-page="${cur+1}" ${cur===pages?'disabled':''}>&rsaquo;</button>`;
   btns.innerHTML=h;
 }
 
@@ -1778,8 +1838,8 @@ const WA_SAMPLE={cliente_nome:'Joao Silva',cliente_whatsapp:'5534999187189',clie
 const WA_EMOJIS=['✅','💰','⚠️','🚀','🔔','📦','💳','🛠️','📌','⏳','🎉','🙏','📲','🧾','🔐','⭐','🔥','👉','👇','☑️','❌','💬','📅','⏰'];
 function getWaBody(){return document.getElementById('wa-body');}
 async function loadNotificacoes(){const list=document.getElementById('wa-template-list');if(list)list.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';const data=await apiFetch(API+'/whatsapp/templates');if(!data)return;S.waTemplates=data.templates||[];renderWhatsAppTemplateList();selectWhatsAppTemplate(S.waSelected||S.waTemplates[0]?.key,true);document.getElementById('lupdate').textContent='Atualizado: '+new Date().toLocaleTimeString('pt-BR');}
-function renderWhatsAppTemplateList(){const list=document.getElementById('wa-template-list');if(!list)return;if(!S.waTemplates.length){list.innerHTML='<div class="empty">Nenhuma mensagem cadastrada.</div>';return;}list.innerHTML=S.waTemplates.map(t=>`<button class="template-option ${S.waSelected===t.key?'active':''}" onclick="selectWhatsAppTemplate('${esc(t.key)}')"><span class="template-option-title">${esc(t.title)}</span><span class="template-option-sub">${esc(t.audience)} | ${esc(t.usage||t.triggerDescription)}</span></button>`).join('');}
-async function selectWhatsAppTemplate(key,force=false){const t=(S.waTemplates||[]).find(x=>x.key===key);if(!t||!force&&t.key===S.waSelected&&S.waHistoryIndex>=0)return;if(!force&&hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja trocar de modelo e descarta-las?'))return;S.waSelected=t.key;renderWhatsAppTemplateList();setText('wa-title',t.title);setText('wa-audience',t.audience);setText('wa-trigger',t.triggerDescription);setText('wa-updated',fmtDateTime(t.updatedAt));setText('wa-usage',t.usage||'');const keyEl=document.getElementById('wa-key');if(keyEl)keyEl.textContent=t.key;const body=getWaBody();const value=t.body||'';if(body)body.value=value;S.waOriginalBody=value;S.waHistory=[value];S.waHistoryIndex=0;const vars=document.getElementById('wa-vars');if(vars)vars.innerHTML=(t.variables||[]).map(v=>`<button class="var-chip" onclick="insertWhatsAppVariable('${esc(v)}')">{{${esc(v)}}}</button>`).join('');renderWhatsAppPreview(value);}
+function renderWhatsAppTemplateList(){const list=document.getElementById('wa-template-list');if(!list)return;if(!S.waTemplates.length){list.innerHTML='<div class="empty">Nenhuma mensagem cadastrada.</div>';return;}list.innerHTML=S.waTemplates.map(t=>`<button class="template-option ${S.waSelected===t.key?'active':''}" data-admin-click="select-whatsapp-template" data-template-key="${esc(t.key)}"><span class="template-option-title">${esc(t.title)}</span><span class="template-option-sub">${esc(t.audience)} | ${esc(t.usage||t.triggerDescription)}</span></button>`).join('');}
+async function selectWhatsAppTemplate(key,force=false){const t=(S.waTemplates||[]).find(x=>x.key===key);if(!t||!force&&t.key===S.waSelected&&S.waHistoryIndex>=0)return;if(!force&&hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja trocar de modelo e descarta-las?'))return;S.waSelected=t.key;renderWhatsAppTemplateList();setText('wa-title',t.title);setText('wa-audience',t.audience);setText('wa-trigger',t.triggerDescription);setText('wa-updated',fmtDateTime(t.updatedAt));setText('wa-usage',t.usage||'');const keyEl=document.getElementById('wa-key');if(keyEl)keyEl.textContent=t.key;const body=getWaBody();const value=t.body||'';if(body)body.value=value;S.waOriginalBody=value;S.waHistory=[value];S.waHistoryIndex=0;const vars=document.getElementById('wa-vars');if(vars)vars.innerHTML=(t.variables||[]).map(v=>`<button class="var-chip" data-admin-click="insert-whatsapp-variable" data-variable="${esc(v)}">{{${esc(v)}}}</button>`).join('');renderWhatsAppPreview(value);}
 function waEscapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function renderWhatsAppMarkup(text){let out=waEscapeHtml(text);out=out.replace(/```([\s\S]+?)```/g,'<code>$1</code>');out=out.replace(/\*([^*\n][^*]*?)\*/g,'<strong>$1</strong>');out=out.replace(/_([^_\n][^_]*?)_/g,'<em>$1</em>');out=out.replace(/~([^~\n][^~]*?)~/g,'<s>$1</s>');return out;}
 function renderWhatsAppPreview(body){let out=body||'';Object.keys(WA_SAMPLE).forEach(k=>{out=out.replaceAll('{{'+k+'}}',WA_SAMPLE[k]);});const preview=document.getElementById('wa-preview');if(preview)preview.innerHTML=renderWhatsAppMarkup(out);const count=document.getElementById('wa-count');if(count)count.textContent=(body||'').length+' caracteres';}

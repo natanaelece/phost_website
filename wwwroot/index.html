@@ -26,66 +26,8 @@
     <link rel="icon" href="img/Ícone48x48.ico">
     <link rel="stylesheet" href="/css/tailwind.css">
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-    <style>
-        body { background-color: #081121; } 
-        .glow-blue { box-shadow: 0 0 25px rgba(37, 99, 235, 0.3); }
-        .text-glow { text-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
-        .hero-grid { background-image: linear-gradient(rgba(59,130,246,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,.05) 1px, transparent 1px); background-size: 42px 42px; }
-        .card-hover { transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
-        .card-hover:hover { transform: translateY(-4px); border-color: rgba(59,130,246,.55); box-shadow: 0 18px 45px rgba(0,0,0,.22); }
-        .register-progress-track { height: 4px; overflow: hidden; border-radius: 999px; background: rgb(30 41 59); }
-        .register-progress-bar { height: 100%; border-radius: inherit; background: rgb(37 99 235); transition: width .25s ease; }
-        .register-step { min-height: 96px; animation: registerStepIn .2s ease; }
-        @keyframes registerStepIn { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
-		.whatsapp-float {
-		position: fixed;
-		right: 20px;
-		bottom: 20px;
-		z-index: 30;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 58px;
-		height: 58px;
-		background-color: #25D366;
-		border-radius: 50%;
-		box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-		transition: transform 0.3s ease;
-		}
-
-		.whatsapp-float img {
-			width: 32px;
-			height: 32px;
-			object-fit: contain;
-		}
-
-		.whatsapp-float:hover {
-			transform: scale(1.1);
-		}
-
-		/* O efeito de onda idêntico ao do concorrente */
-		.whatsapp-float::after {
-			content: "";
-			position: absolute;
-			inset: -7px;
-			border: 1px solid rgba(37, 211, 102, 0.42);
-			border-radius: 50%;
-			pointer-events: none;
-			animation: whatsappRing 4.8s ease-in-out infinite;
-		}
-
-		@keyframes whatsappRing {
-			0% {
-				transform: scale(0.7);
-				opacity: 1;
-			}
-			50%, 100% {
-				transform: scale(1.3);
-				opacity: 0;
-			}
-		}
-    </style>
-</head>
+    <link rel="stylesheet" href="/css/index.css">
+<link rel="stylesheet" href="/css/csp-static.css"></head>
 <body class="min-h-screen text-slate-300 relative flex flex-col">
 
 	<a class="whatsapp-float" href="https://wa.me/5534999187189?text=Suporte+Premier+Host" target="_blank" rel="noopener">
@@ -101,21 +43,21 @@
             <a href="#planos" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Planos</a>
             <a href="#teste" class="text-sm font-semibold text-slate-400 hover:text-blue-400 transition-colors">Teste grátis</a>
             <!-- Botão Único -->
-            <button onclick="abrirModalAuth('login')" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg font-bold transition-all shadow-[0_0_10px_rgba(37,99,235,0.4)]">Painel do Cliente</button>
+            <button data-csp-click="h069" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-lg font-bold transition-all shadow-[0_0_10px_rgba(37,99,235,0.4)]">Painel do Cliente</button>
         </nav>
-        <button onclick="document.getElementById('mobileMenuIndex').classList.toggle('hidden')" class="md:hidden text-slate-400 hover:text-white transition-colors">
+        <button data-csp-click="h070" class="md:hidden text-slate-400 hover:text-white transition-colors">
             <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
         </button>
     </header>
 
     <div id="mobileMenuIndex" class="hidden md:hidden bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-6 py-5 fixed top-[73px] left-0 w-full z-50 shadow-2xl">
         <div class="flex flex-col gap-5">
-            <a href="#sobre" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Sobre nós</a>
-            <a href="#beneficios" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Benefícios</a>
-            <a href="#planos" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Planos</a>
-            <a href="#teste" onclick="fecharMenuMobile()" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Teste grátis</a>
+            <a href="#sobre" data-csp-click="h071" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Sobre nós</a>
+            <a href="#beneficios" data-csp-click="h071" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Benefícios</a>
+            <a href="#planos" data-csp-click="h071" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Planos</a>
+            <a href="#teste" data-csp-click="h071" class="text-sm font-semibold text-slate-300 hover:text-blue-400 block py-1.5 transition-colors">Teste grátis</a>
             <hr class="border-slate-800 my-1">
-            <button onclick="abrirModalAuth('login'); document.getElementById('mobileMenuIndex').classList.add('hidden')" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold transition-all text-center block shadow-[0_0_15px_rgba(37,99,235,0.3)]">
+            <button data-csp-click="h072" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg font-bold transition-all text-center block shadow-[0_0_15px_rgba(37,99,235,0.3)]">
                 Painel do Cliente
             </button>
         </div>
@@ -130,8 +72,8 @@
                 <p class="text-lg md:text-xl text-slate-400 max-w-3xl mx-auto mb-9 leading-relaxed">Computadores remotos preparados para manter suas instâncias online, com acesso pelo navegador ou RealVNC e ativação organizada pelo nosso painel.</p>
                 <div class="flex flex-col sm:flex-row sm:flex-wrap gap-4 justify-center">
                     <a href="/painel#simular-planos" data-analytics-event="plan_cta_clicked" data-analytics-cta="simular_preco" data-analytics-location="hero" class="bg-blue-600 hover:bg-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all glow-blue">Simular preço</a>
-                    <button type="button" onclick="abrirModalAuth('login')" class="border border-blue-500/60 hover:border-blue-400 text-blue-300 text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Entrar na minha conta</button>
-                    <button type="button" data-free-trial-cta onclick="solicitarTesteGratis()" class="border border-slate-700 hover:border-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Testar grátis por 30 min</button>
+                    <button type="button" data-csp-click="h069" class="border border-blue-500/60 hover:border-blue-400 text-blue-300 text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Entrar na minha conta</button>
+                    <button type="button" data-free-trial-cta data-csp-click="h073" class="border border-slate-700 hover:border-blue-500 text-white text-lg px-8 py-4 rounded-xl font-bold transition-all bg-slate-900/70">Testar grátis por 30 min</button>
                 </div>
                 <div class="mt-9 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-slate-400"><span>✓ Pagamento via Pix</span><span>✓ Liberação automatizada</span><span>✓ Suporte pelo WhatsApp</span></div>
             </div>
@@ -163,7 +105,7 @@
             <article class="card-hover bg-slate-900 border border-slate-800 rounded-2xl p-7 flex flex-col"><span class="text-sm font-bold text-blue-400 uppercase">Mensal</span><div class="my-5"><span class="text-4xl font-black text-white">R$ 105</span><span class="text-slate-500"> / PC</span></div><ul class="space-y-3 text-sm text-slate-400 mb-7"><li>✓ 30 dias de acesso</li><li>✓ 25% de desconto no período</li><li>✓ R$ 5 de desconto por PC adicional</li></ul><a href="/painel?periodo=mensal#simular-planos" data-analytics-event="plan_cta_clicked" data-analytics-cta="mensal" data-analytics-location="plan_card" class="mt-auto text-center border border-blue-500 text-blue-400 hover:bg-blue-600 hover:text-white py-3 rounded-lg font-bold transition-all">Simular plano mensal</a></article>
             </div><p class="text-xs text-slate-500 text-center mt-6">Valores-base vigentes no painel. Instâncias adicionais alteram o total e você também pode ganhar desconto por indicação. Consulte as condições no simulador.</p></div></section>
 
-        <section id="teste" class="border-y border-slate-800 bg-gradient-to-r from-blue-950/60 to-slate-900 py-20"><div class="max-w-5xl mx-auto px-6 grid md:grid-cols-[1fr_auto] gap-8 items-center"><div><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Conheça antes de contratar</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Teste grátis por 30 minutos</h2><p class="text-slate-400 leading-relaxed max-w-2xl">Entre ou crie sua conta para registrar a solicitação. Você acompanha o pedido no painel e nossa equipe entra em contato pelo WhatsApp cadastrado quando o ambiente de demonstração estiver disponível.</p></div><button type="button" data-free-trial-cta onclick="solicitarTesteGratis()" class="inline-flex justify-center bg-blue-600 hover:bg-blue-500 text-white px-7 py-4 rounded-xl font-black transition-all whitespace-nowrap">Solicitar teste grátis</button></div></section>
+        <section id="teste" class="border-y border-slate-800 bg-gradient-to-r from-blue-950/60 to-slate-900 py-20"><div class="max-w-5xl mx-auto px-6 grid md:grid-cols-[1fr_auto] gap-8 items-center"><div><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Conheça antes de contratar</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Teste grátis por 30 minutos</h2><p class="text-slate-400 leading-relaxed max-w-2xl">Entre ou crie sua conta para registrar a solicitação. Você acompanha o pedido no painel e nossa equipe entra em contato pelo WhatsApp cadastrado quando o ambiente de demonstração estiver disponível.</p></div><button type="button" data-free-trial-cta data-csp-click="h073" class="inline-flex justify-center bg-blue-600 hover:bg-blue-500 text-white px-7 py-4 rounded-xl font-black transition-all whitespace-nowrap">Solicitar teste grátis</button></div></section>
 
         <section id="dispositivos" class="py-20"><div class="max-w-6xl mx-auto px-6 text-center"><span class="text-blue-400 text-sm font-bold uppercase tracking-widest">Flexibilidade</span><h2 class="text-3xl md:text-4xl font-extrabold text-white mt-3 mb-4">Acesse em seus dispositivos favoritos</h2><p class="text-slate-400 max-w-3xl mx-auto mb-10">Escolha a forma que combina com sua rotina: pelo navegador com nossa página Guacamole ou pelo RealVNC Viewer no computador.</p><div class="grid md:grid-cols-3 gap-6"><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">💻</div><h3 class="font-bold text-white mb-2">Computador</h3><p class="text-sm text-slate-400">Acesso via RealVNC Viewer ou navegador.</p></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">📱</div><h3 class="font-bold text-white mb-2">Celular</h3><p class="text-sm text-slate-400">Entre pela página web compatível com navegadores modernos.</p></div><div class="bg-slate-900 border border-slate-800 rounded-2xl p-7"><div class="text-4xl mb-4">▣</div><h3 class="font-bold text-white mb-2">Tablet</h3><p class="text-sm text-slate-400">Mais espaço de tela com a mesma facilidade do acesso web.</p></div></div></div></section>
 
@@ -171,9 +113,9 @@
     </main>
 
     <!-- Modal de Autenticação -->
-    <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="authModalTitle" onclick="if(event.target === this) fecharModalAuth()">
+    <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="authModalTitle" data-csp-click="h074">
         <div class="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl p-8 shadow-2xl relative glow-blue max-h-[90vh] overflow-y-auto">
-            <button type="button" onclick="fecharModalAuth()" aria-label="Fechar janela de autenticação" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 rounded-lg">
+            <button type="button" data-csp-click="h075" aria-label="Fechar janela de autenticação" class="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 rounded-lg">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
 
@@ -181,8 +123,8 @@
             <h2 id="authModalTitle" class="sr-only">Acessar a Premier Host</h2>
 
             <div id="tabsContainer" role="tablist" aria-label="Autenticação" class="flex border-b border-slate-700 mb-6 mt-2">
-                <button type="button" id="tabLogin" role="tab" aria-controls="loginForm" aria-selected="true" onclick="switchTab('login')" class="flex-1 py-3 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition-all">Entrar</button>
-                <button type="button" id="tabRegister" role="tab" aria-controls="registerForm" aria-selected="false" onclick="switchTab('register')" class="flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-400 transition-all">Criar conta</button>
+                <button type="button" id="tabLogin" role="tab" aria-controls="loginForm" aria-selected="true" data-csp-click="h076" class="flex-1 py-3 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition-all">Entrar</button>
+                <button type="button" id="tabRegister" role="tab" aria-controls="registerForm" aria-selected="false" data-csp-click="h077" class="flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-400 transition-all">Criar conta</button>
             </div>
 
             <!-- Formulário de Login (novalidate bloqueia alertas nativos) -->
@@ -190,17 +132,17 @@
                 <div id="loginErrorMsg" role="alert" aria-live="assertive" class="hidden bg-red-500/20 border border-red-500 text-red-400 text-xs p-3 rounded-lg text-center font-bold"></div>
                 <div>
                     <label for="logEmail" class="block text-xs font-bold text-slate-400 uppercase mb-2">E-mail</label>
-                    <input type="email" id="logEmail" required aria-describedby="logEmailError" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 outline-none" oninput="limparErro('logEmail', 'logEmailError')">
+                    <input type="email" id="logEmail" required aria-describedby="logEmailError" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 outline-none" data-csp-input="h078">
                     <p id="logEmailError" class="text-xs text-red-500 mt-1 hidden font-bold">Por favor, informe seu e-mail.</p>
                 </div>
                 <div>
                     <label for="logPass" class="block text-xs font-bold text-slate-400 uppercase mb-2">Senha</label>
-                    <input type="password" id="logPass" required minlength="6" maxlength="12" aria-describedby="logPassError" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 outline-none" oninput="limparErro('logPass', 'logPassError')">
+                    <input type="password" id="logPass" required minlength="6" maxlength="12" aria-describedby="logPassError" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 outline-none" data-csp-input="h079">
                     <p id="logPassError" class="text-xs text-red-500 mt-1 hidden font-bold">Por favor, informe sua senha.</p>
-                    
+
                     <!-- INJEÇÀO: Esqueci minha senha -->
                     <div class="text-right mt-2">
-                        <a href="#" onclick="switchTab('recover')" class="text-xs text-blue-400 hover:text-blue-300 transition-colors font-bold">Esqueci minha senha</a>
+                        <a href="#" data-csp-click="h080" class="text-xs text-blue-400 hover:text-blue-300 transition-colors font-bold">Esqueci minha senha</a>
                     </div>
                 </div>
 
@@ -213,32 +155,32 @@
             <form id="registerForm" class="space-y-4 hidden" novalidate>
                 <div id="regErrorMsg" role="alert" aria-live="assertive" class="hidden bg-red-500/20 border border-red-500 text-red-400 text-xs p-3 rounded-lg text-center font-bold"></div>
                 <div class="flex items-center justify-between gap-3" aria-live="polite"><span id="regStepLabel" class="text-xs font-bold text-blue-400">Etapa 1 de 6</span><span class="text-xs text-slate-500">Leva menos de 1 minuto</span></div>
-                <div class="register-progress-track" role="progressbar" aria-label="Progresso do cadastro" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1"><div id="regProgressBar" class="register-progress-bar" style="width:16.666%"></div></div>
+                <div class="register-progress-track" role="progressbar" aria-label="Progresso do cadastro" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1"><div id="regProgressBar" class="register-progress-bar csp-s029"></div></div>
 
                 <div class="register-step" data-reg-step="0">
                     <label for="regName" class="block text-xs font-bold text-slate-400 uppercase mb-2">Nome e sobrenome</label>
-                    <input type="text" id="regName" required oninput="limparErro('regName', 'nameErrorMsg')" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none">
+                    <input type="text" id="regName" required data-csp-input="h081" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none">
                     <p id="nameErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Informe seu Nome e Sobrenome (com espaço).</p>
                 </div>
                 <div class="register-step hidden" data-reg-step="1">
                     <label for="regWhatsapp" class="block text-xs font-bold text-slate-400 uppercase mb-2">WhatsApp</label>
-                    <input type="text" id="regWhatsapp" required placeholder="(11) 99999-9999" maxlength="15" oninput="mascaraTelefone(this); limparErro('regWhatsapp', 'waErrorMsg')" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none">
+                    <input type="text" id="regWhatsapp" required placeholder="(11) 99999-9999" maxlength="15" data-csp-input="h082" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none">
                     <p id="waErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Informe um número de WhatsApp válido.</p>
                 </div>
                 <div class="register-step hidden" data-reg-step="2">
                     <label for="regEmail" class="block text-xs font-bold text-slate-400 uppercase mb-2">E-mail</label>
-                    <input type="email" id="regEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('regEmail', 'emailErrorMsg')">
+                    <input type="email" id="regEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" data-csp-input="h083">
                     <p class="text-xs text-slate-500 mt-2">Enviaremos a confirmação da conta para este endereço.</p>
                     <p id="emailErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Informe um e-mail válido.</p>
                 </div>
                 <div class="register-step hidden" data-reg-step="3">
                     <label for="regPass" class="block text-xs font-bold text-slate-400 uppercase mb-2">Senha (6 a 12 caracteres)</label>
-                    <input type="password" id="regPass" required minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('regPass', 'passErrorMsg')">
+                    <input type="password" id="regPass" required minlength="6" maxlength="12" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" data-csp-input="h084">
                     <p id="passErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">A senha deve ter entre 6 e 12 caracteres.</p>
                 </div>
                 <div class="register-step hidden" data-reg-step="4">
                     <label for="regRef" class="block text-xs font-bold text-slate-400 uppercase mb-2">Código de indicação <span class="text-slate-600">(opcional)</span></label>
-                    <input type="text" id="regRef" maxlength="12" placeholder="Ganhe 5% OFF na 1ª compra" oninput="handleReferralInput()" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none uppercase font-bold text-sm tracking-wide">
+                    <input type="text" id="regRef" maxlength="12" placeholder="Ganhe 5% OFF na 1ª compra" data-csp-input="h085" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none uppercase font-bold text-sm tracking-wide">
                     <p class="text-xs text-slate-500 mt-2">Não recebeu um código? Pode continuar normalmente.</p>
                     <p id="refErrorMsg" class="text-xs text-red-500 mt-1 hidden font-bold">Código inválido.</p>
                 </div>
@@ -246,7 +188,7 @@
                 <div class="register-step hidden" data-reg-step="5">
                     <p class="text-sm font-bold text-white mb-3">Antes de criar sua conta</p>
                     <div class="flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-950/70 p-4">
-                        <input type="checkbox" id="regPrivacy" required class="mt-1 w-4 h-4 rounded border-slate-700 bg-slate-950 accent-blue-600 focus:ring-blue-500 cursor-pointer" onchange="limparErro('regPrivacy', 'privacyErrorMsg')">
+                        <input type="checkbox" id="regPrivacy" required class="mt-1 w-4 h-4 rounded border-slate-700 bg-slate-950 accent-blue-600 focus:ring-blue-500 cursor-pointer" data-csp-change="h086">
                         <label for="regPrivacy" class="text-xs text-slate-400 leading-relaxed cursor-pointer">Li e aceito a <a href="privacidade" target="_blank" class="text-blue-400 hover:underline font-bold">Política de Privacidade</a>: meus dados serão usados para gestão da licença e suporte, conforme a LGPD.</label>
                     </div>
                     <p id="privacyErrorMsg" class="text-xs text-red-500 hidden font-bold mt-2">Você precisa aceitar a Política de Privacidade para continuar.</p>
@@ -254,20 +196,20 @@
 
                 <div class="border-t border-slate-800 pt-4"><div class="cf-turnstile flex justify-center" data-sitekey="0x4AAAAAADwNdB-C7M293Oqw" data-theme="dark"></div></div>
 
-                <div class="flex gap-3"><button type="button" id="btnRegBack" onclick="previousRegisterStep()" class="hidden px-4 py-3.5 rounded-lg border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-all">Voltar</button><button type="button" id="btnRegNext" onclick="nextRegisterStep()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all">Continuar</button><button type="submit" id="btnRegSubmit" class="hidden flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all">Criar minha conta</button></div>
+                <div class="flex gap-3"><button type="button" id="btnRegBack" data-csp-click="h087" class="hidden px-4 py-3.5 rounded-lg border border-slate-700 text-slate-300 font-bold hover:bg-slate-800 transition-all">Voltar</button><button type="button" id="btnRegNext" data-csp-click="h088" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all">Continuar</button><button type="submit" id="btnRegSubmit" class="hidden flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all">Criar minha conta</button></div>
             </form>
 
-			<form id="recoverForm" class="space-y-4 hidden" novalidate onsubmit="return handleRecover(event)">
+			<form id="recoverForm" class="space-y-4 hidden" novalidate data-csp-submit="h089">
 				<div class="text-center mb-6">
 					<h3 class="text-2xl font-bold text-white uppercase tracking-wider">Recuperar Conta</h3>
 					<p class="text-xs text-slate-400 mt-2">Digite seu e-mail para receber um link de recuperação.</p>
 				</div>
 				<div id="recoverErrorMsg" role="alert" aria-live="assertive" class="hidden bg-red-500/20 border border-red-500 text-red-400 text-xs p-3 rounded-lg text-center font-bold"></div>
 				<div id="toastRecoverSuccess" role="status" aria-live="polite" class="hidden bg-green-500/20 border border-green-500 text-green-400 text-xs p-3 rounded-lg text-center font-bold">Link enviado! Verifique seu e-mail.</div>
-				
+
 				<div>
                     <label for="recEmail" class="block text-xs font-bold text-slate-400 uppercase mb-2">E-mail</label>
-					<input type="email" id="recEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" oninput="limparErro('recEmail', 'recEmailError')">
+					<input type="email" id="recEmail" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 outline-none" data-csp-input="h090">
 					<p id="recEmailError" class="text-xs text-red-500 mt-1 hidden font-bold">Por favor, informe seu e-mail.</p>
 				</div>
 
@@ -275,9 +217,9 @@
 				<div class="cf-turnstile mt-2 flex justify-center" data-sitekey="0x4AAAAAADwNdB-C7M293Oqw" data-theme="dark"></div>
 
                 <button type="submit" id="btnRecoverSubmit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg transition-all mt-4">Enviar link de recuperação</button>
-				
+
 				<div class="text-center mt-4 border-t border-slate-800 pt-4">
-					<a href="#" onclick="switchTab('login')" class="text-xs font-bold text-slate-400 hover:text-white transition-colors">Voltar para o Login</a>
+					<a href="#" data-csp-click="h076" class="text-xs font-bold text-slate-400 hover:text-white transition-colors">Voltar para o Login</a>
 				</div>
 			</form>
 
@@ -289,10 +231,10 @@
             <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/15 text-green-400"><svg class="h-9 w-9" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg></div>
             <h2 id="registerSuccessTitle" class="text-xl font-extrabold text-white">Conta criada com sucesso</h2>
             <p class="mt-3 text-sm leading-relaxed text-slate-400">Enviamos um link para confirmar seu e-mail. Depois da confirmação, você poderá entrar normalmente.</p>
-            <button type="button" onclick="closeRegisterSuccess()" class="mt-6 w-full rounded-lg bg-blue-600 py-3.5 font-bold text-white transition-all hover:bg-blue-500">OK, entendi</button>
+            <button type="button" data-csp-click="h091" class="mt-6 w-full rounded-lg bg-blue-600 py-3.5 font-bold text-white transition-all hover:bg-blue-500">OK, entendi</button>
         </div>
     </div>
-	
+
 	<!-- Rodapé -->
 	<footer class="border-t border-slate-800 bg-slate-950 mt-auto py-10 px-6 relative z-20">
 		<div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
@@ -303,362 +245,7 @@
 	</footer>
 
     <script src="/analytics.js"></script>
-    <script>
-        let authModalTrigger = null;
-        let registerStep = 0;
-        const registerStepCount = 6;
-        let validatedReferralCode = null;
-        function fecharMenuMobile() {
-            document.getElementById('mobileMenuIndex').classList.add('hidden');
-        }
-
-        function solicitarTesteGratis() {
-            sessionStorage.setItem('premier_post_auth_intent', 'free-trial');
-            window.premierAnalytics?.track('free_trial_cta_clicked', { source: 'landing' });
-            const token = localStorage.getItem('premier_token');
-            const user = localStorage.getItem('premier_user');
-            if (token && user) {
-                window.location.href = '/painel?intent=free-trial#teste-gratis';
-                return;
-            }
-            abrirModalAuth('login');
-        }
-
-        async function applyFreeTrialEligibility() {
-            const token = localStorage.getItem('premier_token');
-            if (!token) return;
-            try {
-                const response = await fetch('/api/free-trial/me', { headers: { 'X-Session-Token': token } });
-                if (!response.ok) return;
-                const status = await response.json();
-                if (!status?.hasPaidOrder) return;
-                document.getElementById('teste')?.classList.add('hidden');
-                document.querySelectorAll('[data-free-trial-cta]').forEach(element => element.classList.add('hidden'));
-            } catch {}
-        }
-
-        function abrirModalAuth(tab = 'login') {
-            const token = localStorage.getItem('premier_token');
-            const user = localStorage.getItem('premier_user');
-            
-            if (token && user) {
-                const target = sessionStorage.getItem('premier_post_auth_intent') === 'free-trial'
-                    ? '/painel?intent=free-trial#teste-gratis'
-                    : '/painel';
-                window.location.href = target;
-            } else {
-                // Limpa resíduos de sessões corrompidas/expiradas que causam o loop
-                localStorage.removeItem('premier_token');
-                localStorage.removeItem('premier_user');
-                
-                authModalTrigger = document.activeElement;
-                switchTab(tab);
-                document.getElementById('authModal').classList.remove('hidden');
-                document.body.classList.add('overflow-hidden');
-                window.premierAnalytics?.track('auth_opened', { source: tab });
-                requestAnimationFrame(() => document.querySelector(`#${tab === 'register' ? 'registerForm' : tab === 'recover' ? 'recoverForm' : 'loginForm'} input`)?.focus());
-            }
-        }
-
-        function fecharModalAuth() {
-            document.getElementById('authModal').classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-            authModalTrigger?.focus();
-        }
-        function mascaraTelefone(input) { let v = input.value.replace(/\D/g, ''); if(v.length>11) v=v.slice(0,11); if(v.length>2) v=`(${v.slice(0,2)}) ${v.slice(2)}`; if(v.length>10) v=`${v.slice(0,10)}-${v.slice(10)}`; input.value=v; }
-        function markInvalid(input) { input.classList.add('border-red-500'); input.setAttribute('aria-invalid','true'); }
-        function limparErro(inputId, msgId) { const input=document.getElementById(inputId); input.classList.remove('border-red-500'); input.setAttribute('aria-invalid','false'); document.getElementById(msgId).classList.add('hidden'); document.getElementById('regErrorMsg').classList.add('hidden'); document.getElementById('loginErrorMsg').classList.add('hidden'); document.getElementById('recoverErrorMsg').classList.add('hidden'); }
-        function handleReferralInput(){validatedReferralCode=null;limparErro('regRef','refErrorMsg');}
-
-        function setRegisterStep(step, focus = true) {
-            registerStep=Math.max(0,Math.min(registerStepCount-1,step));
-            document.querySelectorAll('[data-reg-step]').forEach(el=>el.classList.toggle('hidden',Number(el.dataset.regStep)!==registerStep));
-            document.getElementById('regStepLabel').innerText=`Etapa ${registerStep+1} de ${registerStepCount}`;
-            document.getElementById('regProgressBar').style.width=`${((registerStep+1)/registerStepCount)*100}%`;
-            const progress=document.querySelector('#registerForm [role="progressbar"]');progress?.setAttribute('aria-valuenow',String(registerStep+1));
-            document.getElementById('btnRegBack').classList.toggle('hidden',registerStep===0);
-            document.getElementById('btnRegNext').classList.toggle('hidden',registerStep===registerStepCount-1);
-            document.getElementById('btnRegSubmit').classList.toggle('hidden',registerStep!==registerStepCount-1);
-            if(focus)requestAnimationFrame(()=>document.querySelector(`[data-reg-step="${registerStep}"] input`)?.focus());
-        }
-
-        function validateRegisterStep(step) {
-            const name=document.getElementById('regName'),wa=document.getElementById('regWhatsapp'),email=document.getElementById('regEmail'),pass=document.getElementById('regPass'),privacy=document.getElementById('regPrivacy');
-            if(step===0&&name.value.trim().split(/\s+/).length<2){markInvalid(name);document.getElementById('nameErrorMsg').classList.remove('hidden');return false;}
-            if(step===1&&wa.value.replace(/\D/g,'').length<10){markInvalid(wa);document.getElementById('waErrorMsg').classList.remove('hidden');return false;}
-            if(step===2&&!email.checkValidity()){markInvalid(email);document.getElementById('emailErrorMsg').classList.remove('hidden');return false;}
-            if(step===3&&(pass.value.length<6||pass.value.length>12)){markInvalid(pass);document.getElementById('passErrorMsg').classList.remove('hidden');return false;}
-            if(step===5&&!privacy.checked){document.getElementById('privacyErrorMsg').classList.remove('hidden');return false;}
-            return true;
-        }
-
-        async function validateReferralStep(){
-            const input=document.getElementById('regRef'),error=document.getElementById('refErrorMsg');
-            const code=input.value.trim().toUpperCase();
-            input.value=code;
-            if(!code){validatedReferralCode='';return true;}
-            if(validatedReferralCode===code)return true;
-
-            const button=document.getElementById('btnRegNext'),originalText=button.innerText;
-            button.disabled=true;button.innerText='Validando...';
-            try{
-                const response=await fetch('/api/auth/validate-referral',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-                if(!response.ok)throw new Error('Não foi possível validar o código agora.');
-                const data=await response.json();
-                if(!data.valid){markInvalid(input);error.innerText='Código de indicação inválido.';error.classList.remove('hidden');return false;}
-                validatedReferralCode=code;
-                return true;
-            }catch(e){
-                markInvalid(input);error.innerText=e.message||'Não foi possível validar o código agora.';error.classList.remove('hidden');return false;
-            }finally{button.disabled=false;button.innerText=originalText;}
-        }
-
-        async function nextRegisterStep(){
-            if(!validateRegisterStep(registerStep))return;
-            if(registerStep===4&&!await validateReferralStep())return;
-            setRegisterStep(registerStep+1);
-        }
-        function previousRegisterStep(){setRegisterStep(registerStep-1);}
-        function showRegisterSuccess(email){document.getElementById('authModal').classList.add('hidden');document.getElementById('registerSuccessModal').classList.remove('hidden');document.getElementById('logEmail').value=email;requestAnimationFrame(()=>document.querySelector('#registerSuccessModal button')?.focus());}
-        function closeRegisterSuccess(){document.getElementById('registerSuccessModal').classList.add('hidden');document.body.classList.remove('overflow-hidden');authModalTrigger?.focus();}
-        
-        function switchTab(tab) {
-            const lForm = document.getElementById('loginForm'), rForm = document.getElementById('registerForm'), recForm = document.getElementById('recoverForm');
-            const tLog = document.getElementById('tabLogin'), tReg = document.getElementById('tabRegister');
-            const tabsContainer = document.getElementById('tabsContainer');
-            tLog.setAttribute('aria-selected', String(tab === 'login'));
-            tReg.setAttribute('aria-selected', String(tab === 'register'));
-
-            lForm.classList.add('hidden');
-            rForm.classList.add('hidden');
-            recForm.classList.add('hidden');
-
-            if (tab === 'login') {
-                lForm.classList.remove('hidden');
-                tabsContainer.classList.remove('hidden');
-                tLog.className = "flex-1 py-3 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition-all";
-                tReg.className = "flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-400 transition-all";
-            } else if (tab === 'register') {
-                window.premierAnalytics?.track('signup_started', { source: 'auth_modal' });
-                rForm.classList.remove('hidden');
-                setRegisterStep(0, false);
-                tabsContainer.classList.remove('hidden');
-                tReg.className = "flex-1 py-3 text-sm font-bold text-blue-400 border-b-2 border-blue-500 transition-all";
-                tLog.className = "flex-1 py-3 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-400 transition-all";
-            } else if (tab === 'recover') {
-                recForm.classList.remove('hidden');
-                tabsContainer.classList.add('hidden');
-            }
-        }
-
-        document.addEventListener('keydown', event => {
-            const modal = document.getElementById('authModal');
-            const successModal=document.getElementById('registerSuccessModal');
-            if(!successModal.classList.contains('hidden')&&event.key==='Tab'){event.preventDefault();successModal.querySelector('button')?.focus();return;}
-            if (event.key === 'Escape' && !modal.classList.contains('hidden')) fecharModalAuth();
-            if (event.key === 'Tab' && !modal.classList.contains('hidden')) {
-                const focusable = [...modal.querySelectorAll('button:not([disabled]),a[href],input:not([disabled])')].filter(el => !el.closest('.hidden'));
-                if (!focusable.length) return;
-                const first = focusable[0], last = focusable[focusable.length - 1];
-                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-                else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-            }
-        });
-
-        document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            let hasError = false;
-            const emailInput = document.getElementById('logEmail');
-            const passInput = document.getElementById('logPass');
-
-            if (!emailInput.value.trim() || !emailInput.value.includes('@')) {
-                markInvalid(emailInput);
-                document.getElementById('logEmailError').classList.remove('hidden');
-                hasError = true;
-            }
-            if (!passInput.value.trim()) {
-                markInvalid(passInput);
-                document.getElementById('logPassError').classList.remove('hidden');
-                hasError = true;
-            }
-            
-            if (hasError) return;
-
-            const btn = document.getElementById('btnLoginSubmit'), err = document.getElementById('loginErrorMsg');
-            btn.innerHTML = 'Aguarde...'; btn.disabled = true; err.classList.add('hidden');
-
-            try {
-                // Captura a resposta do Cloudflare Turnstile
-                const cfResponse = document.querySelector('#loginForm [name="cf-turnstile-response"]')?.value;
-                
-                const res = await fetch('/api/auth/login', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        Email: emailInput.value, 
-                        Password: passInput.value,
-                        "cf-turnstile-response": cfResponse // O C# deve validar isso
-                    })
-                });
-                const data = await res.json();
-                
-                // Trata a flag de e-mail não confirmado conforme exigido na arquitetura
-                if(!res.ok) {
-                    if(data.erro && data.erro.includes("não confirmado")) {
-                        throw new Error("Por favor, verifique sua caixa de entrada e confirme seu e-mail antes de fazer login.");
-                    }
-                    throw new Error(data.erro || "Erro de servidor");
-                }
-                
-                localStorage.setItem('premier_token', data.token);
-                localStorage.setItem('premier_user', JSON.stringify(data.user));
-                if (data.isAdmin) {
-                    localStorage.setItem('premier_isAdmin', 'true');
-                } else {
-                    localStorage.removeItem('premier_isAdmin');
-                }
-                window.location.href = '/painel';
-            } catch(e) {
-                err.innerText = e.message; err.classList.remove('hidden');
-            } finally { btn.innerHTML = 'Entrar no Painel'; btn.disabled = false; }
-        });
-
-        document.getElementById('registerForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if(registerStep<registerStepCount-1){await nextRegisterStep();return;}
-            const nameInput = document.getElementById('regName');
-            const waInput = document.getElementById('regWhatsapp');
-            const emailInput = document.getElementById('regEmail');
-            const passInput = document.getElementById('regPass');
-            const privacyCheck = document.getElementById('regPrivacy');
-
-            const invalidStep=[0,1,2,3,4,5].find(step=>!validateRegisterStep(step));
-            if(invalidStep!==undefined){setRegisterStep(invalidStep);return;}
-            if(!await validateReferralStep()){setRegisterStep(4);return;}
-
-            const btn = document.getElementById('btnRegSubmit'), err = document.getElementById('regErrorMsg');
-            btn.innerHTML = 'Aguarde...'; btn.disabled = true; err.classList.add('hidden');
-
-            try {
-                const cfResponse = document.querySelector('#registerForm [name="cf-turnstile-response"]')?.value;
-
-                const res = await fetch('/api/auth/register', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        Name: nameInput.value.trim(), 
-                        Email: emailInput.value.trim(), 
-                        Whatsapp: waInput.value.trim(),
-                        Password: passInput.value,
-                        ReferralCode: document.getElementById('regRef').value.trim(),
-                        "cf-turnstile-response": cfResponse
-                    })
-                });
-                const data = await res.json();
-                
-                if(!res.ok) {
-                    if (data.erro && data.erro.includes("indicação")) {
-                        document.getElementById('regRef').classList.add('border-red-500');
-                        document.getElementById('refErrorMsg').innerText = data.erro;
-                        document.getElementById('refErrorMsg').classList.remove('hidden');
-                        setRegisterStep(4);
-                    } else {
-                        err.innerText = data.erro || "Erro ao registrar";
-                        err.classList.remove('hidden');
-                    }
-                    throw new Error(data.erro || "Erro ao registrar");
-                }
-                
-                window.premierAnalytics?.track('signup_completed', { result: 'success' });
-                showRegisterSuccess(emailInput.value.trim());
-            } catch(e) {
-                if(document.getElementById('refErrorMsg').classList.contains('hidden')&&err.classList.contains('hidden')){err.innerText=e.message||'Não foi possível concluir o cadastro.';err.classList.remove('hidden');}
-            } finally { btn.innerHTML = 'Criar minha conta'; btn.disabled = false; }
-        });
-		
-		async function handleRecover(event) {
-			event.preventDefault();
-			const email = document.getElementById('recEmail').value.trim();
-			const errorMsg = document.getElementById('recoverErrorMsg');
-			const successMsg = document.getElementById('toastRecoverSuccess');
-			const btn = document.getElementById('btnRecoverSubmit');
-			
-			// Validação
-			if (!email) {
-				document.getElementById('recEmail').classList.add('border-red-500');
-				document.getElementById('recEmailError').classList.remove('hidden');
-				return false;
-			}
-			
-			// Pega o token do Turnstile
-			//const turnstileResponse = document.querySelector('#recoverForm .cf-turnstile iframe');
-			let turnstileToken = '';
-			if (window.turnstile) {
-				turnstileToken = window.turnstile.getResponse();
-			}
-			
-			errorMsg.classList.add('hidden');
-			successMsg.classList.add('hidden');
-			btn.disabled = true;
-			btn.innerText = 'Enviando...';
-			
-			try {
-				const res = await fetch('/api/auth/forgot-password', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ 
-						email: email,
-						'cf-turnstile-response': turnstileToken 
-					})
-				});
-				const data = await res.json();
-				
-				if (res.ok) {
-					successMsg.classList.remove('hidden');
-					document.getElementById('recEmail').value = '';
-					if (window.turnstile) { document.querySelectorAll(".cf-turnstile").forEach(el => turnstile.reset(el)); }
-				} else {
-					errorMsg.innerText = data.erro || 'Erro ao enviar link. Tente novamente.';
-					errorMsg.classList.remove('hidden');
-					if (window.turnstile) { document.querySelectorAll(".cf-turnstile").forEach(el => turnstile.reset(el)); }
-				}
-			} catch (err) {
-				errorMsg.innerText = 'Erro de conexão. Tente novamente.';
-				errorMsg.classList.remove('hidden');
-			} finally {
-				btn.disabled = false;
-				btn.innerText = 'Enviar Link';
-			}
-			return false;
-		}
-		
-			document.addEventListener("DOMContentLoaded", function() {
-			applyFreeTrialEligibility();
-			const urlParams = new URLSearchParams(window.location.search);
-			if (urlParams.get('intent') === 'free-trial') {
-				sessionStorage.setItem('premier_post_auth_intent', 'free-trial');
-			}
-			
-			if (urlParams.get('action') === 'login') {
-				const emailParam = urlParams.get('email');
-				
-				// Abre o modal primeiro para garantir que o input exista na tela
-				if (typeof abrirModalAuth === "function") {
-					abrirModalAuth('login');
-				}
-				
-				// Preenche o campo usando o ID correto 'logEmail'
-				if (emailParam) {
-					const emailInput = document.getElementById('logEmail');
-					if (emailInput) {
-						emailInput.value = emailParam;
-					}
-				}
-				
-				// Limpa a URL por último para não atrapalhar a leitura dos dados
-				window.history.replaceState({}, document.title, "/");
-			}
-		});
-    </script>
-</body>
+    <script src="/js/index.js"></script>
+<script src="/js/csp-handlers.js"></script></body>
 </html>
 

@@ -134,7 +134,7 @@ Ao cancelar, `orders.canceled_was_paid` registra se o pedido estava efetivamente
 - O segredo TOTP e os hashes dos dez códigos de recuperação de uso único ficam protegidos pelo ASP.NET Data Protection em `/var/lib/premierapi/admin-totp.protected`, com diretório `0700` e arquivo `0600`. O arquivo deve acompanhar o key ring e o certificado nos backups.
 - Proteção nativa no formulário de acesso com **Cloudflare Turnstile** anti-bot.
 - A Content Security Policy de `Program.cs` declara separadamente scripts, estilos, imagens, frames, conexões e mídia, bloqueia objetos, `<base>`, formulários externos e enquadramento por terceiros. Vídeos locais devem usar URL da própria origem, como `/vid/comofunciona.mp4`; novos provedores externos precisam ser adicionados explicitamente à diretiva `media-src`.
-- A CSP ainda preserva `'unsafe-inline'` porque os HTMLs estáticos possuem scripts, eventos e estilos inline. Execute `node tools/check-csp.mjs` antes de endurecê-la; remover essa permissão sem refatoração quebra a interface.
+- A CSP é estrita para código embutido: `script-src-attr 'none'` e `style-src-attr 'none'` são aplicadas sem `'unsafe-inline'`. Scripts e estilos ficam em arquivos externos da própria origem; eventos estáticos usam o registro delegado de `wwwroot/js/csp-handlers.js`, e os componentes dinâmicos do admin usam ações declarativas de `admin/assets/admin.js`. Execute `node tools/check-csp.mjs` ao alterar HTML, CSS ou JavaScript.
 - HSTS é emitido pela aplicação por 180 dias, sem `includeSubDomains` e sem `preload`. Assim, `phost.pro` e `www.phost.pro` passam a exigir HTTPS depois da primeira resposta segura, sem alcançar as APIs hospedadas em outros subdomínios.
 - A origem Kestrel aceita chamadas somente do proxy reverso configurado em `ReverseProxy:KnownProxy` e do loopback. No host atual, o firewall permite a porta 5000 apenas para `172.31.2.1` e `lo`; não amplie essa regra para toda a sub-rede.
 
@@ -243,6 +243,8 @@ O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo
 
 As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwind.css`, compilado a partir de `assets/tailwind.css` e das classes encontradas em `wwwroot/**/*.html` e `wwwroot/**/*.js`. A versão está fixada no `package-lock.json`. Depois de adicionar ou alterar classes, execute `npm run css:build` e versione o CSS gerado. Em uma instalação nova, rode primeiro `npm ci`. O comando de manutenção **Compilar e reiniciar website** também recompila o CSS e aborta o restart se essa etapa falhar.
 
+Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript e interações básicas no Chromium via ChromeDriver.
+
 Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Isso é especialmente importante para respostas de login, chave TOTP e códigos de recuperação. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
@@ -272,7 +274,7 @@ Ao vincular um computador a um usuário, descrições no padrão `SRV01_01` corr
 
 ## Validação antes de concluir alterações
 
-Não existe atualmente um projeto de testes automatizados. Execute verificações proporcionais à mudança e, antes de commits de código, prefira o conjunto abaixo:
+Não existe atualmente uma suíte automatizada completa. Execute verificações proporcionais à mudança e, antes de commits de código, prefira o conjunto abaixo:
 
 ```bash
 npm run css:build
@@ -282,6 +284,8 @@ node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.
 node tools/check-csp.mjs
 git diff --check
 ```
+
+Mudanças de CSP também devem passar pelo Chromium. Inicie `chromedriver --port=9515 --allowed-ips=127.0.0.1` em um terminal e, no repositório, execute `node tools/check-csp-browser.mjs`. O servidor temporário escuta somente em `127.0.0.1`, usa respostas simuladas sem efeitos para os endpoints necessários e encerra ao concluir.
 
 Com as variáveis protegidas carregadas, `dotnet PremierAPI.dll --validate-admin-security` confere o algoritmo TOTP contra os vetores oficiais do RFC 6238 sem criar ou exibir segredos. `--validate-configuration` continua validando apenas nomes e formatos das configurações.
 

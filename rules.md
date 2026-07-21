@@ -57,7 +57,7 @@ Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este
 - Todas as respostas `/api`, em especial login administrativo, chave TOTP e códigos de recuperação, também devem manter `no-store` no navegador e na CDN.
 - A origem aceita porta 5000 somente do loopback e do proxy exato em `ReverseProxy:KnownProxy`. Preserve a regra correspondente do nftables e não confie em toda a rede `172.31.2.0/24`. Use `CF-Connecting-IP` somente depois de validar esse proxy.
 - Preserve HSTS por aplicação sem `includeSubDomains` e sem `preload`; outros subdomínios da zona hospedam APIs independentes. Aumentar o escopo exige inventário e autorização.
-- Preserve `object-src 'none'`, `base-uri 'none'`, `form-action 'self'` e `frame-ancestors 'none'`. Antes de remover `'unsafe-inline'`, execute `node tools/check-csp.mjs`, refatore cada bloqueio e valide todas as páginas em navegador real com CSP Report-Only.
+- Preserve a CSP sem `'unsafe-inline'`, com `script-src-attr 'none'`, `style-src-attr 'none'`, `object-src 'none'`, `base-uri 'none'`, `form-action 'self'` e `frame-ancestors 'none'`. Não reintroduza scripts, estilos ou eventos inline; novas ações devem usar os registros declarativos externos. Execute `node tools/check-csp.mjs` e valide as 15 páginas com `node tools/check-csp-browser.mjs` no Chromium ao mudar frontend ou CSP.
 - A manutenção disparada pelo Admin admite somente as operações fixas `publish` e `restart`, exige autenticação e confirmação, impede jobs concorrentes e deve executar fora do cgroup de `premierapi` para sobreviver ao reinício. `publish` usa build `Release` sem restore e não reinicia se a compilação falhar. Nunca aceite comandos, argumentos ou caminhos arbitrários vindos do frontend e nunca use `journalctl -f` dentro da requisição.
 - Segredos de `premierapi` devem permanecer exclusivamente em `/etc/premierapi/premierapi.env` e `/etc/premierapi/telegram-alerts.env`, externos ao repositório, propriedade de `root` e modo `0600`. O drop-in do systemd nunca pode conter valores em `Environment=`. Nunca imprima ou compartilhe `systemctl show premierapi -p Environment`; diagnósticos devem limitar as propriedades consultadas e usar `--validate-configuration`, que informa somente nomes de chaves inválidas. Migração e rotação exigem autorização e janela operacional.
 - E-mail não confirmado recebe no máximo dois reenvios automáticos: dia seguinte às 11:00 e outro dia às 19:00. Reenvio manual do admin não consome essa cota; confirmação manual continua explícita pelo checkbox.
@@ -78,4 +78,6 @@ node tools/check-csp.mjs
 git diff --check
 ```
 
-Não existe suíte automatizada no momento. Testes externos com efeitos reais exigem pedido explícito do proprietário.
+Para alterações de CSP/frontend, inicie `chromedriver --port=9515 --allowed-ips=127.0.0.1` separadamente e execute também `node tools/check-csp-browser.mjs`. O teste usa somente loopback e fixtures sem efeitos externos.
+
+Não existe suíte automatizada completa no momento. Testes externos com efeitos reais exigem pedido explícito do proprietário.
