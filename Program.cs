@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using System.Threading.RateLimiting;
 using System;
 using System.IO;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +32,8 @@ if (args.Contains("--validate-configuration", StringComparer.Ordinal))
     Console.WriteLine("CONFIGURATION_VALIDATION=PASS");
     return;
 }
+
+var knownProxyAddress = IPAddress.Parse(builder.Configuration["ReverseProxy:KnownProxy"]!);
 
 // SEGURANÇA: Limita tamanho máximo do body (protege RAM do T8 Pro)
 builder.WebHost.ConfigureKestrel(options =>
@@ -68,25 +71,34 @@ builder.Services.AddCors(options =>
 // 1. RATE LIMITING & CONCURRENCY: Defesa interna para o hardware do T8 Pro
 builder.Services.AddRateLimiter(options =>
 {
-    // Regra por IP para endpoints de autenticação (anti força bruta)
-    // Máximo 5 tentativas por minuto por IP
-    options.AddFixedWindowLimiter("AuthLimiter", opt =>
-    {
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.PermitLimit = 5;
-        opt.QueueLimit = 0;
-        opt.AutoReplenishment = true;
-    });
+    // Regra por IP para endpoints de autenticação (anti força bruta).
+    // Cada cliente recebe sua própria janela para evitar bloqueio global.
+    options.AddPolicy("AuthLimiter", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 5,
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
 
     // Regra padrão para outras APIs
-    options.AddFixedWindowLimiter("ApiPadrao", opt =>
-    {
-        opt.Window = TimeSpan.FromSeconds(10);
-        opt.PermitLimit = 30;
-        opt.QueueLimit = 0;
-    });
+    options.AddPolicy("ApiPadrao", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromSeconds(10),
+                PermitLimit = 30,
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
 
-    // Proteção global: Máximo 50 conexões simultâneas processando ao mesmo tempo
+    // Proteção global: máximo de 20 requisições simultâneas por IP.
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetConcurrencyLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -140,11 +152,34 @@ catch (Exception ex)
     return;
 }
 
-// CLOUDFLARE E PROXY REVERSO: Garante que o IP real do cliente chegue na API em vez do IP do Cloudflare (Evita falso Rate Limit no Asaas)
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+// A origem aceita somente o proxy reverso autorizado e chamadas locais de health check.
+// Esta barreira também protege a aplicação se a regra de firewall for removida por engano.
+app.Use(async (context, next) =>
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    var remoteAddress = context.Connection.RemoteIpAddress;
+    bool isAuthorizedProxy = remoteAddress != null &&
+        remoteAddress.MapToIPv6().Equals(knownProxyAddress.MapToIPv6());
+
+    if (remoteAddress == null || (!IPAddress.IsLoopback(remoteAddress) && !isAuthorizedProxy))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+
+    await next();
 });
+
+// CLOUDFLARE E PROXY REVERSO: aceita os cabeçalhos encaminhados somente do proxy conhecido.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    ForwardedForHeaderName = "CF-Connecting-IP",
+    ForwardLimit = 1
+};
+forwardedHeadersOptions.KnownProxies.Add(knownProxyAddress);
+forwardedHeadersOptions.AllowedHosts.Add("phost.pro");
+forwardedHeadersOptions.AllowedHosts.Add("www.phost.pro");
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 // 2. HEADERS DE SEGURANÇA: Previne XSS, Clickjacking, Sniffing e data injection
 app.Use(async (context, next) =>

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using System.Net;
 
 namespace PremierAPI.Services;
 
@@ -36,6 +37,7 @@ public static class StartupConfigurationValidator
         "Evolution:DryRun",
         "Evolution:Instance",
         "PremierConfig:BaseUrlFront",
+        "ReverseProxy:KnownProxy",
         "Smtp:FromEmail",
         "Smtp:FromName",
         "Smtp:Password",
@@ -61,6 +63,7 @@ public static class StartupConfigurationValidator
         ValidateAbsoluteUri(configuration, "Asaas:SandBoxBaseUrl", invalid);
         ValidateAbsoluteUri(configuration, "Evolution:BaseUrl", invalid);
         ValidateAbsoluteUri(configuration, "PremierConfig:BaseUrlFront", invalid);
+        ValidateIpAddress(configuration, "ReverseProxy:KnownProxy", invalid);
 
         if (!Enum.TryParse<LogLevel>(configuration["Telegram:MinimumLevel"], true, out _))
             invalid.Add("Telegram:MinimumLevel");
@@ -105,5 +108,14 @@ public static class StartupConfigurationValidator
         {
             invalid.Add(key);
         }
+    }
+
+    private static void ValidateIpAddress(
+        IConfiguration configuration,
+        string key,
+        ISet<string> invalid)
+    {
+        if (!IPAddress.TryParse(configuration[key], out _))
+            invalid.Add(key);
     }
 }
