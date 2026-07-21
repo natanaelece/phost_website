@@ -61,6 +61,7 @@ builder.Services.AddSingleton<PremierAPI.Services.AdCredentialEmailService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdPasswordProtectionService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdAccountProvisioningService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdminMaintenanceService>();
+builder.Services.AddSingleton<PremierAPI.Services.AdminSessionService>();
 builder.Services.AddHostedService<PremierAPI.Services.AdAccountProvisioningWorker>();
 builder.Services.AddHostedService<PremierAPI.Services.AdOrderExpirationWorker>();
 builder.Services.AddHostedService<PremierAPI.Services.EmailConfirmationReminderWorker>();

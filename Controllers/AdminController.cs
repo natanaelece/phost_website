@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using PremierAPI.Services;
 
@@ -30,6 +32,7 @@ namespace PremierAPI.Controllers
         private readonly AdminLogStore _adminLogStore;
         private readonly FreeTrialService _freeTrials;
         private readonly AdminMaintenanceService _maintenance;
+        private readonly AdminSessionService _adminSessions;
 
         public AdminController(
             IConfiguration config,
@@ -40,7 +43,8 @@ namespace PremierAPI.Controllers
             AdPasswordProtectionService adPasswordProtection,
             AdminLogStore adminLogStore,
             FreeTrialService freeTrials,
-            AdminMaintenanceService maintenance)
+            AdminMaintenanceService maintenance,
+            AdminSessionService adminSessions)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -53,6 +57,7 @@ namespace PremierAPI.Controllers
             _adminLogStore = adminLogStore;
             _freeTrials = freeTrials;
             _maintenance = maintenance;
+            _adminSessions = adminSessions;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -81,11 +86,40 @@ namespace PremierAPI.Controllers
         private async Task<bool> ValidateAdmin()
         {
             await Task.CompletedTask;
-            string? token = Request.Headers["X-Session-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(token)) return false;
-            string? envToken = _config["AdminToken"];
-            if (string.IsNullOrWhiteSpace(envToken)) return false;
-            return token == envToken;
+            string? token = Request.Cookies[AdminSessionService.CookieName];
+            if (!_adminSessions.TryValidate(token, out var session) || session == null)
+                return false;
+
+            if (HttpMethods.IsGet(Request.Method) ||
+                HttpMethods.IsHead(Request.Method) ||
+                HttpMethods.IsOptions(Request.Method))
+            {
+                return true;
+            }
+
+            string? csrfToken = Request.Headers["X-CSRF-Token"].FirstOrDefault();
+            return FixedTimeEquals(csrfToken, session.CsrfToken);
+        }
+
+        private static bool FixedTimeEquals(string? provided, string? expected)
+        {
+            if (string.IsNullOrEmpty(provided) || string.IsNullOrEmpty(expected)) return false;
+            byte[] providedHash = SHA256.HashData(Encoding.UTF8.GetBytes(provided));
+            byte[] expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
+            return CryptographicOperations.FixedTimeEquals(providedHash, expectedHash);
+        }
+
+        private void IssueAdminSessionCookie(CreatedAdminSession session)
+        {
+            Response.Cookies.Append(AdminSessionService.CookieName, session.Token, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Path = "/",
+                Expires = session.ExpiresAt,
+                IsEssential = true
+            });
         }
 
         [HttpPost("login")]
@@ -110,7 +144,7 @@ namespace PremierAPI.Controllers
             }
 
             string? envToken = _config["AdminToken"];
-            if (string.IsNullOrWhiteSpace(envToken) || req.Token != envToken)
+            if (string.IsNullOrWhiteSpace(envToken) || !FixedTimeEquals(req.Token, envToken))
             {
                 var newLimit = limit;
                 newLimit.Attempts++;
@@ -126,7 +160,14 @@ namespace PremierAPI.Controllers
             // Sucesso, reseta tentativas
             _ipRateLimits.TryRemove(ip, out _);
 
-            return Ok(new { token = envToken, user = new { name = "Administrador", email = _config["AdminEmail"] } });
+            var session = _adminSessions.CreateSession();
+            IssueAdminSessionCookie(session);
+            return Ok(new
+            {
+                csrfToken = session.CsrfToken,
+                expiresAt = session.ExpiresAt,
+                user = new { name = "Administrador", email = _config["AdminEmail"] }
+            });
         }
 
         public class AdminLoginRequest { 
@@ -139,7 +180,30 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> GetSession()
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Sessão expirada." });
-            return Ok(new { user = new { name = "Administrador", email = _config["AdminEmail"] } });
+            string? token = Request.Cookies[AdminSessionService.CookieName];
+            _adminSessions.TryValidate(token, out var session);
+            return Ok(new
+            {
+                csrfToken = session!.CsrfToken,
+                expiresAt = session.ExpiresAt,
+                user = new { name = "Administrador", email = _config["AdminEmail"] }
+            });
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            if (!await ValidateAdmin()) return Unauthorized(new { erro = "Sessão expirada." });
+            string? token = Request.Cookies[AdminSessionService.CookieName];
+            _adminSessions.Revoke(token);
+            Response.Cookies.Delete(AdminSessionService.CookieName, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Path = "/"
+            });
+            return Ok(new { msg = "Sessão encerrada." });
         }
 
         [HttpGet("dashboard")]

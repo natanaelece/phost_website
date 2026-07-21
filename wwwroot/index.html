@@ -514,10 +514,8 @@
                 localStorage.setItem('premier_user', JSON.stringify(data.user));
                 if (data.isAdmin) {
                     localStorage.setItem('premier_isAdmin', 'true');
-                    localStorage.setItem('premier_adminToken', data.adminToken);
                 } else {
                     localStorage.removeItem('premier_isAdmin');
-                    localStorage.removeItem('premier_adminToken');
                 }
                 window.location.href = '/painel';
             } catch(e) {

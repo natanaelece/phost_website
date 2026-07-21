@@ -21,6 +21,7 @@ public static class StartupConfigurationValidator
         "ActiveDirectory:User",
         "ActiveDirectory:WebsiteUsersOu",
         "AdminEmail",
+        "AdminSecurity:SessionHours",
         "AdminToken",
         "Asaas:ApiKey",
         "Asaas:ApiToken",
@@ -56,6 +57,7 @@ public static class StartupConfigurationValidator
             .ToHashSet(StringComparer.Ordinal);
 
         ValidatePositiveInteger(configuration, "ActiveDirectory:Port", invalid);
+        ValidatePositiveInteger(configuration, "AdminSecurity:SessionHours", invalid);
         ValidatePositiveInteger(configuration, "Smtp:Port", invalid);
         ValidateBoolean(configuration, "Asaas:UseSandbox", invalid);
         ValidateBoolean(configuration, "Evolution:DryRun", invalid);

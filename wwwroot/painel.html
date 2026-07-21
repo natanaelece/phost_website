@@ -962,14 +962,6 @@
 
             if (localStorage.getItem('premier_isAdmin') === 'true') {
                 ['adminLink','mobileAdminLink'].forEach(id=>document.getElementById(id)?.classList.remove('hidden'));
-                // SSO: pre-carregar sessao do admin para nao pedir login de novo
-                const adminToken = localStorage.getItem('premier_adminToken');
-                if (adminToken) {
-                    localStorage.setItem('premierAdmin', JSON.stringify({
-                        token: adminToken,
-                        user: { name: 'Admin', email: localUser.email }
-                    }));
-                }
             }
             
             // Busca dados REAIS da API ProfileController

@@ -133,7 +133,6 @@ namespace PremierAPI.Controllers
             {
                 token = sessionToken,
                 isAdmin = isAdmin,
-                adminToken = isAdmin ? _config["AdminToken"] : null,
                 user = new UserDto
                 {
                     Id = user.Id,

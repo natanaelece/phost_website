@@ -1001,15 +1001,19 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     }
 
 const ADMIN_ROUTES={dashboard:'/admin/dashboard.html',financeiro:'/admin/financeiro.html',crm:'/admin/crm.html',trials:'/admin/testes-gratis.html',pedidos:'/admin/pedidos.html',usuarios:'/admin/usuarios.html',ad:'/admin/active-directory.html',notificacoes:'/admin/notificacoes.html',logs:'/admin/logs.html'};
-const S={token:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
+const S={csrfToken:null,user:null,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
 
-function init(){
+async function init(){
   const loginError=document.getElementById('lerr');if(loginError){loginError.setAttribute('role','alert');loginError.setAttribute('aria-live','assertive');}
   document.querySelectorAll('label').forEach(label=>{if(label.htmlFor)return;const control=label.parentElement?.querySelector('input,select,textarea');if(control?.id)label.htmlFor=control.id;});
   document.querySelectorAll('button[title]').forEach(button=>{if(!button.getAttribute('aria-label'))button.setAttribute('aria-label',button.title);});
   setupResponsiveTables();
-  try{const d=JSON.parse(localStorage.getItem('premierAdmin')||'{}');if(d.token){S.token=d.token;S.user=d.user;showApp();return;}}catch(e){}
+  localStorage.removeItem('premierAdmin');
+  try{
+    const response=await fetch(API+'/session',{cache:'no-store'});
+    if(response.ok){const data=await response.json();S.csrfToken=data.csrfToken;S.user=data.user;showApp();return;}
+  }catch(e){}
   showLogin();
 }
 function enhanceResponsiveTables(root=document){
@@ -1269,8 +1273,8 @@ async function doLogin(){
     const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({Token:pass,"cf-turnstile-response":tToken})});
     const d=await r.json();
     if(!r.ok){if(window.turnstile)window.turnstile.reset();showErr(d.erro||'Erro ao fazer login.');return;}
-    S.token=d.token;S.user=d.user;
-    localStorage.setItem('premierAdmin',JSON.stringify({token:d.token,user:d.user}));
+    S.csrfToken=d.csrfToken;S.user=d.user;
+    document.getElementById('lpass').value='';
     showApp();
   }catch(e){if(window.turnstile)window.turnstile.reset();showErr('Erro de conexao. Tente novamente.');}
   finally{btn.disabled=false;btn.innerHTML='Entrar no Painel';}
@@ -1292,11 +1296,12 @@ document.addEventListener('click',e=>{
   requestAnimationFrame(()=>document.querySelector('.modal-overlay.active input:not([type="hidden"]),.modal-overlay.active select,.modal-overlay.active textarea,.modal-overlay.active button')?.focus());
 },true);
 document.addEventListener('click',e=>{const p=document.getElementById('ad-link-picker');if(p&&!p.contains(e.target))closeAdLinkDropdown();});
-async function doLogout(){if(hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja sair e descarta-las?'))return;localStorage.removeItem('premierAdmin');S.token=null;S.user=null;if(S.chart){S.chart.destroy();S.chart=null;}if(S.statusChart){S.statusChart.destroy();S.statusChart=null;}showLogin();}
-function hdrs(){return{'X-Session-Token':S.token,'Content-Type':'application/json'};}
+function clearAdminSession(){localStorage.removeItem('premierAdmin');S.csrfToken=null;S.user=null;if(S.chart){S.chart.destroy();S.chart=null;}if(S.statusChart){S.statusChart.destroy();S.statusChart=null;}showLogin();}
+async function doLogout(){if(hasUnsavedWhatsAppChanges()&&!await askAdminConfirm('Ha alteracoes nao salvas nesta mensagem. Deseja sair e descarta-las?'))return;try{await fetch(API+'/logout',{method:'POST',headers:hdrs()});}catch(e){}clearAdminSession();}
+function hdrs(){const headers={'Content-Type':'application/json'};if(S.csrfToken)headers['X-CSRF-Token']=S.csrfToken;return headers;}
 async function apiFetch(url){
   const r=await fetch(url,{headers:hdrs()});
-  if(r.status===401){doLogout();return null;}
+  if(r.status===401){clearAdminSession();return null;}
   const data=await r.json().catch(()=>null);
   if(!r.ok){showAdminMessage('error', data?.erro||'Erro ao carregar dados.');return null;}
   return data;
