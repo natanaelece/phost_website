@@ -245,6 +245,8 @@ As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwi
 
 Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript e interações básicas no Chromium via ChromeDriver.
 
+O procedimento completo de validação, testes manuais, implantação, monitoramento e rollback está em [`docs/csp-tailwind-rollout.md`](docs/csp-tailwind-rollout.md). Os testes automatizados não efetuam login nem mutações reais; fluxos autenticados e integrações com Asaas, AD, e-mail ou WhatsApp devem seguir a matriz de risco desse runbook.
+
 Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Isso é especialmente importante para respostas de login, chave TOTP e códigos de recuperação. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
@@ -278,10 +280,9 @@ Não existe atualmente uma suíte automatizada completa. Execute verificações 
 
 ```bash
 npm run css:build
-dotnet build --no-restore
-for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
-node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')
+for file in $(rg --files wwwroot tools -g '*.js' -g '*.mjs'); do node --check "$file"; done
 node tools/check-csp.mjs
+dotnet build -c Release --no-restore
 git diff --check
 ```
 

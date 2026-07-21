@@ -36,6 +36,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - Arquivos de aplicação são entregues com `no-store` no navegador e na Cloudflare; não remova os cabeçalhos específicos da CDN nem aplique Cache Rule que os sobreponha. Imagens e vídeos podem continuar cacheáveis.
 - A origem aceita a porta 5000 somente pelo loopback e pelo proxy exato configurado. Preserve a regra do nftables, valide o proxy antes de aceitar `CF-Connecting-IP` e mantenha o HSTS sem `includeSubDomains` e sem `preload`.
 - `AdminToken` é apenas o primeiro fator do admin. O navegador recebe uma sessão aleatória curta em cookie `HttpOnly`/`Secure`/`SameSite=Strict`, com CSRF nas mutações, e o login exige TOTP.
+- Tailwind 3.4 é compilado localmente; nunca reintroduza o Play CDN. A CSP não aceita `'unsafe-inline'`: não crie scripts, estilos, atributos `on*` ou `style` inline. Consulte `docs/csp-tailwind-rollout.md` para testes, implantação e rollback.
 
 ## Segurança operacional
 
@@ -47,9 +48,10 @@ O estado TOTP protegido fica em `/var/lib/premierapi/admin-totp.protected`, com 
 
 ```bash
 npm run css:build
-dotnet build --no-restore
-for file in $(rg --files wwwroot -g '*.js'); do node --check "$file"; done
-node -e 'const fs=require("fs"),vm=require("vm");for(const file of process.argv.slice(1)){const html=fs.readFileSync(file,"utf8");const re=/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;let m,i=0;while((m=re.exec(html))){i++;new vm.Script(m[1],{filename:file+"#inline-"+i});}}' $(rg --files wwwroot -g '*.html')
+for file in $(rg --files wwwroot tools -g '*.js' -g '*.mjs'); do node --check "$file"; done
 node tools/check-csp.mjs
+dotnet build -c Release --no-restore
 git diff --check
 ```
+
+Mudanças de frontend/CSP também exigem o teste Chromium descrito no runbook. O teste local não autoriza nem substitui validação planejada de efeitos reais.
