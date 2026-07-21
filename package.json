@@ -3,9 +3,12 @@
   "private": true,
   "scripts": {
     "css:build": "tailwindcss -i ./assets/tailwind.css -o ./wwwroot/css/tailwind.css --minify",
-    "css:watch": "tailwindcss -i ./assets/tailwind.css -o ./wwwroot/css/tailwind.css --watch"
+    "css:watch": "tailwindcss -i ./assets/tailwind.css -o ./wwwroot/css/tailwind.css --watch",
+    "admin:build": "node ./tools/build-admin-assets.mjs",
+    "assets:build": "npm run css:build && npm run admin:build"
   },
   "devDependencies": {
+    "esbuild": "0.28.1",
     "tailwindcss": "3.4.19"
   }
 }

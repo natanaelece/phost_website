@@ -296,7 +296,7 @@ try {
           const passed = location.pathname === '/admin/dashboard'
             && document.body.dataset.view === 'dashboard'
             && Boolean(document.getElementById('view-dashboard'))
-            && resources.filter(path => path === '/admin/assets/admin.js').length === 1
+            && resources.filter(path => path.startsWith('/admin/assets/build/admin.') && path.endsWith('.min.js')).length === 1
             && resources.filter(path => path === '/api/admin/session').length === 1;
           if (passed || Date.now() >= deadline) done(passed);
           else setTimeout(check, 50);

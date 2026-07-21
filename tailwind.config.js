@@ -2,7 +2,9 @@
 module.exports = {
   content: [
     './wwwroot/**/*.html',
-    './wwwroot/**/*.js'
+    './wwwroot/**/*.js',
+    '!./wwwroot/admin/assets/vendor/**/*.js',
+    '!./wwwroot/admin/assets/build/**/*.js'
   ],
   theme: {
     extend: {}

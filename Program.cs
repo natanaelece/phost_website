@@ -285,8 +285,21 @@ app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = context =>
     {
-        var extension = Path.GetExtension(context.Context.Request.Path.Value ?? string.Empty);
-        if (applicationFileExtensions.Contains(extension))
+        var requestPath = context.Context.Request.Path.Value ?? string.Empty;
+        var extension = Path.GetExtension(requestPath);
+        var immutableAdminAsset = System.Text.RegularExpressions.Regex.IsMatch(
+            requestPath,
+            @"^/admin/assets/build/admin\.[a-f0-9]{12}\.min\.(css|js)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (immutableAdminAsset)
+        {
+            // O hash no nome muda junto com o conteudo, portanto navegador e edge
+            // podem manter estes arquivos por um ano sem servir versao obsoleta.
+            context.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+            context.Context.Response.Headers["Cloudflare-CDN-Cache-Control"] = "public, max-age=31536000, immutable";
+            context.Context.Response.Headers["CDN-Cache-Control"] = "public, max-age=31536000, immutable";
+        }
+        else if (applicationFileExtensions.Contains(extension))
         {
             // Arquivos executaveis/de pagina devem sempre ser revalidados na origem.
             // Os cabecalhos especificos impedem que o edge da Cloudflare entregue
