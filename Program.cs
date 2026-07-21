@@ -206,6 +206,15 @@ app.UseHsts();
 // 2. HEADERS DE SEGURANÇA: Previne XSS, Clickjacking, Sniffing e data injection
 app.Use(async (context, next) =>
 {
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Headers["CDN-Cache-Control"] = "no-store";
+        context.Response.Headers["Cloudflare-CDN-Cache-Control"] = "no-store";
+        context.Response.Headers.Pragma = "no-cache";
+        context.Response.Headers.Expires = "0";
+    }
+
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
