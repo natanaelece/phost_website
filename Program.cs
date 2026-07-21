@@ -43,6 +43,12 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(180);
+    options.IncludeSubDomains = false;
+    options.Preload = false;
+});
 DataProtectionConfiguration.AddPremierDataProtection(
     builder.Services,
     builder.Configuration,
@@ -180,6 +186,7 @@ forwardedHeadersOptions.KnownProxies.Add(knownProxyAddress);
 forwardedHeadersOptions.AllowedHosts.Add("phost.pro");
 forwardedHeadersOptions.AllowedHosts.Add("www.phost.pro");
 app.UseForwardedHeaders(forwardedHeadersOptions);
+app.UseHsts();
 
 // 2. HEADERS DE SEGURANÇA: Previne XSS, Clickjacking, Sniffing e data injection
 app.Use(async (context, next) =>
