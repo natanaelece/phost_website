@@ -227,11 +227,11 @@ app.Use(async (context, next) =>
         "base-uri 'none'; " +
         "form-action 'self'; " +
         "frame-ancestors 'none'; " +
-        "script-src 'self' https://challenges.cloudflare.com https://cdn.jsdelivr.net; " +
+        "script-src 'self' https://challenges.cloudflare.com; " +
         "script-src-attr 'none'; " +
-        "style-src 'self' https://fonts.googleapis.com; " +
+        "style-src 'self'; " +
         "style-src-attr 'none'; " +
-        "font-src 'self' https://fonts.gstatic.com; " +
+        "font-src 'self'; " +
         "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com; " +
         "media-src 'self' https://phost.pro https://www.phost.pro; " +
         "frame-src https://challenges.cloudflare.com https://*.cloudflare.com; " +

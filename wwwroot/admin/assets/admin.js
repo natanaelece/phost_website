@@ -1063,6 +1063,19 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
 const ADMIN_ROUTES={dashboard:'/admin/dashboard',financeiro:'/admin/financeiro',crm:'/admin/crm',trials:'/admin/testes-gratis',pedidos:'/admin/pedidos',usuarios:'/admin/usuarios',ad:'/admin/active-directory',notificacoes:'/admin/notificacoes',logs:'/admin/logs'};
 const S={csrfToken:null,user:null,loginChallengeId:null,twoFactorSetup:false,view:document.body?.dataset.view||'dashboard',ordFilter:'all',ordPage:1,ordSort:'createdAt',ordSortDir:'desc',usrPage:1,usrSearch:'',usrSort:'createdAt',usrSortDir:'desc',trialPage:1,trialFilter:'all',trialSearch:'',trialSort:'lastRequestedAt',trialSortDir:'desc',chart:null,statusChart:null,dashData:null,dashPeriod:localStorage.getItem('premierAdminDashPeriod')||'month',waTemplates:[],waSelected:null,waOriginalBody:'',waHistory:[],waHistoryIndex:-1,waApplyingHistory:false};
 const API='/api/admin';
+let chartLoaderPromise=null;
+
+function ensureChartJs(){
+  if(window.Chart)return Promise.resolve(true);
+  if(chartLoaderPromise)return chartLoaderPromise;
+  chartLoaderPromise=new Promise(resolve=>{
+    const script=document.createElement('script');script.src='/admin/assets/vendor/chart.umd.min.js';script.async=true;
+    script.addEventListener('load',()=>resolve(Boolean(window.Chart)),{once:true});
+    script.addEventListener('error',()=>{showAdminMessage('error','Nao foi possivel carregar os graficos.');resolve(false);},{once:true});
+    document.head.appendChild(script);
+  });
+  return chartLoaderPromise;
+}
 
 async function init(){
   const loginError=document.getElementById('lerr');if(loginError){loginError.setAttribute('role','alert');loginError.setAttribute('aria-live','assertive');}
@@ -1544,7 +1557,7 @@ async function ensureDashData(){
 }
 async function loadDash(){
   handlePeriodChange();
-  const data=await ensureDashData();if(!data)return;
+  const [data,chartReady]=await Promise.all([ensureDashData(),ensureChartJs()]);if(!data)return;
   const st=data.stats;
   document.getElementById('period-label').textContent=(data.period?.label||'Periodo')+' | '+fmtDate(data.period?.start)+' a '+fmtDate(data.period?.end);
   document.getElementById('s-rev').textContent=fmtCur(st.revenue);
@@ -1559,8 +1572,7 @@ async function loadDash(){
   const nu=document.getElementById('s-users-new');nu.textContent='+'+st.newUsers+' novos usuarios';nu.className='stat-note '+(st.newUsers>0?'up':'neutral');
   document.getElementById('s-mrr').textContent=fmtCur(st.estimatedMrr);
   document.getElementById('s-total').textContent='Total historico '+fmtCur(st.totalRevenue);
-  renderChart(data.revenueSeries||data.monthlyRevenue||[]);
-  renderStatusChart(data.statusBreakdown||[]);
+  if(chartReady){renderChart(data.revenueSeries||data.monthlyRevenue||[]);renderStatusChart(data.statusBreakdown||[]);}
   renderAnalyticsFunnel(data.analyticsFunnel||[]);
   renderActionList('action-list',data.actionQueue||[]);
   renderTopMini(data.topCustomers||[]);

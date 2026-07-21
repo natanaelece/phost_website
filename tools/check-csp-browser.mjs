@@ -12,11 +12,11 @@ const csp = [
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "script-src 'self' https://challenges.cloudflare.com https://cdn.jsdelivr.net",
+  "script-src 'self' https://challenges.cloudflare.com",
   "script-src-attr 'none'",
-  "style-src 'self' https://fonts.googleapis.com",
+  "style-src 'self'",
   "style-src-attr 'none'",
-  "font-src 'self' https://fonts.gstatic.com",
+  "font-src 'self'",
   "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com",
   "media-src 'self' https://phost.pro https://www.phost.pro",
   'frame-src https://challenges.cloudflare.com https://*.cloudflare.com',
@@ -70,6 +70,7 @@ const contentTypes = new Map([
   ['.json', 'application/json; charset=utf-8'],
   ['.png', 'image/png'],
   ['.svg', 'image/svg+xml'],
+  ['.woff2', 'font/woff2'],
   ['.webp', 'image/webp']
 ]);
 
@@ -268,6 +269,18 @@ try {
           && document.getElementById('sname').textContent === 'Admin Fixture'
           && Boolean(document.querySelector('.slogo svg'))
           && document.querySelector('[title="Sair"]')?.classList.contains('csp-s006');
+      `
+    },
+    {
+      name: 'admin-local-chart-and-font',
+      page: '/admin/dashboard?authenticated-fixture=1',
+      wait: 1750,
+      script: `
+        const resources = performance.getEntriesByType('resource').map(entry => entry.name);
+        return Boolean(window.Chart)
+          && resources.some(url => url.includes('/admin/assets/vendor/chart.umd.min.js'))
+          && resources.some(url => url.includes('/admin/assets/fonts/inter-latin-wght-normal.woff2'))
+          && !resources.some(url => url.includes('cdn.jsdelivr.net') || url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com'));
       `
     }
   ];
