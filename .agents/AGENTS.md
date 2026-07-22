@@ -13,7 +13,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 
 ## Não redescubra nem reverta
 
-- NPM existe somente para o build fixado do Tailwind; não introduza bundler ou framework frontend. Node 18 também é ferramenta de validação.
+- NPM existe somente para os builds fixados do Tailwind e dos assets do admin com esbuild; não introduza framework frontend nem bundler em runtime. Node 18 também é ferramenta de validação.
 - QR Pix é estático para evitar CPF/CNPJ. Concilie compras atuais por `pixQrCodeId`; mantenha o fallback legado pela descrição `Licença`.
 - Pedido administrativo nasce pendente com `created_manually`, não pago. O cliente pode gerar ou renovar o QR depois.
 - Regras comerciais não podem ser copiadas para JS/controladores: use `PricingRules` e os endpoints de regras/cotação.

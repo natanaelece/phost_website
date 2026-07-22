@@ -1,6 +1,6 @@
 # PremierAPI
 
-> Atualizacao do painel admin: o painel administrativo agora fica em `wwwroot/admin/`, com telas HTML estaticas separadas para Dashboard, Financeiro, CRM, Pedidos, Usuarios e Active Directory. O `admin.html` permanece como entrada compativel/redirecionamento. O admin permanece em HTML estatico, CSS nativo e Vanilla JavaScript; nao usa Tailwind sem permissao explicita.
+> Atualizacao do painel admin: o painel administrativo fica em `wwwroot/admin/`, com nove telas HTML estaticas para Dashboard, Financeiro, CRM, Testes grátis, Pedidos, Usuários, Active Directory, Notificações e Logs. O `admin.html` permanece como entrada compatível para `/admin/dashboard`. O admin usa CSS nativo e Vanilla JavaScript; não usa Tailwind sem permissão explícita.
 
 Plataforma de gerenciamento e automação para venda e gestão de slots/acessos (WYD) integrada com Active Directory e faturamento automático via Asaas (PIX).
 
@@ -19,7 +19,7 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
   - Asaas API (Geração de PIX, Webhooks, Reembolso)
   - Active Directory / LDAP (Criação de usuários, troca de senha, grupos)
 - **Frontend (Integrado em `wwwroot/`):** HTML5, Vanilla JavaScript, CSS Nativo UI (no admin) e **Tailwind CSS 3.4** compilado localmente (usado extensamente no Painel do Cliente, Login e Recuperação de senha).
-- **Autenticação:** JWT (JSON Web Tokens)
+- **Autenticação:** sessões de cliente validadas no backend e sessão administrativa em cookie seguro com TOTP e CSRF
 
 ## 📦 Estrutura do Projeto
 
@@ -38,16 +38,18 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 │   └── DatabaseInitializer.cs       # Seed e criação de tabelas automáticas no PostgreSQL
 │
 ├── wwwroot/                  # Aplicação Frontend
-│   ├── admin.html            # Entrada compatível que redireciona para /admin/dashboard.html
+│   ├── admin.html            # Entrada compatível que redireciona para /admin/dashboard
 │   ├── admin/                # Painel Administrativo separado por tela
 │   │   ├── dashboard.html
 │   │   ├── financeiro.html
 │   │   ├── crm.html
+│   │   ├── testes-gratis.html
 │   │   ├── pedidos.html
 │   │   ├── usuarios.html
 │   │   ├── active-directory.html
+│   │   ├── notificacoes.html
 │   │   ├── logs.html         # Eventos da execução atual, com filtros e atualização automática
-│   │   ├── assets/           # CSS e JavaScript compartilhados do admin
+│   │   ├── assets/           # Fontes editáveis, build com hash, Inter e Chart.js locais
 │   │   └── partials/         # Modais compartilhados
 │   ├── painel.html           # Dashboard do cliente (minha conta, meus pedidos)
 │   ├── vid/
@@ -71,7 +73,7 @@ O servidor também possui **Node.js 18** e npm. O npm fixa o Tailwind local e o 
 ### Passo a Passo
 
 1. **Clonar o Repositório** e navegar até a pasta do projeto.
-2. **Configuração de Ambiente:** Copie e configure o arquivo `appsettings.json` com suas variáveis de banco de dados, chaves do Asaas e Active Directory. **Nota Importante:** É obrigatório definir as Variáveis de Ambiente `AdminEmail` e `AdminToken` no servidor (LXC/Docker) para habilitar o primeiro fator do Painel Admin. O `AdminToken` nunca é devolvido ao navegador nem usado diretamente como sessão.
+2. **Configuração de Ambiente:** mantenha valores não sensíveis em `appsettings.json`. Em produção, banco, Asaas, Active Directory, JWT, primeiro fator administrativo e demais segredos ficam nos arquivos protegidos `/etc/premierapi/premierapi.env` e `/etc/premierapi/telegram-alerts.env`, fora do repositório e com modo `0600`. `AdminEmail` e `AdminToken` são obrigatórios; o token nunca é devolvido ao navegador nem usado diretamente como sessão.
 3. **Restaurar e Compilar:**
    ```bash
    npm ci
@@ -253,7 +255,7 @@ Arquivos mutáveis que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
 
-O rodapé da barra lateral administrativa possui o menu recolhido **Manutenção**. **Compilar e reiniciar website** executa build `Release` sem restore e só reinicia `premierapi` quando a compilação termina com sucesso; **Reiniciar serviço** ignora o build. As duas operações exigem sessão administrativa e confirmação, são mutuamente exclusivas e usam apenas comandos allowlisted. Um job systemd transitório executa `scripts/admin-maintenance.sh` fora do processo da API e persiste o andamento em `/run/premierapi-maintenance`, permitindo que o Admin bloqueie a interface, atravesse a indisponibilidade, retome o polling e recarregue sozinho quando a API voltar. O resultado é verde quando o build não tem avisos e o health check responde, amarelo quando a compilação tem warnings e vermelho em falhas. O acompanhamento usa consultas limitadas; nunca mantém `journalctl -f` preso a uma requisição HTTP.
+O rodapé da barra lateral administrativa possui o menu recolhido **Manutenção**. **Compilar e reiniciar website** executa `npm run assets:build`, depois o build .NET `Release` sem restore, e só reinicia `premierapi` quando ambos terminam com sucesso; **Reiniciar serviço** ignora os builds. As duas operações exigem sessão administrativa e confirmação, são mutuamente exclusivas e usam apenas comandos allowlisted. Um job systemd transitório executa `scripts/admin-maintenance.sh` fora do processo da API e persiste o andamento em `/run/premierapi-maintenance`, permitindo que o Admin bloqueie a interface, atravesse a indisponibilidade, retome o polling e recarregue sozinho quando a API voltar. O resultado é verde quando o build não tem avisos e o health check responde, amarelo quando a compilação tem warnings e vermelho em falhas. O acompanhamento usa consultas limitadas; nunca mantém `journalctl -f` preso a uma requisição HTTP.
 
 As variáveis de `premierapi` são carregadas pelos arquivos protegidos `/etc/premierapi/premierapi.env` e `/etc/premierapi/telegram-alerts.env`, ambos externos ao repositório, pertencentes a `root` e com modo `0600`. O drop-in versionado em `systemd/premierapi.service.d/override.conf` referencia esses arquivos e não pode voltar a conter valores inline. Nunca exponha `systemctl show premierapi -p Environment`; para diagnóstico, consulte somente propriedades não sensíveis, como `FragmentPath`, `DropInPaths` e `EnvironmentFiles`. A aplicação aceita `--validate-configuration` para conferir presença e formato das configurações sem iniciar a API nem imprimir valores. Falhas de configuração ou banco encerram a inicialização, são enviadas ao Telegram quando o canal está disponível e também acionam `premierapi-startup-alert.service`, que usa credenciais separadas para sobreviver a falhas no arquivo principal.
 

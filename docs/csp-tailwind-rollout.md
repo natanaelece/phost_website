@@ -1,8 +1,8 @@
 # Runbook de implantação — frontend local, CSP estrita e admin otimizado
 
 Este documento registra o escopo, as evidências de validação, os testes ainda
-necessários e o procedimento de implantação/rollback das alterações feitas na
-linha de desenvolvimento iniciada na branch `security/strict-csp-validation`.
+necessários e o procedimento de implantação/rollback das alterações integradas
+à branch `development`.
 
 ## Escopo e separação dos commits
 
@@ -14,6 +14,8 @@ linha de desenvolvimento iniciada na branch `security/strict-csp-validation`.
 | `22aeb0b` | Serve Inter e Chart.js localmente, carrega gráficos somente no Dashboard e reduz a allowlist CSP | Sim |
 | `fd966bf` | Troca somente o conteúdo central na navegação administrativa, preservando shell e sessão | Sim, depois do shell uniforme |
 | `d7f429a` | Minifica e gera hash dos assets do admin, com cache imutável restrito aos nomes versionados | Sim; exige `npm ci` e `npm run assets:build` |
+| `4e6acc5` | Faz a publicação do menu Manutenção gerar Tailwind e assets versionados do admin antes do build .NET | Sim |
+| `89a1a9c` | Alinha o fallback sem JavaScript de `/admin` à rota canônica sem `.html` | Sim |
 
 Os commits devem permanecer nessa ordem. A CSP não permite reintroduzir o Play
 CDN nem código inline; a navegação interna pressupõe o shell uniforme, e os
@@ -87,7 +89,7 @@ mesmo commit, para que o teste represente a política real.
 
 ## Evidências já obtidas
 
-Na branch foram executados:
+Na linha integrada à `development` foram executados:
 
 - `npm run assets:build` repetido com saída determinística;
 - `npm audit` com zero vulnerabilidades conhecidas;
@@ -218,8 +220,9 @@ Implantação e reinicialização exigem autorização e janela operacional.
 3. Publique/reinicie e faça o smoke test público do Tailwind local.
 4. Integre `9648368`, repita os verificadores estático e Chromium e revise a CSP
    final de `Program.cs`.
-5. Integre, na ordem, `6130e17`, `22aeb0b`, `fd966bf` e `d7f429a`; execute
-   `npm ci`, `npm run assets:build`, os verificadores e o teste Chromium.
+5. Integre, na ordem, `6130e17`, `22aeb0b`, `fd966bf`, `d7f429a`, `4e6acc5` e
+   `89a1a9c`; execute `npm ci`, `npm run assets:build`, os verificadores e o
+   teste Chromium.
 6. Publique/reinicie novamente e execute os testes pós-implantação abaixo.
 7. Integre commits posteriores de documentação sem alterar a ordem histórica.
 
@@ -242,7 +245,7 @@ cabeçalhos HTTPS em `/`, `/painel`, `/privacidade` e uma rota administrativa:
 curl -sS -o /dev/null -D - https://phost.pro/
 curl -sS -o /dev/null -D - https://phost.pro/painel
 curl -sS -o /dev/null -D - https://phost.pro/privacidade
-curl -sS -o /dev/null -D - https://phost.pro/admin/dashboard.html
+curl -sS -o /dev/null -D - https://phost.pro/admin/dashboard
 ```
 
 Verifique:
@@ -268,6 +271,25 @@ independentes.
 Depois dos cabeçalhos, repita em navegador real os testes manuais sem efeitos e
 o login cliente/admin. Confira especialmente Turnstile, Inter local, Chart.js
 local, cupom, indicação, perfil e componentes dinâmicos do admin.
+
+### Estado observado em 21 de julho de 2026
+
+- `premierapi` reiniciou e permaneceu `active/running`;
+- o health check local em `/api/checkout/pricing-rules` respondeu `200`;
+- as 15 rotas do verificador responderam `200` em HTTPS; `/painel` teve um
+  timeout transitório durante a subida e depois respondeu `200` três vezes;
+- HTTP redirecionou para HTTPS com `301`;
+- HSTS, CSP, `X-Frame-Options`, `X-Content-Type-Options` e Referrer-Policy foram
+  confirmados na resposta publicada;
+- HTML administrativo respondeu com `no-store`, e o JavaScript com hash recebeu
+  `public, max-age=31536000, immutable` tanto na origem quanto pela Cloudflare.
+
+O processo levou aproximadamente 27 segundos para começar a escutar após o
+restart. A unit atual executa `dotnet run --configuration Release`, que aplica o
+perfil `http` de `Properties/launchSettings.json` e inicia o ASP.NET em ambiente
+`Development`. Em produção, a unit deve usar `--no-launch-profile` ou executar o
+DLL publicado com `ASPNETCORE_ENVIRONMENT=Production`. Alterar a unit ou os
+arquivos protegidos requer autorização e janela operacional próprias.
 
 ## O que monitorar
 
