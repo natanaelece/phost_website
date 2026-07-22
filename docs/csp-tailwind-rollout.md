@@ -1,8 +1,8 @@
-# Runbook de implantação — Tailwind local e CSP estrita
+# Runbook de implantação — frontend local, CSP estrita e admin otimizado
 
 Este documento registra o escopo, as evidências de validação, os testes ainda
 necessários e o procedimento de implantação/rollback das alterações feitas na
-branch `security/strict-csp-validation`.
+linha de desenvolvimento iniciada na branch `security/strict-csp-validation`.
 
 ## Escopo e separação dos commits
 
@@ -10,13 +10,17 @@ branch `security/strict-csp-validation`.
 | --- | --- | --- |
 | `52fe549` | Compila Tailwind 3.4.19 localmente, remove o Play CDN e integra o build CSS à manutenção | Sim. A CSP anterior ainda aceita a aplicação enquanto o visual é validado |
 | `9648368` | Remove código/estilo inline, ativa CSP estrita e adiciona verificadores estático e de navegador | Sim, desde que o commit do Tailwind local já esteja presente |
+| `6130e17` | Uniformiza shell, logout, logo, rotas limpas e gate inicial das nove telas administrativas | Sim |
+| `22aeb0b` | Serve Inter e Chart.js localmente, carrega gráficos somente no Dashboard e reduz a allowlist CSP | Sim |
+| `fd966bf` | Troca somente o conteúdo central na navegação administrativa, preservando shell e sessão | Sim, depois do shell uniforme |
+| `d7f429a` | Minifica e gera hash dos assets do admin, com cache imutável restrito aos nomes versionados | Sim; exige `npm ci` e `npm run assets:build` |
 
-O segundo commit depende do primeiro. A CSP não permite reintroduzir o Play CDN
-nem código inline, portanto a ordem de integração e implantação deve ser
-Tailwind local primeiro e CSP estrita depois.
+Os commits devem permanecer nessa ordem. A CSP não permite reintroduzir o Play
+CDN nem código inline; a navegação interna pressupõe o shell uniforme, e os
+artefatos com hash devem ser gerados somente depois das fontes do admin.
 
 Não há migration, alteração de banco, rotação de segredo ou mudança de unit
-systemd nesses dois commits. Chromium, ChromeDriver, Node.js e npm instalados no
+systemd nesses commits. Chromium, ChromeDriver, Node.js e npm instalados no
 host são ferramentas de build/teste e não fazem parte do processo da API em
 runtime.
 
@@ -29,7 +33,9 @@ runtime.
   versionado servido pela aplicação.
 - `npm run css:build` recompila o CSS minificado; `npm run css:watch` atende ao
   desenvolvimento.
-- O scanner considera `wwwroot/**/*.html` e `wwwroot/**/*.js`.
+- O scanner considera `wwwroot/**/*.html` e `wwwroot/**/*.js`, excluindo o
+  Chart.js de terceiros e os arquivos gerados do admin para evitar classes
+  incidentais e crescimento do CSS público.
 - As cinco páginas públicas deixaram de carregar `cdn.tailwindcss.com`.
 - A manutenção de publicação recompila o CSS antes do build .NET e aborta se
   essa etapa falhar.
@@ -37,6 +43,27 @@ runtime.
 O Play CDN não deve voltar a ser usado em produção. Uma atualização para
 Tailwind 4 é uma mudança maior e deve ficar em branch/commit próprios, com nova
 comparação visual e revisão de compatibilidade de navegadores.
+
+### Assets e navegação do admin
+
+- Inter variável `5.3.0` e Chart.js `4.4.0` ficam em
+  `wwwroot/admin/assets/fonts` e `wwwroot/admin/assets/vendor`, acompanhados das
+  respectivas licenças.
+- Chart.js é solicitado somente quando o Dashboard é aberto; as demais telas
+  não transferem os aproximadamente 205 KB da biblioteca.
+- Após a primeira validação de sessão, o menu busca o HTML da rota canônica e
+  substitui somente `#main > .content`. O shell, os modais, o JavaScript e a
+  sessão permanecem carregados; voltar/avançar do navegador continua suportado.
+- `tools/build-admin-assets.mjs`, com esbuild `0.28.1` fixado, minifica as fontes
+  `admin.css/js`, calcula SHA-256 abreviado e atualiza as nove páginas para
+  `admin.<hash>.min.css/js`.
+- Somente esses dois nomes com hash recebem cache público de um ano e
+  `immutable`. HTML, APIs, fontes editáveis, Chart.js e demais arquivos de
+  aplicação continuam sem armazenamento.
+- O JavaScript compartilhado permanece em uma fonte única porque as telas usam
+  estado, ações declarativas e modais comuns. Como o shell agora o carrega uma
+  única vez, dividi-lo por tela teria maior risco de regressão e pouco ganho
+  adicional; o Chart.js, que é o bloco pesado e isolável, já foi separado.
 
 ### CSP
 
@@ -49,8 +76,8 @@ comparação visual e revisão de compatibilidade de navegadores.
   `wwwroot/js/csp-handlers.js`.
 - Componentes gerados pelo admin usam `data-admin-*` e o registro delegado de
   `wwwroot/admin/assets/admin.js`.
-- Permanecem permitidos apenas os provedores necessários: Cloudflare Turnstile,
-  Chart.js no jsDelivr e Google Fonts.
+- O único provedor frontend externo permitido é o Cloudflare Turnstile;
+  Chart.js e Inter são servidos pela própria aplicação.
 - `object-src 'none'`, `base-uri 'none'`, `form-action 'self'` e
   `frame-ancestors 'none'` continuam como barreiras adicionais.
 
@@ -62,7 +89,7 @@ mesmo commit, para que o teste represente a política real.
 
 Na branch foram executados:
 
-- `npm run css:build` com sucesso;
+- `npm run assets:build` repetido com saída determinística;
 - `npm audit` com zero vulnerabilidades conhecidas;
 - build .NET 8 em Release com zero warnings e zero erros;
 - verificação de sintaxe de todos os `.js` e `.mjs`;
@@ -70,7 +97,9 @@ Na branch foram executados:
   dinâmicos incompatíveis e zero ações declarativas ausentes;
 - teste das 15 páginas completas no Chromium, com a política exata de
   `Program.cs`: zero violações CSP e zero exceções JavaScript;
-- abertura/fechamento dos modais principais e troca das telas de autenticação;
+- abertura/fechamento dos modais principais, troca das telas de autenticação,
+  fonte/Chart.js locais e navegação administrativa sem segunda carga de shell
+  ou sessão;
 - comparação visual da landing em desktop e mobile após a migração do Tailwind.
 
 O teste de navegador usa servidor somente em `127.0.0.1` e fixtures sem efeitos.
@@ -83,7 +112,7 @@ Execute no host de runtime, dentro do repositório:
 
 ```bash
 npm ci
-npm run css:build
+npm run assets:build
 npm audit
 for file in $(rg --files wwwroot tools -g '*.js' -g '*.mjs'); do node --check "$file"; done
 node tools/check-csp.mjs
@@ -91,9 +120,10 @@ dotnet build -c Release --no-restore
 git diff --check
 ```
 
-Depois do build CSS, revise o diff de `wwwroot/css/tailwind.css`. Um arquivo
-alterado é esperado quando classes foram adicionadas ou removidas; uma alteração
-inesperada precisa ser entendida antes do commit.
+Depois do build, revise o diff de `wwwroot/css/tailwind.css`, das nove páginas
+administrativas e de `wwwroot/admin/assets/build/`. Mudanças de hash devem
+corresponder a mudanças nas fontes; uma alteração inesperada precisa ser
+entendida antes do commit.
 
 Para o teste de navegador, inicie o driver em um terminal:
 
@@ -151,13 +181,13 @@ Use contas de teste e dados que possam ser restaurados:
 - Pedidos/Usuários/Testes grátis/Active Directory: abrir e fechar todos os
   modais, filtros, menus, tooltips, tabelas responsivas e confirmações, sem
   confirmar a ação destrutiva.
-- Ao navegar entre telas administrativas, deve aparecer somente o estado neutro
-  "Validando sessão administrativa..." até a resposta do servidor. O formulário
-  de login não deve piscar quando já existe uma sessão válida, e logo, menu
-  completo e botão de logout devem permanecer iguais em todas as telas.
+- Em um acesso direto, deve aparecer somente o estado neutro "Validando sessão
+  administrativa..." até a resposta do servidor; o formulário de login não
+  deve piscar. Depois disso, os links devem manter logo/menu/logout e trocar só
+  o conteúdo, sem novo gate, novo download do shell ou novo `/api/admin/session`.
 - Os links do menu devem permanecer nas rotas canônicas sem `.html`, sem resposta
-  301 intermediária. A requisição de sessão e o carregamento dos modais
-  compartilhados devem começar em paralelo.
+  301 intermediária. Teste também voltar/avançar, acesso direto e recarga em cada
+  rota. Alterações não salvas de WhatsApp devem continuar pedindo confirmação.
 - Código de recuperação TOTP só deve ser testado em janela planejada: cada uso
   consome um código e exige atualizar o inventário guardado pelo proprietário.
 
@@ -188,9 +218,10 @@ Implantação e reinicialização exigem autorização e janela operacional.
 3. Publique/reinicie e faça o smoke test público do Tailwind local.
 4. Integre `9648368`, repita os verificadores estático e Chromium e revise a CSP
    final de `Program.cs`.
-5. Publique/reinicie novamente e execute os testes pós-implantação abaixo.
-6. Integre commits posteriores de documentação sem alterar a ordem histórica
-   dos dois commits funcionais.
+5. Integre, na ordem, `6130e17`, `22aeb0b`, `fd966bf` e `d7f429a`; execute
+   `npm ci`, `npm run assets:build`, os verificadores e o teste Chromium.
+6. Publique/reinicie novamente e execute os testes pós-implantação abaixo.
+7. Integre commits posteriores de documentação sem alterar a ordem histórica.
 
 Se a janela não permitir duas publicações, os commits podem ser integrados e
 publicados juntos, mas a separação deve ser preservada no Git para diagnóstico e
@@ -223,7 +254,9 @@ Verifique:
 - `X-Frame-Options: DENY`;
 - `X-Content-Type-Options: nosniff`;
 - `Referrer-Policy: strict-origin-when-cross-origin`;
-- arquivos HTML/CSS/JS e respostas `/api` com `no-store` também na CDN;
+- HTML, APIs e arquivos CSS/JS sem hash com `no-store` também na CDN;
+- `/admin/assets/build/admin.<hash>.min.css/js` com
+  `public, max-age=31536000, immutable` no navegador e na CDN;
 - `/css/tailwind.css`, CSS extraídos e scripts de `/js/` respondendo `200`.
 
 HSTS só passa a ser obedecido pelo navegador depois de uma resposta HTTPS. Ele
@@ -233,8 +266,8 @@ atual protege apenas o host que emitiu o cabeçalho; não ampliar para
 independentes.
 
 Depois dos cabeçalhos, repita em navegador real os testes manuais sem efeitos e
-o login cliente/admin. Confira especialmente Turnstile, Google Fonts, Chart.js,
-cupom, indicação, perfil e componentes dinâmicos do admin.
+o login cliente/admin. Confira especialmente Turnstile, Inter local, Chart.js
+local, cupom, indicação, perfil e componentes dinâmicos do admin.
 
 ## O que monitorar
 
@@ -242,16 +275,19 @@ Nas primeiras horas após a implantação, observe:
 
 - violações CSP e erros JavaScript no console do navegador;
 - respostas 404/403/5xx para os novos arquivos CSS/JS;
+- HTML apontando para um hash inexistente depois de publicação parcial;
+- assets com hash sem `immutable`, ou HTML/API cacheados indevidamente;
 - falhas de Turnstile ou gráficos vazios;
+- nova chamada a `/api/admin/session` ou novo download do JavaScript a cada
+  clique no menu administrativo;
 - botões que alteram o texto mas deixam de executar a ação seguinte;
 - modais, tooltips, paginação, filtros e ordenação do admin;
 - diferenças de layout em páginas pouco acessadas ou no celular;
 - aumento de erros no log da aplicação, sem imprimir ambiente ou segredos.
 
 Uma evolução útil, em commit separado, é adicionar coleta de relatórios CSP
-(`report-to`/`report-uri`) em endpoint limitado e sem dados sensíveis. Outra é
-servir Chart.js e fontes localmente, reduzindo a allowlist; o Turnstile continuará
-dependendo dos domínios Cloudflare.
+(`report-to`/`report-uri`) em endpoint limitado e sem dados sensíveis. O
+Turnstile continuará dependendo dos domínios Cloudflare.
 
 ## Rollback
 
@@ -263,6 +299,12 @@ republique com o mesmo processo de build.
 - Problema no Tailwind local: reverta primeiro a CSP e somente depois `52fe549`.
   Reverter o Tailwind mantendo a CSP estrita reintroduziria um CDN que a política
   não autoriza e pode deixar a interface sem estilos.
+- Problema em Chart/fonte locais: reverta `22aeb0b`; esse commit restaura também
+  as permissões CSP externas correspondentes.
+- Problema na navegação interna: reverta `fd966bf`; as rotas voltam a recarregar
+  páginas completas, sem afetar autenticação ou banco.
+- Problema em minificação/cache: reverta `d7f429a`; as páginas voltam a apontar
+  para `admin.css/js` com `no-store`.
 - Problema apenas documental: reverta somente o commit de documentação.
 
 Essas alterações não exigem rollback de banco. Antes de reiniciar, valide a
@@ -275,12 +317,12 @@ conteúdo dos arquivos de ambiente ou o estado TOTP.
 - Registre ações estáticas em `csp-handlers.js` e ações de templates do admin em
   `adminDeclarativeActions`.
 - Ao adicionar classe Tailwind, use a classe completa nos arquivos escaneados e
-  execute `npm run css:build`; classes montadas por concatenação podem não entrar
+  execute `npm run assets:build`; classes montadas por concatenação podem não entrar
   no CSS gerado.
 - Ao adicionar um provedor externo, autorize somente a diretiva e o host
   indispensáveis, atualize o teste de navegador e documente a justificativa.
 - Atualizações de Tailwind, Chart.js, Browserslist/caniuse ou outras dependências
   devem ficar em commits próprios. O aviso de `caniuse-lite` desatualizado é
   informativo e não justifica uma atualização automática misturada a segurança.
-- Preserve o Tailwind local e mantenha o admin sem Tailwind, salvo decisão
-  arquitetural explícita.
+- Preserve Tailwind, Inter e Chart.js locais e mantenha o admin sem Tailwind,
+  salvo decisão arquitetural explícita.

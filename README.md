@@ -66,7 +66,7 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 3. Servidor Windows (ou permissão de delegação LDAP) para acesso ao **Active Directory**.
 4. Chaves da API do **Asaas** (Produção e Sandbox).
 
-O servidor também possui **Node.js 18** e npm. O npm é usado somente para fixar e compilar o Tailwind local; o frontend continua sem bundler ou framework. `wwwroot/css/tailwind.css` é versionado para que a aplicação possa servir o CSS sem runtime JavaScript e sem depender de CDN.
+O servidor também possui **Node.js 18** e npm. O npm fixa o Tailwind local e o esbuild usado apenas durante o build; o frontend continua sem framework ou bundler em runtime. `wwwroot/css/tailwind.css` e os assets versionados do admin são servidos pela própria aplicação, sem CDN de fonte, Chart.js ou Tailwind.
 
 ### Passo a Passo
 
@@ -75,7 +75,7 @@ O servidor também possui **Node.js 18** e npm. O npm é usado somente para fixa
 3. **Restaurar e Compilar:**
    ```bash
    npm ci
-   npm run css:build
+   npm run assets:build
    dotnet restore
    dotnet build
    ```
@@ -134,7 +134,7 @@ Ao cancelar, `orders.canceled_was_paid` registra se o pedido estava efetivamente
 - O segredo TOTP e os hashes dos dez códigos de recuperação de uso único ficam protegidos pelo ASP.NET Data Protection em `/var/lib/premierapi/admin-totp.protected`, com diretório `0700` e arquivo `0600`. O arquivo deve acompanhar o key ring e o certificado nos backups.
 - Proteção nativa no formulário de acesso com **Cloudflare Turnstile** anti-bot.
 - A Content Security Policy de `Program.cs` declara separadamente scripts, estilos, imagens, frames, conexões e mídia, bloqueia objetos, `<base>`, formulários externos e enquadramento por terceiros. Vídeos locais devem usar URL da própria origem, como `/vid/comofunciona.mp4`; novos provedores externos precisam ser adicionados explicitamente à diretiva `media-src`.
-- A CSP é estrita para código embutido: `script-src-attr 'none'` e `style-src-attr 'none'` são aplicadas sem `'unsafe-inline'`. Scripts e estilos ficam em arquivos externos da própria origem; eventos estáticos usam o registro delegado de `wwwroot/js/csp-handlers.js`, e os componentes dinâmicos do admin usam ações declarativas de `admin/assets/admin.js`. Execute `node tools/check-csp.mjs` ao alterar HTML, CSS ou JavaScript.
+- A CSP é estrita para código embutido: `script-src-attr 'none'` e `style-src-attr 'none'` são aplicadas sem `'unsafe-inline'`. Scripts, estilos, Inter e Chart.js ficam na própria origem; o Chart.js só é carregado ao abrir o Dashboard. Eventos estáticos usam `wwwroot/js/csp-handlers.js`, e os componentes dinâmicos do admin usam ações declarativas de `admin/assets/admin.js`. Execute `node tools/check-csp.mjs` ao alterar HTML, CSS ou JavaScript.
 - HSTS é emitido pela aplicação por 180 dias, sem `includeSubDomains` e sem `preload`. Assim, `phost.pro` e `www.phost.pro` passam a exigir HTTPS depois da primeira resposta segura, sem alcançar as APIs hospedadas em outros subdomínios.
 - A origem Kestrel aceita chamadas somente do proxy reverso configurado em `ReverseProxy:KnownProxy` e do loopback. No host atual, o firewall permite a porta 5000 apenas para `172.31.2.1` e `lo`; não amplie essa regra para toda a sub-rede.
 
@@ -241,15 +241,15 @@ O `DatabaseInitializer.cs` valida o encoding na inicializacao e emite um aviso c
 
 O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo e Vanilla JavaScript. Cada area principal tem seu proprio `.html`, enquanto `admin/assets/admin.css`, `admin/assets/admin.js` e `admin/partials/modals.html` concentram estilos, logica compartilhada e modais. Ele nao usa framework frontend e, por regra do projeto, nao deve receber Tailwind sem permissao explicita.
 
-Todas as telas administrativas mantêm estaticamente o mesmo cabeçalho lateral: logo, navegação completa — inclusive **Testes grátis** —, identificação do administrador e botão de logout. Durante `GET /api/admin/session`, login e aplicação ficam ocultos por um estado neutro de validação. Essa consulta ao backend é a barreira correta para decidir entre sessão existente e formulário de acesso; exibir o formulário por alguns instantes antes da resposta não acrescenta segurança e deve ser tratado como regressão visual. Os links usam as rotas canônicas sem `.html`, evitando um redirecionamento a cada troca de tela, e a validação da sessão começa em paralelo ao carregamento dos modais compartilhados.
+Todas as telas administrativas mantêm estaticamente o mesmo cabeçalho lateral: logo, navegação completa — inclusive **Testes grátis** —, identificação do administrador e botão de logout. Durante o primeiro `GET /api/admin/session`, login e aplicação ficam ocultos por um estado neutro de validação. Depois da autenticação, os links canônicos sem `.html` trocam somente o conteúdo central via History API; o shell, o JavaScript, os modais e a sessão não são recarregados. Cada chamada de API continua validando a sessão no backend, inclusive depois dessa navegação interna.
 
-As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwind.css`, compilado a partir de `assets/tailwind.css` e das classes encontradas em `wwwroot/**/*.html` e `wwwroot/**/*.js`. A versão está fixada no `package-lock.json`. Depois de adicionar ou alterar classes, execute `npm run css:build` e versione o CSS gerado. Em uma instalação nova, rode primeiro `npm ci`. O comando de manutenção **Compilar e reiniciar website** também recompila o CSS e aborta o restart se essa etapa falhar.
+As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`; o scanner ignora JavaScript de terceiros e os arquivos gerados do admin. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O comando cria `admin.<hash>.min.css/js`, atualiza as nove páginas administrativas e remove somente versões antigas que seguem esse padrão. Em uma instalação nova, rode primeiro `npm ci`.
 
-Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript e interações básicas no Chromium via ChromeDriver.
+Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript, shell autenticado simulado, Chart/fonte locais e navegação sem nova carga do shell ou da sessão.
 
 O procedimento completo de validação, testes manuais, implantação, monitoramento e rollback está em [`docs/csp-tailwind-rollout.md`](docs/csp-tailwind-rollout.md). Os testes automatizados não efetuam login nem mutações reais; fluxos autenticados e integrações com Asaas, AD, e-mail ou WhatsApp devem seguir a matriz de risco desse runbook.
 
-Arquivos que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` tanto para o navegador quanto para a CDN, incluindo `Cloudflare-CDN-Cache-Control`. Isso é especialmente importante para respostas de login, chave TOTP e códigos de recuperação. Imagens e vídeos continuam fora dessa política para preservar o benefício do cache. Uma Cache Rule da Cloudflare que force armazenamento sobre esses caminhos deve ser removida, pois regras de resposta no edge prevalecem sobre os cabeçalhos da origem.
+Arquivos mutáveis que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador e na CDN. A única exceção são `/admin/assets/build/admin.<hash>.min.css/js`: como o nome muda com o conteúdo, eles recebem `public, max-age=31536000, immutable`. Respostas de login, chave TOTP e códigos de recuperação nunca entram nessa exceção. Uma Cache Rule da Cloudflare não deve sobrepor os cabeçalhos da origem.
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
 
@@ -281,7 +281,7 @@ Ao vincular um computador a um usuário, descrições no padrão `SRV01_01` corr
 Não existe atualmente uma suíte automatizada completa. Execute verificações proporcionais à mudança e, antes de commits de código, prefira o conjunto abaixo:
 
 ```bash
-npm run css:build
+npm run assets:build
 for file in $(rg --files wwwroot tools -g '*.js' -g '*.mjs'); do node --check "$file"; done
 node tools/check-csp.mjs
 dotnet build -c Release --no-restore
