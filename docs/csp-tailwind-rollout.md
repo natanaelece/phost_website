@@ -276,7 +276,11 @@ Verifique:
 - `X-Frame-Options: DENY`;
 - `X-Content-Type-Options: nosniff`;
 - `Referrer-Policy: strict-origin-when-cross-origin`;
-- HTML, APIs e arquivos CSS/JS sem hash com `no-store` também na CDN;
+- APIs, rotas fora da allowlist pública e arquivos CSS/JS sem hash com
+  `no-store` também na CDN;
+- `/assets/build/public.<nome>.<hash>.css/js` com cache imutável de um ano;
+- `/`, `/painel` e `/privacidade` com `no-store` no navegador e microcache de
+  60 segundos exclusivamente na Cloudflare;
 - `/admin/assets/build/admin.<hash>.min.css/js` com
   `public, max-age=31536000, immutable` no navegador e na CDN;
 - `/css/tailwind.css`, CSS extraídos e scripts de `/js/` respondendo `200`.

@@ -13,7 +13,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 
 ## Não redescubra nem reverta
 
-- NPM existe somente para os builds fixados do Tailwind e dos assets do admin com esbuild; não introduza framework frontend nem bundler em runtime. Node 18 também é ferramenta de validação.
+- NPM existe somente para os builds fixados do Tailwind, dos assets do admin com esbuild e das cópias públicas com hash de conteúdo; não introduza framework frontend nem bundler em runtime. Node 18 também é ferramenta de validação.
 - QR Pix é estático para evitar CPF/CNPJ. Concilie compras atuais por `pixQrCodeId`; mantenha o fallback legado pela descrição `Licença`.
 - Pedido administrativo nasce pendente com `created_manually`, não pago. O cliente pode gerar ou renovar o QR depois.
 - Regras comerciais não podem ser copiadas para JS/controladores: use `PricingRules` e os endpoints de regras/cotação.
@@ -33,7 +33,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - A descrição convencional do computador `SRV01_01` corresponde ao grupo `ACESSO_SRV01-01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
-- Arquivos mutáveis da aplicação são entregues com `no-store` no navegador e na Cloudflare. Somente `/admin/assets/build/admin.<hash>.min.css/js` usa cache imutável de um ano; preserve o hash de conteúdo e não aplique Cache Rule que sobreponha os cabeçalhos da origem.
+- Arquivos mutáveis da aplicação mantêm `no-store` no navegador. Assets públicos e administrativos gerados com hash usam cache imutável de um ano. Somente `/`, `/painel` e `/privacidade` admitem microcache de 60 segundos na Cloudflare; APIs e demais rotas continuam `no-store`. Preserve os hashes e não amplie a allowlist por Cache Rule.
 - A origem aceita a porta 5000 somente pelo loopback e pelo proxy exato configurado. Preserve a regra do nftables, valide o proxy antes de aceitar `CF-Connecting-IP` e mantenha o HSTS sem `includeSubDomains` e sem `preload`.
 - `AdminToken` é apenas o primeiro fator do admin. O navegador recebe uma sessão aleatória curta em cookie `HttpOnly`/`Secure`/`SameSite=Strict`, com CSRF nas mutações, e o login exige TOTP.
 - Tailwind 3.4, Inter e Chart.js são locais; nunca reintroduza seus CDNs. A CSP não aceita `'unsafe-inline'`: não crie scripts, estilos, atributos `on*` ou `style` inline. Consulte `docs/csp-tailwind-rollout.md` para testes, implantação e rollback.

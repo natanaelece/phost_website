@@ -291,7 +291,14 @@ app.UseStaticFiles(new StaticFileOptions
             requestPath,
             @"^/admin/assets/build/admin\.[a-f0-9]{12}\.min\.(css|js)$",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (immutableAdminAsset)
+        var immutablePublicAsset = System.Text.RegularExpressions.Regex.IsMatch(
+            requestPath,
+            @"^/assets/build/public\.[a-z0-9-]+\.[a-f0-9]{12}\.(css|js)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var edgeCachedPublicHtml = requestPath.Equals("/index.html", StringComparison.OrdinalIgnoreCase) ||
+            requestPath.Equals("/painel.html", StringComparison.OrdinalIgnoreCase) ||
+            requestPath.Equals("/privacidade.html", StringComparison.OrdinalIgnoreCase);
+        if (immutableAdminAsset || immutablePublicAsset)
         {
             // O hash no nome muda junto com o conteudo, portanto navegador e edge
             // podem manter estes arquivos por um ano sem servir versao obsoleta.
@@ -301,11 +308,12 @@ app.UseStaticFiles(new StaticFileOptions
         }
         else if (applicationFileExtensions.Contains(extension))
         {
-            // Arquivos executaveis/de pagina devem sempre ser revalidados na origem.
-            // Os cabecalhos especificos impedem que o edge da Cloudflare entregue
-            // uma versao anterior depois de build ou reinicializacao da aplicacao.
+            // O navegador nunca armazena arquivos mutaveis. A Cloudflare pode manter
+            // por poucos segundos somente as tres paginas publicas allowlisted.
             context.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate, max-age=0";
-            context.Context.Response.Headers["Cloudflare-CDN-Cache-Control"] = "no-store";
+            context.Context.Response.Headers["Cloudflare-CDN-Cache-Control"] = edgeCachedPublicHtml
+                ? "public, max-age=60, stale-while-revalidate=30"
+                : "no-store";
             context.Context.Response.Headers["CDN-Cache-Control"] = "no-store";
             context.Context.Response.Headers.Pragma = "no-cache";
             context.Context.Response.Headers.Expires = "0";
@@ -324,6 +332,11 @@ app.MapGet("/recuperar-senha", async context =>
     var filePath = Path.Combine(env.WebRootPath, "recuperar-senha.html");
 
     context.Response.ContentType = "text/html; charset=utf-8";
+    context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate, max-age=0";
+    context.Response.Headers["Cloudflare-CDN-Cache-Control"] = "no-store";
+    context.Response.Headers["CDN-Cache-Control"] = "no-store";
+    context.Response.Headers.Pragma = "no-cache";
+    context.Response.Headers.Expires = "0";
     await context.Response.SendFileAsync(filePath);
 });
 

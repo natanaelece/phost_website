@@ -58,7 +58,8 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 │
 ├── appsettings.json          # Configurações do ambiente (Asaas, Postgres, AD, JWT)
 ├── Program.cs                # Entry point da aplicação e Injeção de Dependências
-└── restart.sh                # Script utilitário para reiniciar e fazer build da API no servidor
+├── restart.sh                # Reinicia, aguarda o health check e acompanha o journal
+└── restart-completo.sh       # Compila assets/.NET e depois reinicia o serviço
 ```
 
 ## ⚙️ Pré-requisitos e Instalação
@@ -83,8 +84,10 @@ O servidor também possui **Node.js 18** e npm. O npm fixa o Tailwind local e o 
    ```
 4. **Execução:**
    ```bash
-   # Você pode utilizar o script de bash caso esteja rodando sob um ambiente Unix/Linux:
+   # Reinício simples, sem recompilar os assets ou a aplicação:
    ./restart.sh
+   # Publicação completa, com build dos assets e do .NET antes do reinício:
+   ./restart-completo.sh
    # Ou rodar via dotnet diretamente:
    dotnet run
    ```
@@ -245,13 +248,15 @@ O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo
 
 Todas as telas administrativas mantêm estaticamente o mesmo cabeçalho lateral: logo, navegação completa — inclusive **Testes grátis** —, identificação do administrador e botão de logout. Durante o primeiro `GET /api/admin/session`, login e aplicação ficam ocultos por um estado neutro de validação. Depois da autenticação, os links canônicos sem `.html` trocam somente o conteúdo central via History API; o shell, o JavaScript, os modais e a sessão não são recarregados. Cada chamada de API continua validando a sessão no backend, inclusive depois dessa navegação interna.
 
-As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`; o scanner ignora JavaScript de terceiros e os arquivos gerados do admin. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O comando cria `admin.<hash>.min.css/js`, atualiza as nove páginas administrativas e remove somente versões antigas que seguem esse padrão. Em uma instalação nova, rode primeiro `npm ci`.
+As cinco páginas públicas que usam utilitários Tailwind partem de `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`. O build copia sem transformação os CSS/JS públicos para `/assets/build/public.<nome>.<hash>.css/js` e atualiza somente as cinco páginas públicas; o conteúdo original continua sendo a fonte editável. O scanner ignora JavaScript de terceiros e todos os arquivos gerados. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O mesmo comando também cria `admin.<hash>.min.css/js` e atualiza as nove páginas administrativas. Em uma instalação nova, rode primeiro `npm ci`.
 
 Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript, shell autenticado simulado, Chart/fonte locais, navegação sem nova carga do shell ou da sessão, aplicação do período selecionado no Dashboard e ausência dos pesos tipográficos altos que causavam halo no tema escuro.
 
 O procedimento completo de validação, testes manuais, implantação, monitoramento e rollback está em [`docs/csp-tailwind-rollout.md`](docs/csp-tailwind-rollout.md). Os testes automatizados não efetuam login nem mutações reais; fluxos autenticados e integrações com Asaas, AD, e-mail ou WhatsApp devem seguir a matriz de risco desse runbook.
 
-Arquivos mutáveis que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador e na CDN. A única exceção são `/admin/assets/build/admin.<hash>.min.css/js`: como o nome muda com o conteúdo, eles recebem `public, max-age=31536000, immutable`. Respostas de login, chave TOTP e códigos de recuperação nunca entram nessa exceção. Uma Cache Rule da Cloudflare não deve sobrepor os cabeçalhos da origem.
+Arquivos mutáveis que definem a aplicação (`.html`, fontes editáveis `.css/.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador. Os assets públicos `/assets/build/public.<nome>.<hash>.css/js` e os assets administrativos `/admin/assets/build/admin.<hash>.min.css/js` recebem `public, max-age=31536000, immutable`, pois qualquer mudança de conteúdo gera outra URL. Somente `/`, `/painel` e `/privacidade` permitem microcache de 60 segundos exclusivamente na Cloudflare, com `stale-while-revalidate=30`; o navegador e outros intermediários continuam recebendo `no-store`. Respostas de API, login, confirmação, recuperação, chave TOTP e códigos de recuperação nunca entram nessas exceções. Cache Rules devem respeitar essa allowlist e nunca ampliar o cache para rotas autenticadas ou respostas `/api`.
+
+Como a Cloudflare não torna HTML elegível para cache por padrão, o microcache requer uma Cache Rule com **Cache eligibility: Eligible for cache** limitada a `GET`/`HEAD`, hosts `phost.pro` e `www.phost.pro` e caminhos exatamente `/`, `/painel` e `/privacidade`. O Edge TTL deve respeitar os cabeçalhos da origem; não defina TTL global nem regra `Cache Everything` mais ampla. Sem essa regra, os três HTML continuam `DYNAMIC`, enquanto os assets com hash funcionam normalmente como `MISS` seguido de `HIT`.
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
 

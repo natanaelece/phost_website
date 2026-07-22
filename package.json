@@ -5,7 +5,8 @@
     "css:build": "tailwindcss -i ./assets/tailwind.css -o ./wwwroot/css/tailwind.css --minify",
     "css:watch": "tailwindcss -i ./assets/tailwind.css -o ./wwwroot/css/tailwind.css --watch",
     "admin:build": "node ./tools/build-admin-assets.mjs",
-    "assets:build": "npm run css:build && npm run admin:build"
+    "public:build": "node ./tools/build-public-assets.mjs",
+    "assets:build": "npm run css:build && npm run admin:build && npm run public:build"
   },
   "devDependencies": {
     "esbuild": "0.28.1",
