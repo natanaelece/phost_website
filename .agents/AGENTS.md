@@ -7,6 +7,11 @@ produção. Envie a mudança validada a `origin/development`, integre-a em `main
 sem reescrever histórico e envie `origin/main`; produção nunca deve acompanhar
 `origin/development`.
 
+Em produção, preserve `systemd/premierapi.service` executando diretamente o DLL
+`Release`. Não volte a usar `dotnet run`, que pode aplicar `launchSettings.json`
+e iniciar em `Development`. Mudanças de aplicação exigem
+`restart-completo.sh`; `restart.sh` apenas recicla o último build validado.
+
 ## Mapa rápido
 
 - `Controllers/`: APIs administrativas, autenticação, checkout, perfil, webhook e analytics.

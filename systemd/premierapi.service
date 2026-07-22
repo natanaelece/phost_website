@@ -1,0 +1,15 @@
+[Unit]
+Description=Premierhost API e Painel (.NET 8)
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/premierhost/PremierAPI
+ExecStart=/usr/bin/dotnet /var/www/premierhost/PremierAPI/bin/Release/net8.0/PremierAPI.dll
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=premierapi
+User=root
+
+[Install]
+WantedBy=multi-user.target

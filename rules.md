@@ -7,6 +7,13 @@ acompanhada por produção. Entregas devem ser commitadas e enviadas primeiro a
 `development`, integradas em `main` sem reescrever histórico e então enviadas a
 `origin/main`. Nunca configure produção para acompanhar `origin/development`.
 
+A unit de produção deve executar diretamente
+`bin/Release/net8.0/PremierAPI.dll`; não use `dotnet run`, pois ele pode carregar
+`launchSettings.json` e iniciar o ASP.NET em `Development`. Depois de mudanças
+na aplicação, use `restart-completo.sh`; o reinício simples reutiliza o último
+build `Release` validado. Preserve `systemd/premierapi.service` como fonte da
+unit instalada e não adicione variáveis ou segredos inline.
+
 ## Arquitetura que deve ser preservada
 
 - Backend ASP.NET Core/.NET 8, API stateless com JWT, PostgreSQL e Dapper. Não introduza Entity Framework.
