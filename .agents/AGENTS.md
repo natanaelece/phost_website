@@ -2,6 +2,11 @@
 
 Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este arquivo é um índice curto; em caso de dúvida, as decisões detalhadas estão no README.
 
+Use `development` para trabalho e validação e `main` como branch canônica de
+produção. Envie a mudança validada a `origin/development`, integre-a em `main`
+sem reescrever histórico e envie `origin/main`; produção nunca deve acompanhar
+`origin/development`.
+
 ## Mapa rápido
 
 - `Controllers/`: APIs administrativas, autenticação, checkout, perfil, webhook e analytics.

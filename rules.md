@@ -2,6 +2,11 @@
 
 Leitura obrigatória, nesta ordem, antes de alterar o projeto: `README.md`, este `rules.md` e `.agents/AGENTS.md`. Eles registram decisões de produto e invariantes que não devem ser redescobertos a cada chat.
 
+`development` é a branch de trabalho e validação; `main` é a branch canônica
+acompanhada por produção. Entregas devem ser commitadas e enviadas primeiro a
+`development`, integradas em `main` sem reescrever histórico e então enviadas a
+`origin/main`. Nunca configure produção para acompanhar `origin/development`.
+
 ## Arquitetura que deve ser preservada
 
 - Backend ASP.NET Core/.NET 8, API stateless com JWT, PostgreSQL e Dapper. Não introduza Entity Framework.

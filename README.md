@@ -71,6 +71,21 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 
 O servidor também possui **Node.js 18** e npm. O npm fixa o Tailwind local e o esbuild usado apenas durante o build; o frontend continua sem framework ou bundler em runtime. `wwwroot/css/tailwind.css` e os assets versionados do admin são servidos pela própria aplicação, sem CDN de fonte, Chart.js ou Tailwind.
 
+### Fluxo de branches e produção
+
+`development` é a branch de trabalho e validação. `main` é a branch canônica de
+produção e também o `HEAD` padrão do repositório remoto. Uma entrega só está
+disponível para o processo de produção depois de ser commitada e enviada a
+`development`, integrada em `main` e ter `main` enviada ao remoto. A automação
+de produção deve acompanhar `origin/main`, nunca `origin/development`.
+
+Antes da integração, atualize as duas referências e não sobrescreva divergências
+com reset destrutivo. O fluxo normal é validar em `development`, fazer
+`git push origin development`, atualizar a `main` local com
+`git pull --ff-only origin main`, executar o merge de `development` em `main` e
+então `git push origin main`. Conflitos devem ser revisados e validados antes do
+push.
+
 ### Passo a Passo
 
 1. **Clonar o Repositório** e navegar até a pasta do projeto.

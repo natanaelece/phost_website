@@ -2,7 +2,8 @@
 
 Este documento registra o escopo, as evidências de validação, os testes ainda
 necessários e o procedimento de implantação/rollback das alterações integradas
-à branch `development`.
+primeiro à branch de trabalho `development` e depois promovidas à branch
+canônica de produção `main`.
 
 ## Escopo e separação dos commits
 
@@ -97,7 +98,8 @@ mesmo commit, para que o teste represente a política real.
 
 ## Evidências já obtidas
 
-Na linha integrada à `development` foram executados:
+Na linha validada em `development`, antes da promoção para `main`, foram
+executados:
 
 - `npm run assets:build` repetido com saída determinística;
 - `npm audit` com zero vulnerabilidades conhecidas;
@@ -164,6 +166,23 @@ ADMIN_SHELL_FAILURES=0
 
 Chromium e ChromeDriver devem possuir versões compatíveis. O servidor temporário
 do teste e o driver devem escutar somente em loopback e ser encerrados depois.
+
+## Integração de branches
+
+Depois de concluir as validações e o commit em `development`, use o fluxo:
+
+```bash
+git push origin development
+git switch main
+git pull --ff-only origin main
+git merge --no-ff development
+git push origin main
+```
+
+`development` recebe o trabalho e as validações; produção acompanha somente
+`origin/main`. Não faça o serviço de produção rastrear `development` e não use
+`git reset --hard` para forçar a integração. Se houver conflito ou se qualquer
+validação falhar, interrompa o fluxo antes do push de `main`.
 
 ## Testes manuais necessários
 
