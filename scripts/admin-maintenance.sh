@@ -42,7 +42,7 @@ sleep 2
 
 if [[ "$operation" == "publish" ]]; then
     write_status "building" "Compilando os assets e a aplicacao em Release..."
-    if ! (cd "$project_root" && npm run css:build && dotnet build --configuration Release --no-restore) >> "$log_file" 2>&1; then
+    if ! (cd "$project_root" && npm run assets:build && dotnet build --configuration Release --no-restore) >> "$log_file" 2>&1; then
         write_status "failed" "A compilacao falhou. O servico atual foi mantido."
         exit 4
     fi
