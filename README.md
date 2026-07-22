@@ -154,6 +154,7 @@ Ao cancelar, `orders.canceled_was_paid` registra se o pedido estava efetivamente
 
 ### Compatibilidade dos webhooks Asaas
 
+- O endpoint público canônico é `https://webhook-website.phost.pro/api/webhook/asaas`. Preserve `webhook-website.phost.pro` tanto em `AllowedHosts` de `appsettings.json` quanto na lista `ForwardedHeadersOptions.AllowedHosts` de `Program.cs`; removê-lo faz o Host Filtering responder `400 Bad Request - Invalid Hostname` antes de alcançar o controlador.
 - O texto historico enviado ao criar uma cobranca dinamica era `Licença ({periodo}) - AnyDesk: {id}`. Preserve esse formato em qualquer fluxo dinamico legado.
 - O QR Code estatico continua recebendo esse texto no campo `description`, mas o Asaas cria a cobranca somente depois do pagamento e pode atribuir a ela a descricao automatica de Pix recebido. Portanto, a descricao presente no evento da cobranca nao e um identificador confiavel para esse fluxo.
 - Webhooks que compartilham a mesma conta Asaas devem reconhecer compras atuais da PremierHost pelo `payment.pixQrCodeId`, conciliando esse valor com `orders.asaas_pix_qr_code_id`. A descricao iniciada por `Licença` serve apenas como compatibilidade com cobrancas dinamicas antigas.

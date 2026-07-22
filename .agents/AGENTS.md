@@ -25,6 +25,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 
 - NPM existe somente para os builds fixados do Tailwind, dos assets do admin com esbuild e das cópias públicas com hash de conteúdo; não introduza framework frontend nem bundler em runtime. Node 18 também é ferramenta de validação.
 - QR Pix é estático para evitar CPF/CNPJ. Concilie compras atuais por `pixQrCodeId`; mantenha o fallback legado pela descrição `Licença`.
+- O webhook canônico do Asaas é `https://webhook-website.phost.pro/api/webhook/asaas`; preserve esse hostname nas allowlists de `appsettings.json` e `Program.cs` para que o Host Filtering não rejeite a chamada antes do controlador.
 - Pedido administrativo nasce pendente com `created_manually`, não pago. O cliente pode gerar ou renovar o QR depois.
 - Regras comerciais não podem ser copiadas para JS/controladores: use `PricingRules` e os endpoints de regras/cotação.
 - Ordenação das tabelas mostra somente uma seta na coluna ativa; mobile deve preservar todas as informações em cartões.

@@ -31,6 +31,7 @@ unit instalada e não adicione variáveis ou segredos inline.
 
 ## Invariantes do Asaas
 
+- O webhook público canônico é `https://webhook-website.phost.pro/api/webhook/asaas`. Mantenha `webhook-website.phost.pro` nas allowlists de host de `appsettings.json` e `Program.cs`; sem isso, a requisição é rejeitada antes do `WebhookController`.
 - O checkout usa `/v3/pix/qrCodes/static`: QR individual, valor fixo e validade curta, sem exigir CPF/CNPJ. Não reverta para cobrança dinâmica sem autorização expressa.
 - Preserve a descrição histórica do QR: `Licença ({periodo}) - AnyDesk: {id}`.
 - A identidade confiável é `payment.pixQrCodeId` ligado a `orders.asaas_pix_qr_code_id`. `description.StartsWith("Licença")` é apenas compatibilidade com cobranças dinâmicas antigas.

@@ -200,6 +200,7 @@ var forwardedHeadersOptions = new ForwardedHeadersOptions
 forwardedHeadersOptions.KnownProxies.Add(knownProxyAddress);
 forwardedHeadersOptions.AllowedHosts.Add("phost.pro");
 forwardedHeadersOptions.AllowedHosts.Add("www.phost.pro");
+forwardedHeadersOptions.AllowedHosts.Add("webhook-website.phost.pro");
 app.UseForwardedHeaders(forwardedHeadersOptions);
 app.UseHsts();
 
