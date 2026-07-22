@@ -326,12 +326,25 @@ local, cupom, indicação, perfil e componentes dinâmicos do admin.
 - HTML administrativo respondeu com `no-store`, e o JavaScript com hash recebeu
   `public, max-age=31536000, immutable` tanto na origem quanto pela Cloudflare.
 
-O processo levou aproximadamente 27 segundos para começar a escutar após o
-restart. A unit atual executa `dotnet run --configuration Release`, que aplica o
-perfil `http` de `Properties/launchSettings.json` e inicia o ASP.NET em ambiente
-`Development`. Em produção, a unit deve usar `--no-launch-profile` ou executar o
-DLL publicado com `ASPNETCORE_ENVIRONMENT=Production`. Alterar a unit ou os
-arquivos protegidos requer autorização e janela operacional próprias.
+O processo levou aproximadamente 27 segundos para começar a escutar após esse
+restart porque a unit ainda executava `dotnet run --configuration Release`, que
+aplicava o perfil `http` de `Properties/launchSettings.json` e iniciava o ASP.NET
+em ambiente `Development`. Esse era o estado anterior e não deve ser restaurado.
+
+### Ambiente de produção corrigido em 22 de julho de 2026
+
+A unit passou a executar diretamente
+`bin/Release/net8.0/PremierAPI.dll`, sem `dotnet run` e sem carregar
+`launchSettings.json`. O ambiente esperado no journal é `Production`. O arquivo
+canônico está em `systemd/premierapi.service`; a cópia instalada fica em
+`/etc/systemd/system/premierapi.service`.
+
+Depois de mudar código, HTML, CSS ou JavaScript, execute
+`restart-completo.sh`, que regenera assets, compila o .NET em `Release` e só
+reinicia se ambos terminarem com sucesso. `restart.sh` é reservado para reciclar
+o último build validado quando nenhum arquivo da aplicação mudou. O drop-in
+continua contendo apenas `EnvironmentFile=/etc/premierapi/premierapi.env`; não
+adicione segredos nem valores de ambiente inline à unit.
 
 ### Estado observado em 22 de julho de 2026 — cache público
 

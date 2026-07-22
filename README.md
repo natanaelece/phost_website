@@ -114,6 +114,14 @@ compila o .NET e só então chama o reinício simples. Os dois scripts terminam
 acompanhando o journal; `Ctrl+C` encerra somente esse acompanhamento e não para
 o serviço.
 
+Em produção, a unit versionada em `systemd/premierapi.service` executa
+diretamente `bin/Release/net8.0/PremierAPI.dll`. Ela não usa `dotnet run` nem os
+perfis de `Properties/launchSettings.json`, que são exclusivos de
+desenvolvimento local. Sem uma variável de ambiente que o substitua, o ASP.NET
+inicia em `Production`. Por isso, o build `Release` deve existir antes do
+primeiro start e `restart-completo.sh` é obrigatório depois de mudanças de
+código; `restart.sh` reutiliza deliberadamente o último build validado.
+
 A aplicação fará a criação e atualização automática da estrutura de tabelas do banco de dados graças ao `DatabaseInitializer.cs`.
 
 As automações usam as seções de configuração `AdProvisioning`, `AdExpiration` e `EmailConfirmationReminders`. Os intervalos definem apenas a frequência de reconciliação; o horário comercial continua autoritativo no fuso configurado. O padrão é tentar provisionamentos a cada 5 minutos, verificar expirações a cada minuto e procurar confirmações pendentes a cada 5 minutos.
