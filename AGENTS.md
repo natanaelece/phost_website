@@ -1,60 +1,44 @@
-# Política de execução remota
+# Política de execução
 
-Este repositório está montado no llm-server através de SSHFS.
+Antes de executar comandos, identifique o ambiente pelo `hostname` e pelo
+diretório atual.
 
-- Caminho local: `/opt/remotes/PremierAPI`
-- Host de runtime: `website`
-- Caminho remoto: `/var/www/premierhost/PremierAPI`
+## Execução direta no host de runtime
 
-O SSHFS deve ser usado apenas para ler, pesquisar e editar arquivos.
+Quando o `hostname` for `website` e o projeto estiver em
+`/var/www/premierhost/PremierAPI`, execute diretamente nesse diretório todos os
+comandos do projeto, incluindo leitura, pesquisa, edição, Git, build, testes,
+scripts, logs, banco de dados, Docker, serviços e diagnósticos.
 
-Todos os comandos relacionados ao projeto devem ser executados no servidor
+Nesse cenário, não abra uma nova conexão com `website`: o Codex já está no host
+correto.
+
+## Execução a partir do llm-server
+
+Quando o `hostname` for `llm-server` e o projeto estiver montado em
+`/opt/remotes/PremierAPI`, use esse diretório somente para ler, pesquisar e
+editar arquivos.
+
+Não crie nem mantenha arquivos específicos da tarefa fora desse mount no
+filesystem local do `llm-server`. Código, documentação e outros artefatos que
+pertencem ao repositório devem ficar em `/opt/remotes/PremierAPI`. Artefatos não
+versionados devem ser criados diretamente no host `website`; backups devem
+ficar preferencialmente em `/var/backups` nesse host.
+
+Todos os comandos relacionados ao projeto devem ser executados no host
 `website`, incluindo Git, build, testes, scripts, logs, banco de dados, Docker,
-serviços e diagnóstico de runtime.
-
-Use sempre:
+serviços, diagnósticos e geração de artefatos. Use:
 
 `ssh website 'cd /var/www/premierhost/PremierAPI && COMANDO'`
 
-Nunca execute localmente no llm-server:
+Se a conexão falhar, pare e informe o erro. Não execute comandos do projeto
+localmente no `llm-server` como fallback.
 
-- `dotnet`, builds ou testes
-- migrations ou comandos de banco
-- scripts do projeto
-- Docker ou Docker Compose
-- inicialização ou reinicialização de serviços
-- comandos Git que alterem estado
-
-Se o SSH falhar, pare e informe o erro. Nunca use execução local como fallback.
+Se o ambiente não corresponder a nenhum dos dois cenários, pare e informe os
+valores reais de `hostname`, diretório atual e raiz Git antes de prosseguir.
 
 Migrations, deploys, reinicializações, alterações de banco e comandos
 destrutivos precisam de autorização explícita do usuário.
-
-## Isolamento do llm-server
-
-Este projeto está montado no `llm-server` em
-`/opt/remotes/PremierAPI`, mas pertence ao host `website` e à raiz remota
-`/var/www/premierhost/PremierAPI`.
-
-Nenhum arquivo específico da tarefa pode ser criado ou mantido no filesystem
-local do `llm-server`.
-
-Código, documentação, relatórios, handoffs, planos, checkpoints, backups,
-dumps, logs, temporários, resultados de testes e quaisquer outros artefatos
-devem ficar:
-
-- dentro de `/opt/remotes/PremierAPI`, quando pertencem ao repositório; ou
-- diretamente no host `website`, quando não devem ser versionados.
-
-Backups não versionados devem ser criados remotamente, preferencialmente em
-`/var/backups`, por meio de SSH.
-
-Todos os comandos Git, build, teste, runtime, banco, serviço e geração de
-artefatos devem executar com:
-
-`ssh website 'cd /var/www/premierhost/PremierAPI && COMANDO'`
-
-Se o SSH falhar, pare. Nunca execute localmente como fallback.
 
 ## Proteção de variáveis sensíveis
 
