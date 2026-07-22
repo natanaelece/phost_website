@@ -42,14 +42,15 @@ destrutivos precisam de autorização explícita do usuário.
 
 ## Proteção de variáveis sensíveis
 
-O serviço `premierapi` carrega suas variáveis pelos arquivos protegidos
-`/etc/premierapi/premierapi.env` e
-`/etc/premierapi/telegram-alerts.env`. Eles ficam fora do repositório,
-pertencem a `root` e devem manter modo `0600`.
+O serviço `premierapi` e `premierapi-startup-alert.service` carregam suas
+variáveis somente pelo arquivo protegido `/etc/premierapi/premierapi.env`,
+inclusive as chaves hierárquicas `Telegram__BotToken` e `Telegram__ChatId`.
+Esse arquivo fica fora do repositório, pertence a `root` e deve manter modo
+`0600`.
 
-O drop-in `/etc/systemd/system/premierapi.service.d/override.conf` deve conter
-somente as referências `EnvironmentFile=` e nunca valores inline em
-`Environment=`. Nunca exiba ou registre `systemctl show premierapi -p
+O drop-in `/etc/systemd/system/premierapi.service.d/override.conf` e a unit de
+alerta devem conter somente `EnvironmentFile=/etc/premierapi/premierapi.env` e
+nunca valores inline em `Environment=`. Nunca exiba ou registre `systemctl show premierapi -p
 Environment`. Para diagnóstico, consulte apenas propriedades não sensíveis,
 como `FragmentPath`, `DropInPaths` e `EnvironmentFiles`, e use
 `dotnet PremierAPI.dll --validate-configuration`, que informa apenas nomes de

@@ -42,6 +42,7 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 ## Segurança operacional
 
 Não faça chamadas com efeitos reais no Asaas nem mutações no AD para testar sem autorização expressa. Não exponha segredos, tokens ou configurações privadas em logs, diffs ou respostas.
+`premierapi` e `premierapi-startup-alert.service` carregam somente `/etc/premierapi/premierapi.env`, onde ficam centralizados todos os segredos, inclusive `Telegram__BotToken` e `Telegram__ChatId`. O arquivo pertence a `root`, mantém modo `0600` e nunca deve ter seus valores exibidos. Como o alerta externo usa o mesmo arquivo da aplicação, ele também falhará se `premierapi.env` estiver ausente ou tiver sintaxe inválida.
 O key ring do Data Protection é persistente e protegido por certificado; preserve `DataProtectionConfiguration` e nunca versione `.data-protection-keys`.
 O estado TOTP protegido fica em `/var/lib/premierapi/admin-totp.protected`, com arquivo `0600`. Nunca exponha chave, URI `otpauth` ou códigos de recuperação; faça backup dele junto do key ring e do certificado, pois o arquivo isolado não é recuperável.
 
