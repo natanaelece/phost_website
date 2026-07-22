@@ -18,7 +18,8 @@ namespace PremierAPI.Controllers
             "auth_opened", "signup_started", "signup_completed", "email_confirmed",
             "checkout_attempted", "pix_created", "pix_copied", "payment_received",
             "access_delivered", "checkout_error", "renewal_started", "renewal_paid",
-            "free_trial_cta_clicked", "free_trial_requested"
+            "free_trial_cta_clicked", "free_trial_requested", "guide_viewed",
+            "guide_cta_clicked"
         };
 
         private static readonly Regex PropertyKeyPattern = new("^[a-z][a-z0-9_]{0,39}$", RegexOptions.Compiled);

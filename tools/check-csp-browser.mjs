@@ -47,6 +47,7 @@ const pricingFixture = {
 const pages = [
   '/',
   '/confirmar',
+  '/guia-wyd',
   '/painel',
   '/privacidade',
   '/recuperar-senha',
@@ -256,6 +257,22 @@ try {
         document.querySelector('[data-csp-click="h101"]').click();
         const closed = document.getElementById('ajudaModal').classList.contains('hidden');
         return opened && closed;
+      `
+    },
+    {
+      name: 'guide-faq-and-contract-links',
+      page: '/guia-wyd',
+      script: `
+        const details = document.querySelector('.guide-faq details');
+        details.querySelector('summary').click();
+        const simulator = document.querySelector('[data-analytics-location="guide_hero"][href="/painel#simular-planos"]');
+        const trial = document.querySelector('[data-analytics-location="guide_trial"]');
+        return details.open
+          && document.querySelectorAll('h1').length === 1
+          && document.querySelector('link[rel="canonical"]')?.href === 'https://phost.pro/guia-wyd'
+          && simulator?.dataset.analyticsSource === 'guia_wyd'
+          && trial?.getAttribute('href') === '/?action=login&intent=free-trial'
+          && trial?.dataset.analyticsEvent === 'free_trial_cta_clicked';
       `
     },
     {

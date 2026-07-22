@@ -11,6 +11,7 @@ const assets = [
   { key: 'index-style', source: 'css/index.css' },
   { key: 'panel-style', source: 'css/painel.css' },
   { key: 'privacy-style', source: 'css/privacidade.css' },
+  { key: 'guide-style', source: 'css/guia-wyd.css' },
   { key: 'confirm-style', source: 'css/confirmar.css' },
   { key: 'recovery-style', source: 'css/recuperar-senha.css' },
   { key: 'shared-style', source: 'css/csp-static.css' },
@@ -26,6 +27,7 @@ const publicPages = [
   'index.html',
   'painel.html',
   'privacidade.html',
+  'guia-wyd.html',
   'confirmar.html',
   'recuperar-senha.html'
 ];

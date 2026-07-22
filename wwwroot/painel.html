@@ -24,8 +24,8 @@
     <meta name="twitter:image" content="https://phost.pro/img/preview-premier-host-v3.png">
     <meta name="twitter:image:alt" content="Premier Host — computadores remotos para WYD">
     <link rel="icon" href="img/Ícone48x48.ico">
-    <link rel="stylesheet" href="/assets/build/public.tailwind.007b267ab031.css">
-    <link rel="stylesheet" href="/assets/build/public.panel-style.689544d32663.css">
+    <link rel="stylesheet" href="/assets/build/public.tailwind.d11bb74f7974.css">
+    <link rel="stylesheet" href="/assets/build/public.panel-style.f4a98dfb1b38.css">
 <link rel="stylesheet" href="/assets/build/public.shared-style.bf8678226c7f.css"></head>
 <body class="min-h-screen text-slate-300 relative flex flex-col">
 
@@ -88,6 +88,15 @@
                     <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">3</span><h3 class="font-bold text-white mb-2">Pague com Pix</h3><p class="text-sm text-slate-400 leading-relaxed">Revise o resumo, gere a cobrança e faça o pagamento. A confirmação é recebida automaticamente pela plataforma.</p></div>
                     <div class="rounded-xl border border-slate-800 bg-slate-950/60 p-5"><span class="inline-flex w-8 h-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400 font-black mb-3">4</span><h3 class="font-bold text-white mb-2">Receba seu acesso</h3><p class="text-sm text-slate-400 leading-relaxed">Após a confirmação, acompanhe a liberação no painel. Nossa equipe auxilia na configuração inicial quando necessário.</p></div>
                 </div>
+                <div class="mb-7 rounded-xl border border-blue-500/20 bg-blue-500/10 p-5">
+                    <h3 class="font-bold text-white">O que continua funcionando fora da sua casa?</h3>
+                    <ul class="mt-3 space-y-2 text-sm leading-relaxed text-slate-400">
+                        <li><strong class="text-slate-200">Internet residencial:</strong> se ela cair, você perde temporariamente a visualização e o controle, mas o computador remoto continua executando o jogo.</li>
+                        <li><strong class="text-slate-200">Energia residencial:</strong> a falta de energia na sua casa não desliga o computador da Premier Host.</li>
+                        <li><strong class="text-slate-200">Primeiro acesso:</strong> use as credenciais liberadas no painel para entrar pelo navegador ou RealVNC; solicite configuração assistida quando necessário.</li>
+                    </ul>
+                    <a href="/guia-wyd" class="mt-4 inline-flex text-sm font-bold text-blue-300 hover:text-blue-200">Entenda DC, IP dedicado, farm e eventos no Guia WYD</a>
+                </div>
                 <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950"><video class="w-full aspect-video" controls preload="metadata" playsinline><source src="/vid/comofunciona.mp4" type="video/mp4">Seu navegador não consegue reproduzir este vídeo.</video><p class="px-4 py-3 text-center text-xs text-slate-500">Se o vídeo não abrir, <a href="/vid/comofunciona.mp4" target="_blank" class="text-blue-400 hover:underline">assista diretamente pelo navegador</a>.</p></div>
             </div>
 
@@ -95,8 +104,14 @@
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Preciso estar logado para consultar os preços?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Não. O simulador é público. Você só precisa entrar ou criar uma conta quando quiser gerar o PIX e contratar.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Os computadores são máquinas virtuais?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Não. São computadores físicos reais, com conexão e IP próprios. O serviço não fornece hacks ou bots.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Como acesso o computador contratado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Você pode acessar pelo navegador em nossa página com Guacamole ou usar o RealVNC Viewer no computador. O suporte orienta a configuração inicial.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">O que acontece se minha internet cair?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">O acesso à tela pode ser interrompido temporariamente, mas o jogo continua sendo executado no computador remoto. Quando sua conexão voltar, acesse novamente a mesma máquina.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">O que acontece se faltar energia na minha casa?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">A queda de energia residencial não desliga o computador da Premier Host, pois ele está fisicamente em nossa estrutura.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Qual a diferença entre perder a tela e o computador parar?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Perder a tela significa ficar temporariamente sem visualização e controle por causa da sua conexão. O computador remoto parar seria interromper o processamento na estrutura; uma queda na sua residência não provoca isso.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Cada computador possui IP dedicado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Sim. Cada computador utiliza conexão e IP dedicados — não é proxy nem VPN compartilhada.</p></details>
+                <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Como faço o primeiro acesso?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Após a liberação, consulte suas credenciais no painel e entre pelo navegador ou RealVNC. A equipe auxilia a configuração inicial quando necessário.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Quando o acesso é liberado?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">O sistema recebe a confirmação do PIX e inicia a liberação. Você acompanha o pedido e as credenciais pelo painel.</p></details>
                 <details class="group rounded-xl border border-slate-800 bg-slate-950/60 p-5"><summary class="cursor-pointer font-bold text-white">Posso testar antes de contratar?</summary><p class="text-sm text-slate-400 leading-relaxed mt-3">Sim, desde que sua conta ainda não possua pedido pago. O teste gratuito dura 30 minutos: entre na sua conta, registre a solicitação no painel e acompanhe a liberação. A equipe usa o WhatsApp cadastrado apenas para o contato operacional.</p></details>
+                <p class="pt-3 text-center text-sm"><a href="/guia-wyd" class="font-bold text-blue-300 hover:text-blue-200">Entenda DC, IP dedicado, farm e eventos no Guia WYD</a></p>
                 <div class="mt-6 rounded-xl border border-green-500/20 bg-green-500/10 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h3 class="font-bold text-white">Ainda ficou com alguma dúvida?</h3><p class="text-sm text-slate-400 mt-1">Fale diretamente com a equipe da Premier Host.</p></div><a href="https://wa.me/5534999187189?text=Ol%C3%A1%21+Tenho+uma+d%C3%BAvida+sobre+a+Premier+Host." target="_blank" rel="noopener" class="text-center bg-[#25D366] hover:bg-[#20bd5a] text-slate-950 px-5 py-3 rounded-lg font-black transition-colors whitespace-nowrap">Chamar no WhatsApp</a></div>
             </div>
         </div>
@@ -222,7 +237,7 @@
         <!-- CORREÇÃO: Div única e alinhada para o Aviso de IPs -->
         <div class="mb-8 bg-zinc-800/40 border border-amber-500/20 text-white p-3 rounded-lg text-sm flex items-center gap-3">
             <span class="text-xl">⚠️</span>
-            <p>Cada computador possui um IP válido único (não é proxy nem VPN, sem risco de banimento) !</p>
+            <p>Cada computador utiliza conexão e IP dedicados — não é proxy nem VPN compartilhada. Até hoje, nenhum cliente foi banido por utilizar a infraestrutura da Premier Host.</p>
         </div>
 
         <div id="simular-planos" class="grid grid-cols-1 md:grid-cols-2 gap-8 scroll-mt-28">
@@ -509,7 +524,7 @@
 		</div>
 	</footer>
 
-    <script src="/assets/build/public.analytics.d3186c711536.js"></script>
+    <script src="/assets/build/public.analytics.9df672116368.js"></script>
     <script src="/assets/build/public.panel-script.3d8a17454887.js"></script>
 <script src="/assets/build/public.shared-script.78b629c659aa.js"></script></body>
 </html>

@@ -26,7 +26,7 @@ body { background-color: #081121; }
 		transform: scale(1.1);
 	}
 
-	/* O efeito de onda idêntico ao do concorrente */
+	/* Efeito de pulso do botão flutuante do WhatsApp */
 	.whatsapp-float::after {
 		content: "";
 		position: absolute;

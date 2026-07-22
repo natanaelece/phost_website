@@ -298,7 +298,8 @@ app.UseStaticFiles(new StaticFileOptions
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         var edgeCachedPublicHtml = requestPath.Equals("/index.html", StringComparison.OrdinalIgnoreCase) ||
             requestPath.Equals("/painel.html", StringComparison.OrdinalIgnoreCase) ||
-            requestPath.Equals("/privacidade.html", StringComparison.OrdinalIgnoreCase);
+            requestPath.Equals("/privacidade.html", StringComparison.OrdinalIgnoreCase) ||
+            requestPath.Equals("/guia-wyd.html", StringComparison.OrdinalIgnoreCase);
         if (immutableAdminAsset || immutablePublicAsset)
         {
             // O hash no nome muda junto com o conteudo, portanto navegador e edge
@@ -310,7 +311,7 @@ app.UseStaticFiles(new StaticFileOptions
         else if (applicationFileExtensions.Contains(extension))
         {
             // O navegador nunca armazena arquivos mutaveis. A Cloudflare pode manter
-            // por poucos segundos somente as tres paginas publicas allowlisted.
+            // por poucos segundos somente as quatro paginas publicas allowlisted.
             context.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate, max-age=0";
             context.Context.Response.Headers["Cloudflare-CDN-Cache-Control"] = edgeCachedPublicHtml
                 ? "public, max-age=60, stale-while-revalidate=30"

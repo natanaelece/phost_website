@@ -34,7 +34,7 @@ body { background-color: #081121; }
 			transform: scale(1.1);
 		}
 
-		/* O efeito de onda idêntico ao do concorrente */
+		/* Efeito de pulso do botão flutuante do WhatsApp */
 		.whatsapp-float::after {
 			content: "";
 			position: absolute;
@@ -44,6 +44,9 @@ body { background-color: #081121; }
 			pointer-events: none;
 			animation: whatsappRing 4.8s ease-in-out infinite;
 		}
+
+        .home-guide-strip { background: linear-gradient(90deg, rgba(15, 23, 42, 0.45), rgba(30, 58, 138, 0.12), rgba(15, 23, 42, 0.45)); }
+        .home-guide-strip__button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; }
 
 		@keyframes whatsappRing {
 			0% {

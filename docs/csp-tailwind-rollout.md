@@ -42,7 +42,7 @@ runtime.
 - O scanner considera `wwwroot/**/*.html` e `wwwroot/**/*.js`, excluindo o
   Chart.js de terceiros e os arquivos gerados do admin para evitar classes
   incidentais e crescimento do CSS público.
-- As cinco páginas públicas deixaram de carregar `cdn.tailwindcss.com`.
+- As seis páginas públicas processadas pelo pipeline não carregam `cdn.tailwindcss.com`.
 - A manutenção de publicação recompila o CSS antes do build .NET e aborta se
   essa etapa falhar.
 
@@ -107,7 +107,7 @@ executados:
 - verificação de sintaxe de todos os `.js` e `.mjs`;
 - `node tools/check-csp.mjs`, com zero scripts, estilos, eventos ou templates
   dinâmicos incompatíveis e zero ações declarativas ausentes;
-- teste das 15 páginas completas no Chromium, com a política exata de
+- teste das 16 páginas completas no Chromium, com a política exata de
   `Program.cs`: zero violações CSP e zero exceções JavaScript;
 - abertura/fechamento dos modais principais, troca das telas de autenticação,
   fonte/Chart.js locais e navegação administrativa sem segunda carga de shell
@@ -156,7 +156,7 @@ node tools/check-csp-browser.mjs
 O resultado esperado é:
 
 ```text
-CSP_BROWSER_PAGES=15
+CSP_BROWSER_PAGES=16
 CSP_BROWSER_VIOLATIONS=0
 CSP_BROWSER_RUNTIME_ERRORS=0
 CSP_BROWSER_INTERACTION_FAILURES=0
@@ -277,12 +277,13 @@ curl -sS -o /dev/null -D - http://phost.pro/
 ```
 
 O resultado deve redirecionar para `https://phost.pro/`. Em seguida, confira os
-cabeçalhos HTTPS em `/`, `/painel`, `/privacidade` e uma rota administrativa:
+cabeçalhos HTTPS em `/`, `/painel`, `/privacidade`, `/guia-wyd` e uma rota administrativa:
 
 ```bash
 curl -sS -o /dev/null -D - https://phost.pro/
 curl -sS -o /dev/null -D - https://phost.pro/painel
 curl -sS -o /dev/null -D - https://phost.pro/privacidade
+curl -sS -o /dev/null -D - https://phost.pro/guia-wyd
 curl -sS -o /dev/null -D - https://phost.pro/admin/dashboard
 ```
 
@@ -298,7 +299,7 @@ Verifique:
 - APIs, rotas fora da allowlist pública e arquivos CSS/JS sem hash com
   `no-store` também na CDN;
 - `/assets/build/public.<nome>.<hash>.css/js` com cache imutável de um ano;
-- `/`, `/painel` e `/privacidade` com `no-store` no navegador e microcache de
+- `/`, `/painel`, `/privacidade` e `/guia-wyd` com `no-store` no navegador e microcache de
   60 segundos exclusivamente na Cloudflare;
 - `/admin/assets/build/admin.<hash>.min.css/js` com
   `public, max-age=31536000, immutable` no navegador e na CDN;
@@ -366,6 +367,11 @@ Novos visitantes aproveitam o `HIT` quando aquele ponto já está aquecido. Um
 restart simples, sem mudança de arquivos, também não invalida o cache da
 Cloudflare nem os assets imutáveis no navegador.
 
+Esse registro descreve a regra publicada antes da criação do Guia WYD. Depois
+do deploy do guia, uma alteração operacional separada deve acrescentar somente
+`/guia-wyd` à Cache Rule e confirmar `MISS` seguido de `HIT`, sem ampliar o
+escopo para qualquer outra rota.
+
 ## O que monitorar
 
 Nas primeiras horas após a implantação, observe:
@@ -377,7 +383,7 @@ Nas primeiras horas após a implantação, observe:
 - `/api`, `/confirmar`, `/recuperar-senha`, rotas administrativas ou respostas
   com `Set-Cookie` retornando `HIT`;
 - conteúdo personalizado ou dados de sessão aparecendo no HTML de `/painel`;
-- alteração de ordem ou escopo da Cache Rule que ultrapasse os três caminhos
+- alteração de ordem ou escopo da Cache Rule que ultrapasse os quatro caminhos
   públicos exatos;
 - 404 de uma geração pública antiga: o build remove hashes anteriores, mas um
   HTML ainda presente em algum edge pode referenciá-los brevemente;
@@ -412,7 +418,7 @@ republique com o mesmo processo de build.
 - Problema em minificação/cache: reverta `d7f429a`; as páginas voltam a apontar
   para `admin.css/js` com `no-store`.
 - Problema no cache público ou no build dos assets públicos: reverta `23d0750`,
-  execute a publicação completa e limpe somente `/`, `/painel` e `/privacidade`
+  execute a publicação completa e limpe somente `/`, `/painel`, `/privacidade` e `/guia-wyd`
   na Cloudflare. Não é necessário limpar assets com hash.
 - Problema no filtro do Dashboard: reverta `fd392fb`; isso restaura o
   comportamento anterior, no qual o botão podia reutilizar o período já
