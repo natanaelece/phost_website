@@ -2,7 +2,8 @@
 
 Este documento registra o escopo, as evidências de validação, os testes ainda
 necessários e o procedimento de implantação/rollback das alterações integradas
-à branch `development`.
+primeiro à branch de trabalho `development` e depois promovidas à branch
+canônica de produção `main`.
 
 ## Escopo e separação dos commits
 
@@ -97,7 +98,8 @@ mesmo commit, para que o teste represente a política real.
 
 ## Evidências já obtidas
 
-Na linha integrada à `development` foram executados:
+Na linha validada em `development`, antes da promoção para `main`, foram
+executados:
 
 - `npm run assets:build` repetido com saída determinística;
 - `npm audit` com zero vulnerabilidades conhecidas;
@@ -164,6 +166,23 @@ ADMIN_SHELL_FAILURES=0
 
 Chromium e ChromeDriver devem possuir versões compatíveis. O servidor temporário
 do teste e o driver devem escutar somente em loopback e ser encerrados depois.
+
+## Integração de branches
+
+Depois de concluir as validações e o commit em `development`, use o fluxo:
+
+```bash
+git push origin development
+git switch main
+git pull --ff-only origin main
+git merge --no-ff development
+git push origin main
+```
+
+`development` recebe o trabalho e as validações; produção acompanha somente
+`origin/main`. Não faça o serviço de produção rastrear `development` e não use
+`git reset --hard` para forçar a integração. Se houver conflito ou se qualquer
+validação falhar, interrompa o fluxo antes do push de `main`.
 
 ## Testes manuais necessários
 
@@ -276,7 +295,11 @@ Verifique:
 - `X-Frame-Options: DENY`;
 - `X-Content-Type-Options: nosniff`;
 - `Referrer-Policy: strict-origin-when-cross-origin`;
-- HTML, APIs e arquivos CSS/JS sem hash com `no-store` também na CDN;
+- APIs, rotas fora da allowlist pública e arquivos CSS/JS sem hash com
+  `no-store` também na CDN;
+- `/assets/build/public.<nome>.<hash>.css/js` com cache imutável de um ano;
+- `/`, `/painel` e `/privacidade` com `no-store` no navegador e microcache de
+  60 segundos exclusivamente na Cloudflare;
 - `/admin/assets/build/admin.<hash>.min.css/js` com
   `public, max-age=31536000, immutable` no navegador e na CDN;
 - `/css/tailwind.css`, CSS extraídos e scripts de `/js/` respondendo `200`.
@@ -310,6 +333,26 @@ perfil `http` de `Properties/launchSettings.json` e inicia o ASP.NET em ambiente
 DLL publicado com `ASPNETCORE_ENVIRONMENT=Production`. Alterar a unit ou os
 arquivos protegidos requer autorização e janela operacional próprias.
 
+### Estado observado em 22 de julho de 2026 — cache público
+
+- a Cache Rule ficou limitada a `GET`/`HEAD`, aos hosts `phost.pro` e
+  `www.phost.pro` e aos caminhos exatos `/`, `/painel` e `/privacidade`;
+- os três HTML passaram de `CF-Cache-Status: MISS` para `HIT`; uma resposta
+  `REVALIDATED` após o TTL foi observada e é normal;
+- a página inicial caiu de aproximadamente 2,25 s no `MISS` para 104 ms no
+  `HIT`, e `/painel`, de aproximadamente 1,35 s para 86 ms;
+- assets públicos com hash responderam `HIT` e mantiveram
+  `public, max-age=31536000, immutable`;
+- API, `/confirmar` e `/recuperar-senha` permaneceram `DYNAMIC` na Cloudflare e
+  `no-store`; tokens de teste não foram consumidos;
+- HSTS permaneceu em `max-age=15552000`, sem `includeSubDomains` e sem
+  `preload`.
+
+Um `MISS` frio pertence ao ponto de presença da Cloudflare, não a cada cliente.
+Novos visitantes aproveitam o `HIT` quando aquele ponto já está aquecido. Um
+restart simples, sem mudança de arquivos, também não invalida o cache da
+Cloudflare nem os assets imutáveis no navegador.
+
 ## O que monitorar
 
 Nas primeiras horas após a implantação, observe:
@@ -318,6 +361,15 @@ Nas primeiras horas após a implantação, observe:
 - respostas 404/403/5xx para os novos arquivos CSS/JS;
 - HTML apontando para um hash inexistente depois de publicação parcial;
 - assets com hash sem `immutable`, ou HTML/API cacheados indevidamente;
+- `/api`, `/confirmar`, `/recuperar-senha`, rotas administrativas ou respostas
+  com `Set-Cookie` retornando `HIT`;
+- conteúdo personalizado ou dados de sessão aparecendo no HTML de `/painel`;
+- alteração de ordem ou escopo da Cache Rule que ultrapasse os três caminhos
+  públicos exatos;
+- 404 de uma geração pública antiga: o build remove hashes anteriores, mas um
+  HTML ainda presente em algum edge pode referenciá-los brevemente;
+- aumento anormal de `MISS` sem `HIT`, levando em conta que `REVALIDATED` após o
+  TTL é esperado;
 - falhas de Turnstile ou gráficos vazios;
 - nova chamada a `/api/admin/session` ou novo download do JavaScript a cada
   clique no menu administrativo;
@@ -346,6 +398,9 @@ republique com o mesmo processo de build.
   páginas completas, sem afetar autenticação ou banco.
 - Problema em minificação/cache: reverta `d7f429a`; as páginas voltam a apontar
   para `admin.css/js` com `no-store`.
+- Problema no cache público ou no build dos assets públicos: reverta `23d0750`,
+  execute a publicação completa e limpe somente `/`, `/painel` e `/privacidade`
+  na Cloudflare. Não é necessário limpar assets com hash.
 - Problema no filtro do Dashboard: reverta `fd392fb`; isso restaura o
   comportamento anterior, no qual o botão podia reutilizar o período já
   carregado.
@@ -372,3 +427,13 @@ conteúdo dos arquivos de ambiente ou o estado TOTP.
   informativo e não justifica uma atualização automática misturada a segurança.
 - Preserve Tailwind, Inter e Chart.js locais e mantenha o admin sem Tailwind,
   salvo decisão arquitetural explícita.
+- Mantenha `/painel` no microcache somente enquanto o HTML for um shell público
+  idêntico para todos. Se o servidor passar a renderizar dados de usuário,
+  remova a rota da allowlist antes da implantação.
+- Nunca amplie a Cache Rule para `/api`, `/confirmar`, `/recuperar-senha`, rotas
+  administrativas, respostas com `Set-Cookie` ou conteúdo personalizado.
+- Não edite arquivos de `wwwroot/assets/build/` nem reutilize o mesmo hash para
+  conteúdo diferente. Gere-os com `npm run assets:build` e versione o resultado.
+- Ao evoluir a limpeza dos assets públicos, conserve pelo menos a geração
+  anterior durante a janela máxima do HTML no edge, evitando 404 entre uma
+  publicação e a expiração do microcache.

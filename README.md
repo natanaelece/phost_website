@@ -58,7 +58,8 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 │
 ├── appsettings.json          # Configurações do ambiente (Asaas, Postgres, AD, JWT)
 ├── Program.cs                # Entry point da aplicação e Injeção de Dependências
-└── restart.sh                # Script utilitário para reiniciar e fazer build da API no servidor
+├── restart.sh                # Reinicia, aguarda o health check e acompanha o journal
+└── restart-completo.sh       # Compila assets/.NET e depois reinicia o serviço
 ```
 
 ## ⚙️ Pré-requisitos e Instalação
@@ -70,10 +71,25 @@ O **PremierAPI** atua como um sistema de *Backend for Frontend* (BFF), orquestra
 
 O servidor também possui **Node.js 18** e npm. O npm fixa o Tailwind local e o esbuild usado apenas durante o build; o frontend continua sem framework ou bundler em runtime. `wwwroot/css/tailwind.css` e os assets versionados do admin são servidos pela própria aplicação, sem CDN de fonte, Chart.js ou Tailwind.
 
+### Fluxo de branches e produção
+
+`development` é a branch de trabalho e validação. `main` é a branch canônica de
+produção e também o `HEAD` padrão do repositório remoto. Uma entrega só está
+disponível para o processo de produção depois de ser commitada e enviada a
+`development`, integrada em `main` e ter `main` enviada ao remoto. A automação
+de produção deve acompanhar `origin/main`, nunca `origin/development`.
+
+Antes da integração, atualize as duas referências e não sobrescreva divergências
+com reset destrutivo. O fluxo normal é validar em `development`, fazer
+`git push origin development`, atualizar a `main` local com
+`git pull --ff-only origin main`, executar o merge de `development` em `main` e
+então `git push origin main`. Conflitos devem ser revisados e validados antes do
+push.
+
 ### Passo a Passo
 
 1. **Clonar o Repositório** e navegar até a pasta do projeto.
-2. **Configuração de Ambiente:** mantenha valores não sensíveis em `appsettings.json`. Em produção, banco, Asaas, Active Directory, JWT, primeiro fator administrativo e demais segredos ficam nos arquivos protegidos `/etc/premierapi/premierapi.env` e `/etc/premierapi/telegram-alerts.env`, fora do repositório e com modo `0600`. `AdminEmail` e `AdminToken` são obrigatórios; o token nunca é devolvido ao navegador nem usado diretamente como sessão.
+2. **Configuração de Ambiente:** mantenha valores não sensíveis em `appsettings.json`. Em produção, banco, Asaas, Active Directory, JWT, primeiro fator administrativo, Telegram e demais segredos ficam centralizados em `/etc/premierapi/premierapi.env`, fora do repositório, pertencente a `root` e com modo `0600`. `AdminEmail` e `AdminToken` são obrigatórios; o token nunca é devolvido ao navegador nem usado diretamente como sessão.
 3. **Restaurar e Compilar:**
    ```bash
    npm ci
@@ -83,11 +99,20 @@ O servidor também possui **Node.js 18** e npm. O npm fixa o Tailwind local e o 
    ```
 4. **Execução:**
    ```bash
-   # Você pode utilizar o script de bash caso esteja rodando sob um ambiente Unix/Linux:
+   # Reinício simples, sem recompilar os assets ou a aplicação:
    ./restart.sh
+   # Publicação completa, com build dos assets e do .NET antes do reinício:
+   ./restart-completo.sh
    # Ou rodar via dotnet diretamente:
    dotnet run
    ```
+
+Use `restart.sh` para apenas reciclar o processo quando nenhum arquivo do
+repositório mudou. Use `restart-completo.sh` depois de `git pull` ou de qualquer
+mudança em código, HTML, CSS ou JavaScript: ele regenera os assets com hash,
+compila o .NET e só então chama o reinício simples. Os dois scripts terminam
+acompanhando o journal; `Ctrl+C` encerra somente esse acompanhamento e não para
+o serviço.
 
 A aplicação fará a criação e atualização automática da estrutura de tabelas do banco de dados graças ao `DatabaseInitializer.cs`.
 
@@ -245,19 +270,50 @@ O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo
 
 Todas as telas administrativas mantêm estaticamente o mesmo cabeçalho lateral: logo, navegação completa — inclusive **Testes grátis** —, identificação do administrador e botão de logout. Durante o primeiro `GET /api/admin/session`, login e aplicação ficam ocultos por um estado neutro de validação. Depois da autenticação, os links canônicos sem `.html` trocam somente o conteúdo central via History API; o shell, o JavaScript, os modais e a sessão não são recarregados. Cada chamada de API continua validando a sessão no backend, inclusive depois dessa navegação interna.
 
-As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`; o scanner ignora JavaScript de terceiros e os arquivos gerados do admin. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O comando cria `admin.<hash>.min.css/js`, atualiza as nove páginas administrativas e remove somente versões antigas que seguem esse padrão. Em uma instalação nova, rode primeiro `npm ci`.
+As cinco páginas públicas que usam utilitários Tailwind partem de `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`. O build copia sem transformação os CSS/JS públicos para `/assets/build/public.<nome>.<hash>.css/js` e atualiza somente as cinco páginas públicas; o conteúdo original continua sendo a fonte editável. O scanner ignora JavaScript de terceiros e todos os arquivos gerados. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O mesmo comando também cria `admin.<hash>.min.css/js` e atualiza as nove páginas administrativas. Em uma instalação nova, rode primeiro `npm ci`.
 
 Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript, shell autenticado simulado, Chart/fonte locais, navegação sem nova carga do shell ou da sessão, aplicação do período selecionado no Dashboard e ausência dos pesos tipográficos altos que causavam halo no tema escuro.
 
 O procedimento completo de validação, testes manuais, implantação, monitoramento e rollback está em [`docs/csp-tailwind-rollout.md`](docs/csp-tailwind-rollout.md). Os testes automatizados não efetuam login nem mutações reais; fluxos autenticados e integrações com Asaas, AD, e-mail ou WhatsApp devem seguir a matriz de risco desse runbook.
 
-Arquivos mutáveis que definem a aplicação (`.html`, `.css`, `.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador e na CDN. A única exceção são `/admin/assets/build/admin.<hash>.min.css/js`: como o nome muda com o conteúdo, eles recebem `public, max-age=31536000, immutable`. Respostas de login, chave TOTP e códigos de recuperação nunca entram nessa exceção. Uma Cache Rule da Cloudflare não deve sobrepor os cabeçalhos da origem.
+Arquivos mutáveis que definem a aplicação (`.html`, fontes editáveis `.css/.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador. Os assets públicos `/assets/build/public.<nome>.<hash>.css/js` e os assets administrativos `/admin/assets/build/admin.<hash>.min.css/js` recebem `public, max-age=31536000, immutable`, pois qualquer mudança de conteúdo gera outra URL. Somente `/`, `/painel` e `/privacidade` permitem microcache de 60 segundos exclusivamente na Cloudflare, com `stale-while-revalidate=30`; o navegador e outros intermediários continuam recebendo `no-store`. Respostas de API, login, confirmação, recuperação, chave TOTP e códigos de recuperação nunca entram nessas exceções. Cache Rules devem respeitar essa allowlist e nunca ampliar o cache para rotas autenticadas ou respostas `/api`.
+
+Como a Cloudflare não torna HTML elegível para cache por padrão, o microcache requer uma Cache Rule com **Cache eligibility: Eligible for cache** limitada a `GET`/`HEAD`, hosts `phost.pro` e `www.phost.pro` e caminhos exatamente `/`, `/painel` e `/privacidade`. O Edge TTL deve respeitar os cabeçalhos da origem; não defina TTL global nem regra `Cache Everything` mais ampla. Sem essa regra, os três HTML continuam `DYNAMIC`, enquanto os assets com hash funcionam normalmente como `MISS` seguido de `HIT`.
+
+A regra está ativa desde 22 de julho de 2026. Na validação publicada, cada HTML
+da allowlist passou de `MISS` para `HIT`; `REVALIDATED` depois do TTL também é
+esperado. A página inicial caiu de aproximadamente 2,25 s no primeiro `MISS`
+para 104 ms no `HIT`, e `/painel`, de aproximadamente 1,35 s para 86 ms. O
+primeiro acesso ainda pode ser mais lento quando o ponto de presença da
+Cloudflare está frio, mas não existe uma nova inicialização por cliente: depois
+que o ponto está aquecido, inclusive novos visitantes recebem o HTML em cache.
+
+Cuidados operacionais do cache público:
+
+- `/painel` só pode permanecer na allowlist enquanto seu HTML for o mesmo shell
+  público para todos. Se dados do usuário passarem a ser renderizados no HTML
+  pelo servidor, remova a rota do cache antes de publicar.
+- Nunca inclua `/api`, `/confirmar`, `/recuperar-senha`, rotas administrativas,
+  respostas com `Set-Cookie` ou qualquer conteúdo personalizado na Cache Rule.
+- O HTML pode permanecer no edge por até 60 segundos, com mais 30 segundos de
+  `stale-while-revalidate`. Em correção urgente, limpe somente as URLs `/`,
+  `/painel` e `/privacidade`; assets com hash não precisam de purge.
+- Não edite arquivos gerados nem reutilize uma URL com hash para conteúdo novo.
+  O build atual remove gerações públicas antigas; monitore 404 de hashes após
+  publicação, pois um HTML antigo em algum edge pode apontar brevemente para um
+  asset já removido da origem. Uma melhoria futura é conservar ao menos a
+  geração anterior durante a janela de cache do HTML.
+- HSTS não causa a latência observada. Ele força HTTPS por 180 dias e, por isso,
+  exige certificado e HTTPS sempre válidos; mantenha o escopo atual sem
+  `includeSubDomains` e sem `preload`.
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
 
 O rodapé da barra lateral administrativa possui o menu recolhido **Manutenção**. **Compilar e reiniciar website** executa `npm run assets:build`, depois o build .NET `Release` sem restore, e só reinicia `premierapi` quando ambos terminam com sucesso; **Reiniciar serviço** ignora os builds. As duas operações exigem sessão administrativa e confirmação, são mutuamente exclusivas e usam apenas comandos allowlisted. Um job systemd transitório executa `scripts/admin-maintenance.sh` fora do processo da API e persiste o andamento em `/run/premierapi-maintenance`, permitindo que o Admin bloqueie a interface, atravesse a indisponibilidade, retome o polling e recarregue sozinho quando a API voltar. O resultado é verde quando o build não tem avisos e o health check responde, amarelo quando a compilação tem warnings e vermelho em falhas. O acompanhamento usa consultas limitadas; nunca mantém `journalctl -f` preso a uma requisição HTTP.
 
-As variáveis de `premierapi` são carregadas pelos arquivos protegidos `/etc/premierapi/premierapi.env` e `/etc/premierapi/telegram-alerts.env`, ambos externos ao repositório, pertencentes a `root` e com modo `0600`. O drop-in versionado em `systemd/premierapi.service.d/override.conf` referencia esses arquivos e não pode voltar a conter valores inline. Nunca exponha `systemctl show premierapi -p Environment`; para diagnóstico, consulte somente propriedades não sensíveis, como `FragmentPath`, `DropInPaths` e `EnvironmentFiles`. A aplicação aceita `--validate-configuration` para conferir presença e formato das configurações sem iniciar a API nem imprimir valores. Falhas de configuração ou banco encerram a inicialização, são enviadas ao Telegram quando o canal está disponível e também acionam `premierapi-startup-alert.service`, que usa credenciais separadas para sobreviver a falhas no arquivo principal.
+O serviço `premierapi` e o alerta de falha `premierapi-startup-alert.service` carregam suas variáveis do único arquivo `/etc/premierapi/premierapi.env`, externo ao repositório, pertencente a `root` e com modo `0600`. Configurações hierárquicas do .NET usam dois sublinhados no nome da variável; por exemplo, as chaves do Telegram são `Telegram__BotToken` e `Telegram__ChatId`.
+
+O drop-in de `premierapi` e a unit de alerta devem conter somente a referência `EnvironmentFile=/etc/premierapi/premierapi.env`, sem valores inline em `Environment=`. Nunca exponha `systemctl show premierapi -p Environment`; para diagnóstico, consulte somente propriedades não sensíveis, como `FragmentPath`, `DropInPaths` e `EnvironmentFiles`. A aplicação aceita `--validate-configuration` para conferir presença e formato das configurações sem iniciar a API nem imprimir valores. Se tentativas inválidas atingirem o limite de inicialização do systemd, valide a configuração e, após corrigir a causa, use `systemctl reset-failed premierapi` antes de reiniciar. Falhas de configuração ou banco encerram a inicialização, são enviadas ao Telegram quando o canal da aplicação está disponível e também acionam `premierapi-startup-alert.service`. Como ambos dependem do mesmo arquivo, a ausência ou uma falha de sintaxe em `premierapi.env` também impede o alerta externo; mantenha o arquivo válido e protegido.
 
 Principais areas do painel:
 
