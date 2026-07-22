@@ -247,7 +247,7 @@ Todas as telas administrativas mantêm estaticamente o mesmo cabeçalho lateral:
 
 As cinco páginas públicas que usam utilitários Tailwind carregam `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`; o scanner ignora JavaScript de terceiros e os arquivos gerados do admin. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O comando cria `admin.<hash>.min.css/js`, atualiza as nove páginas administrativas e remove somente versões antigas que seguem esse padrão. Em uma instalação nova, rode primeiro `npm ci`.
 
-Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript, shell autenticado simulado, Chart/fonte locais e navegação sem nova carga do shell ou da sessão.
+Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript, shell autenticado simulado, Chart/fonte locais, navegação sem nova carga do shell ou da sessão, aplicação do período selecionado no Dashboard e ausência dos pesos tipográficos altos que causavam halo no tema escuro.
 
 O procedimento completo de validação, testes manuais, implantação, monitoramento e rollback está em [`docs/csp-tailwind-rollout.md`](docs/csp-tailwind-rollout.md). Os testes automatizados não efetuam login nem mutações reais; fluxos autenticados e integrações com Asaas, AD, e-mail ou WhatsApp devem seguir a matriz de risco desse runbook.
 
@@ -261,7 +261,7 @@ As variáveis de `premierapi` são carregadas pelos arquivos protegidos `/etc/pr
 
 Principais areas do painel:
 
-- **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes.
+- **Dashboard:** cockpit executivo com receita por periodo, ticket medio, conversao, MRR estimado, licencas ativas, clientes ativos, fila operacional, ranking de clientes e pedidos recentes. O botão **Aplicar** consulta novamente a API com o período escolhido; a opção personalizada exige início e fim válidos.
 - **Financeiro:** analise de receita paga, total historico, pedidos manuais, conversao, receita por plano, tipo de pedido e status dos pedidos.
 - **CRM:** visao de clientes ativos, licencas vencendo, entregas pendentes, novos usuarios, proximos vencimentos, acoes recomendadas e ranking de clientes.
 - **Testes grátis:** lista todos os cadastros, separa quem nunca solicitou, quem ainda não utilizou e cada estado operacional, e permite liberar, recusar, cancelar ou confirmar o uso. Também permite liberar manualmente para quem nunca solicitou e excluir solicitações recusadas ou utilizadas, sempre com confirmação e retorno para nunca solicitou. As datas de cadastro, solicitação, liberação e uso ficam visíveis. Um balão `i` ao lado da data de cadastro mostra IP, navegador/SO, User-Agent, idioma, país aproximado, origem e canal quando esses dados estiverem disponíveis.
@@ -313,6 +313,11 @@ O endpoint administrativo `GET /api/admin/dashboard` aceita filtros de periodo:
 ```
 
 Esse endpoint retorna os blocos usados pelas telas Dashboard, Financeiro e CRM: estatisticas financeiras, serie de receita, status dos pedidos, planos, origem dos pedidos, top clientes, vencimentos proximos, fila operacional e pedidos recentes.
+
+No Dashboard, alterar o seletor apenas prepara o filtro. A consulta é refeita ao
+pressionar **Aplicar**, sempre com o valor atual do seletor e, quando o período
+for `custom`, com as duas datas informadas. O rótulo do cockpit deve refletir o
+intervalo devolvido pelo backend.
 
 ---
 *Desenvolvido e mantido para a infraestrutura da PremierHost.*

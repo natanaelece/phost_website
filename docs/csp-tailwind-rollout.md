@@ -16,6 +16,9 @@ necessários e o procedimento de implantação/rollback das alterações integra
 | `d7f429a` | Minifica e gera hash dos assets do admin, com cache imutável restrito aos nomes versionados | Sim; exige `npm ci` e `npm run assets:build` |
 | `4e6acc5` | Faz a publicação do menu Manutenção gerar Tailwind e assets versionados do admin antes do build .NET | Sim |
 | `89a1a9c` | Alinha o fallback sem JavaScript de `/admin` à rota canônica sem `.html` | Sim |
+| `fd392fb` | Faz o botão Aplicar do Dashboard consultar a API com o período atualmente selecionado e adiciona teste de regressão | Sim |
+| `8ce5e69` | Suaviza os pesos tipográficos do admin para remover o aspecto de halo no tema escuro e adiciona teste de regressão | Sim |
+| `6df19be` | Centraliza verticalmente o resumo “Cockpit administrativo” sem alterar os controles de período | Sim, depois do ajuste tipográfico |
 
 Os commits devem permanecer nessa ordem. A CSP não permite reintroduzir o Play
 CDN nem código inline; a navegação interna pressupõe o shell uniforme, e os
@@ -62,6 +65,11 @@ comparação visual e revisão de compatibilidade de navegadores.
 - Somente esses dois nomes com hash recebem cache público de um ano e
   `immutable`. HTML, APIs, fontes editáveis, Chart.js e demais arquivos de
   aplicação continuam sem armazenamento.
+- No Dashboard, **Aplicar** lê o valor atual do seletor antes de recarregar os
+  dados e envia também as datas quando o período é personalizado.
+- Os pesos do texto administrativo ficam limitados aos níveis regulares e
+  médios usados no tema escuro; o resumo do cockpit é centralizado sem mover os
+  controles de período.
 - O JavaScript compartilhado permanece em uma fonte única porque as telas usam
   estado, ações declarativas e modais comuns. Como o shell agora o carrega uma
   única vez, dividi-lo por tela teria maior risco de regressão e pouco ganho
@@ -102,6 +110,10 @@ Na linha integrada à `development` foram executados:
 - abertura/fechamento dos modais principais, troca das telas de autenticação,
   fonte/Chart.js locais e navegação administrativa sem segunda carga de shell
   ou sessão;
+- seleção de outro período no Dashboard seguida de **Aplicar**, confirmando a
+  nova consulta à API, além da verificação automatizada dos pesos tipográficos;
+- comparação visual do peso dos textos e do alinhamento vertical do resumo
+  “Cockpit administrativo” no tema escuro;
 - comparação visual da landing em desktop e mobile após a migração do Tailwind.
 
 O teste de navegador usa servidor somente em `127.0.0.1` e fixtures sem efeitos.
@@ -180,6 +192,11 @@ Use contas de teste e dados que possam ser restaurados:
   aplicação/remoção de cupom, histórico e reabertura de PIX pendente.
 - Admin: primeiro fator, Turnstile, TOTP, logout e expiração da sessão.
 - Dashboard/Financeiro/CRM: filtros, gráficos Chart.js, paginação e ordenação.
+  No Dashboard, selecione pelo menos **Hoje**, **Últimos 7 dias** e
+  **Personalizado**, pressione **Aplicar** e confirme o rótulo e as datas
+  devolvidas. Confira também que o resumo “Cockpit administrativo” está
+  centralizado verticalmente e que os textos não apresentam halo ou negrito
+  excessivo.
 - Pedidos/Usuários/Testes grátis/Active Directory: abrir e fechar todos os
   modais, filtros, menus, tooltips, tabelas responsivas e confirmações, sem
   confirmar a ação destrutiva.
@@ -223,8 +240,10 @@ Implantação e reinicialização exigem autorização e janela operacional.
 5. Integre, na ordem, `6130e17`, `22aeb0b`, `fd966bf`, `d7f429a`, `4e6acc5` e
    `89a1a9c`; execute `npm ci`, `npm run assets:build`, os verificadores e o
    teste Chromium.
-6. Publique/reinicie novamente e execute os testes pós-implantação abaixo.
-7. Integre commits posteriores de documentação sem alterar a ordem histórica.
+6. Integre, na ordem, `fd392fb`, `8ce5e69` e `6df19be`; repita o build dos
+   assets e o teste Chromium, com atenção ao filtro e à aparência do Dashboard.
+7. Publique/reinicie novamente e execute os testes pós-implantação abaixo.
+8. Integre commits posteriores de documentação sem alterar a ordem histórica.
 
 Se a janela não permitir duas publicações, os commits podem ser integrados e
 publicados juntos, mas a separação deve ser preservada no Git para diagnóstico e
@@ -327,6 +346,11 @@ republique com o mesmo processo de build.
   páginas completas, sem afetar autenticação ou banco.
 - Problema em minificação/cache: reverta `d7f429a`; as páginas voltam a apontar
   para `admin.css/js` com `no-store`.
+- Problema no filtro do Dashboard: reverta `fd392fb`; isso restaura o
+  comportamento anterior, no qual o botão podia reutilizar o período já
+  carregado.
+- Problema somente na aparência dos textos: reverta primeiro `6df19be` e depois
+  `8ce5e69`; esses commits não alteram APIs, autenticação nem banco.
 - Problema apenas documental: reverta somente o commit de documentação.
 
 Essas alterações não exigem rollback de banco. Antes de reiniciar, valide a
