@@ -34,6 +34,8 @@ Leia integralmente `README.md` e `rules.md` antes de investigar ou editar. Este 
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel` e `/privacidade`; preserve `robots.txt` e `sitemap.xml`.
 - Arquivos mutáveis da aplicação mantêm `no-store` no navegador. Assets públicos e administrativos gerados com hash usam cache imutável de um ano. Somente `/`, `/painel` e `/privacidade` admitem microcache de 60 segundos na Cloudflare; APIs e demais rotas continuam `no-store`. Preserve os hashes e não amplie a allowlist por Cache Rule.
+- O HTML da allowlist precisa ser público e idêntico para todos, sem sessão, personalização ou `Set-Cookie`. Se `/painel` passar a renderizar dados do usuário no servidor, retire-o do microcache antes de publicar. `/confirmar` e `/recuperar-senha` nunca entram na regra.
+- Não edite assets gerados nem reutilize uma URL com hash. Ao alterar a limpeza, retenha ao menos a geração pública anterior durante a janela do microcache para evitar 404 a partir de HTML antigo no edge.
 - A origem aceita a porta 5000 somente pelo loopback e pelo proxy exato configurado. Preserve a regra do nftables, valide o proxy antes de aceitar `CF-Connecting-IP` e mantenha o HSTS sem `includeSubDomains` e sem `preload`.
 - `AdminToken` é apenas o primeiro fator do admin. O navegador recebe uma sessão aleatória curta em cookie `HttpOnly`/`Secure`/`SameSite=Strict`, com CSRF nas mutações, e o login exige TOTP.
 - Tailwind 3.4, Inter e Chart.js são locais; nunca reintroduza seus CDNs. A CSP não aceita `'unsafe-inline'`: não crie scripts, estilos, atributos `on*` ou `style` inline. Consulte `docs/csp-tailwind-rollout.md` para testes, implantação e rollback.

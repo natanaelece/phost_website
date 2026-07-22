@@ -92,6 +92,13 @@ O servidor também possui **Node.js 18** e npm. O npm fixa o Tailwind local e o 
    dotnet run
    ```
 
+Use `restart.sh` para apenas reciclar o processo quando nenhum arquivo do
+repositório mudou. Use `restart-completo.sh` depois de `git pull` ou de qualquer
+mudança em código, HTML, CSS ou JavaScript: ele regenera os assets com hash,
+compila o .NET e só então chama o reinício simples. Os dois scripts terminam
+acompanhando o journal; `Ctrl+C` encerra somente esse acompanhamento e não para
+o serviço.
+
 A aplicação fará a criação e atualização automática da estrutura de tabelas do banco de dados graças ao `DatabaseInitializer.cs`.
 
 As automações usam as seções de configuração `AdProvisioning`, `AdExpiration` e `EmailConfirmationReminders`. Os intervalos definem apenas a frequência de reconciliação; o horário comercial continua autoritativo no fuso configurado. O padrão é tentar provisionamentos a cada 5 minutos, verificar expirações a cada minuto e procurar confirmações pendentes a cada 5 minutos.
@@ -257,6 +264,33 @@ O procedimento completo de validação, testes manuais, implantação, monitoram
 Arquivos mutáveis que definem a aplicação (`.html`, fontes editáveis `.css/.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador. Os assets públicos `/assets/build/public.<nome>.<hash>.css/js` e os assets administrativos `/admin/assets/build/admin.<hash>.min.css/js` recebem `public, max-age=31536000, immutable`, pois qualquer mudança de conteúdo gera outra URL. Somente `/`, `/painel` e `/privacidade` permitem microcache de 60 segundos exclusivamente na Cloudflare, com `stale-while-revalidate=30`; o navegador e outros intermediários continuam recebendo `no-store`. Respostas de API, login, confirmação, recuperação, chave TOTP e códigos de recuperação nunca entram nessas exceções. Cache Rules devem respeitar essa allowlist e nunca ampliar o cache para rotas autenticadas ou respostas `/api`.
 
 Como a Cloudflare não torna HTML elegível para cache por padrão, o microcache requer uma Cache Rule com **Cache eligibility: Eligible for cache** limitada a `GET`/`HEAD`, hosts `phost.pro` e `www.phost.pro` e caminhos exatamente `/`, `/painel` e `/privacidade`. O Edge TTL deve respeitar os cabeçalhos da origem; não defina TTL global nem regra `Cache Everything` mais ampla. Sem essa regra, os três HTML continuam `DYNAMIC`, enquanto os assets com hash funcionam normalmente como `MISS` seguido de `HIT`.
+
+A regra está ativa desde 22 de julho de 2026. Na validação publicada, cada HTML
+da allowlist passou de `MISS` para `HIT`; `REVALIDATED` depois do TTL também é
+esperado. A página inicial caiu de aproximadamente 2,25 s no primeiro `MISS`
+para 104 ms no `HIT`, e `/painel`, de aproximadamente 1,35 s para 86 ms. O
+primeiro acesso ainda pode ser mais lento quando o ponto de presença da
+Cloudflare está frio, mas não existe uma nova inicialização por cliente: depois
+que o ponto está aquecido, inclusive novos visitantes recebem o HTML em cache.
+
+Cuidados operacionais do cache público:
+
+- `/painel` só pode permanecer na allowlist enquanto seu HTML for o mesmo shell
+  público para todos. Se dados do usuário passarem a ser renderizados no HTML
+  pelo servidor, remova a rota do cache antes de publicar.
+- Nunca inclua `/api`, `/confirmar`, `/recuperar-senha`, rotas administrativas,
+  respostas com `Set-Cookie` ou qualquer conteúdo personalizado na Cache Rule.
+- O HTML pode permanecer no edge por até 60 segundos, com mais 30 segundos de
+  `stale-while-revalidate`. Em correção urgente, limpe somente as URLs `/`,
+  `/painel` e `/privacidade`; assets com hash não precisam de purge.
+- Não edite arquivos gerados nem reutilize uma URL com hash para conteúdo novo.
+  O build atual remove gerações públicas antigas; monitore 404 de hashes após
+  publicação, pois um HTML antigo em algum edge pode apontar brevemente para um
+  asset já removido da origem. Uma melhoria futura é conservar ao menos a
+  geração anterior durante a janela de cache do HTML.
+- HSTS não causa a latência observada. Ele força HTTPS por 180 dias e, por isso,
+  exige certificado e HTTPS sempre válidos; mantenha o escopo atual sem
+  `includeSubDomains` e sem `preload`.
 
 O primeiro login administrativo após implantar o 2FA inicia a configuração do Authenticator. Selecione no aplicativo a opção de inserir chave de configuração, copie a chave exibida, confirme com o primeiro código de seis dígitos e guarde os dez códigos de recuperação fora do servidor. Cada código de recuperação funciona uma vez e seu uso gera `Warning`. Perder o Authenticator e todos os códigos exige uma redefinição operacional do arquivo protegido; não o remova sem backup, autorização explícita e janela de manutenção.
 
