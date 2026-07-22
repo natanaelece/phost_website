@@ -326,6 +326,21 @@ try {
         };
         check();
       `
+    },
+    {
+      name: 'admin-typography-without-heavy-glow',
+      page: '/admin/dashboard?authenticated-fixture=1',
+      wait: 1750,
+      script: `
+        const elements = ['.slogo-text', '.hdr-title', '.card-title', '.stat-val', '.ni', '.suser-name']
+          .map(selector => document.querySelector(selector));
+        return elements.every(element => {
+          const style = getComputedStyle(element);
+          return Number(style.fontWeight) <= 500
+            && style.textShadow === 'none'
+            && style.filter === 'none';
+        });
+      `
     }
   ];
 
