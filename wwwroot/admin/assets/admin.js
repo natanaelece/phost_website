@@ -1598,10 +1598,16 @@ function dashUrl(){
   }
   return API+'/dashboard?'+qs.toString();
 }
-function handlePeriodChange(){
+function syncDashPeriodControls(){
   const periodSelect=document.getElementById('dash-period');
   if(periodSelect&&periodSelect.value!==S.dashPeriod)periodSelect.value=S.dashPeriod;
   const custom=periodSelect?.value==='custom';
+  document.querySelectorAll('.dash-custom').forEach(e=>e.classList.toggle('hidden',!custom));
+}
+function handlePeriodChange(){
+  const periodSelect=document.getElementById('dash-period');if(!periodSelect)return;
+  S.dashPeriod=periodSelect.value;
+  const custom=periodSelect.value==='custom';
   document.querySelectorAll('.dash-custom').forEach(e=>e.classList.toggle('hidden',!custom));
 }
 function reloadDashViews(){S.dashData=null;loadCurrentView();}
@@ -1613,7 +1619,7 @@ async function ensureDashData(){
   return data;
 }
 async function loadDash(){
-  handlePeriodChange();
+  syncDashPeriodControls();
   const [data,chartReady]=await Promise.all([ensureDashData(),ensureChartJs()]);if(!data)return;
   const st=data.stats;
   document.getElementById('period-label').textContent=(data.period?.label||'Periodo')+' | '+fmtDate(data.period?.start)+' a '+fmtDate(data.period?.end);

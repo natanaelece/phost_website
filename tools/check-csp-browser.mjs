@@ -303,6 +303,29 @@ try {
         };
         check();
       `
+    },
+    {
+      name: 'admin-dashboard-period-change',
+      page: '/admin/dashboard?authenticated-fixture=1',
+      wait: 1750,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        const select = document.getElementById('dash-period');
+        select.value = '7d';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        document.querySelector('[data-csp-click="h015"]').click();
+        const deadline = Date.now() + 3000;
+        const check = () => {
+          const requested = performance.getEntriesByType('resource').some(entry => {
+            const url = new URL(entry.name);
+            return url.pathname === '/api/admin/dashboard' && url.searchParams.get('period') === '7d';
+          });
+          const passed = select.value === '7d' && requested;
+          if (passed || Date.now() >= deadline) done(passed);
+          else setTimeout(check, 50);
+        };
+        check();
+      `
     }
   ];
 
