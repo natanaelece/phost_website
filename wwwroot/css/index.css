@@ -43,10 +43,11 @@ body { background-color: #081121; }
 			border-radius: 50%;
 			pointer-events: none;
 			animation: whatsappRing 4.8s ease-in-out infinite;
-		}
+        }
 
         .home-closing-shell { width: min(calc(100% - 3rem), 72rem); margin-inline: auto; }
-        .home-guide-strip { padding-block: 4.5rem; }
+        .home-devices-section { padding-bottom: 1.5rem; }
+        .home-guide-strip { padding: 1rem 0 3.5rem; }
         .home-guide-card {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
@@ -65,38 +66,38 @@ body { background-color: #081121; }
         .home-trust-item h3 { line-height: 1.35; }
         .home-trust-item p { max-width: 15rem; line-height: 1.6; }
         .home-footer { position: relative; z-index: 20; margin-top: auto; background: rgb(2 6 23); }
-        .home-footer__top { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 4rem; align-items: start; padding-block: 3.5rem 2.5rem; }
-        .home-footer__brand img { width: 11.25rem; height: auto; margin-bottom: 1rem; }
-        .home-footer__brand p { max-width: 21rem; color: rgb(100 116 139); font-size: 0.875rem; line-height: 1.6; }
-        .home-footer__title { margin-bottom: 0.75rem; color: rgb(226 232 240); font-size: 0.75rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
-        .home-footer__nav { display: flex; flex-direction: column; align-items: flex-start; }
-        .home-footer__nav a { display: inline-flex; min-height: 2.75rem; align-items: center; color: rgb(148 163 184); font-size: 0.875rem; font-weight: 600; transition: color 0.18s ease; }
-        .home-footer__nav a:hover { color: rgb(96 165 250); }
-        .home-footer__bottom { border-top: 1px solid rgb(30 41 59); padding-block: 1.5rem; }
-        .home-footer__bottom p { color: rgb(71 85 105); font-size: 0.75rem; font-weight: 600; line-height: 1.5; }
+        .home-footer__compact { display: grid; grid-template-columns: minmax(14rem, 0.9fr) minmax(25rem, 1.4fr) auto; gap: 2rem; align-items: center; padding-block: 2.25rem; }
+        .home-footer__brand img { width: 9rem; height: auto; margin-bottom: 0.625rem; }
+        .home-footer__brand p { max-width: 18rem; color: rgb(100 116 139); font-size: 0.75rem; line-height: 1.55; }
+        .home-footer__links { display: flex; min-width: 0; flex-direction: column; gap: 0.25rem; align-items: flex-start; }
+        .home-footer__link-group { display: flex; flex-wrap: wrap; gap: 0 1.25rem; align-items: center; }
+        .home-footer__links a { display: inline-flex; min-height: 2.5rem; align-items: center; color: rgb(148 163 184); font-size: 0.75rem; font-weight: 600; transition: color 0.18s ease; }
+        .home-footer__links a:hover { color: rgb(96 165 250); }
+        .home-footer__copyright { min-width: 17.5rem; color: rgb(71 85 105); font-size: 0.75rem; font-weight: 600; line-height: 1.5; text-align: right; white-space: nowrap; }
         .home-guide-strip__button:focus-visible,
-        .home-footer__nav a:focus-visible { outline: 2px solid rgb(96 165 250); outline-offset: 3px; }
+        .home-footer__links a:focus-visible { outline: 2px solid rgb(96 165 250); outline-offset: 3px; }
 
         @media (max-width: 1023px) {
             .home-trust-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem 3rem; }
             .home-trust-item p { max-width: 20rem; }
-            .home-footer__top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.5rem 4rem; }
-            .home-footer__brand { grid-column: 1 / -1; }
+            .home-footer__compact { grid-template-columns: minmax(14rem, 0.8fr) minmax(0, 1.2fr); gap: 1.25rem 2rem; padding-block: 2rem; }
+            .home-footer__copyright { grid-column: 1 / -1; min-width: 0; border-top: 1px solid rgb(30 41 59); padding-top: 1rem; text-align: left; }
         }
 
         @media (max-width: 767px) {
             .home-closing-shell { width: min(calc(100% - 2rem), 72rem); }
-            .home-guide-strip { padding-block: 3.25rem; }
+            .home-devices-section { padding-bottom: 1rem; }
+            .home-guide-strip { padding: 0.75rem 0 3rem; }
             .home-guide-card { grid-template-columns: minmax(0, 1fr); gap: 1.75rem; padding: 1.75rem; }
             .home-guide-strip__button { width: 100%; }
             .home-trust-strip { padding-block: 2.5rem; }
             .home-trust-grid { grid-template-columns: minmax(0, 1fr); gap: 1.75rem; }
             .home-trust-item p { max-width: 32rem; }
-            .home-footer { padding-bottom: 4.5rem; }
-            .home-footer__top { grid-template-columns: minmax(0, 1fr); gap: 2rem; padding-block: 3rem 2.25rem; }
-            .home-footer__brand { grid-column: auto; }
-            .home-footer__brand img { width: 10rem; }
-            .home-footer__bottom { padding-block: 1.25rem; }
+            .home-footer__compact { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; padding: 2rem 0 5rem; }
+            .home-footer__brand img { width: 8.5rem; }
+            .home-footer__links { gap: 0.125rem; }
+            .home-footer__link-group { column-gap: 1rem; }
+            .home-footer__copyright { grid-column: auto; white-space: normal; }
         }
 
 		@keyframes whatsappRing {
