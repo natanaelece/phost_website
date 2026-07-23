@@ -209,7 +209,21 @@ O vídeo compartilhado por essas duas telas fica em `wwwroot/vid/comofunciona.mp
 
 ### Indexação pública
 
-O arquivo `wwwroot/sitemap.xml` anuncia ao Google somente as URLs públicas canônicas `/`, `/painel`, `/privacidade` e `/guia-wyd`, e `wwwroot/robots.txt` referencia esse sitemap. Rotas administrativas, APIs, confirmação de e-mail e recuperação de senha não devem aparecer nos resultados de busca. Ao restringir bots conhecidos na Cloudflare, mantenha `/sitemap.xml` e `/robots.txt` liberados juntamente com as quatro páginas públicas e seus recursos de `/img/` e `/vid/`. Essa lista não deve ser ampliada sem nova autorização.
+O arquivo `wwwroot/sitemap.xml` anuncia ao Google somente as URLs públicas canônicas `/`, `/painel`, `/privacidade` e `/guia-wyd`, e `wwwroot/robots.txt` referencia esse sitemap. Rotas administrativas, APIs, confirmação de e-mail e recuperação de senha não devem aparecer nos resultados de busca. Ao restringir bots conhecidos na Cloudflare, mantenha `/sitemap.xml` e `/robots.txt` liberados juntamente com as quatro páginas públicas e seus recursos de `/img/`, `/vid/`, `/assets/build/`, `/favicon.ico` e `/favicon-96x96.png`. Essa lista não deve ser ampliada sem nova autorização.
+
+### Host canônico e favicon
+
+O host público canônico é `https://phost.pro`. Requisições para
+`https://www.phost.pro` recebem redirecionamento permanente para o host sem
+`www`, preservando caminho e query string; os canonicals das páginas públicas
+devem sempre usar `phost.pro`.
+
+Os favicons públicos oficiais são `/favicon.ico` e `/favicon-96x96.png`. Esses
+arquivos finais permanecem na raiz pública por serem recursos globais do site;
+fontes originais e outras imagens de identidade podem continuar em
+`/wwwroot/img/`. Não os substitua pelo ícone do WhatsApp ou por outro ativo.
+Alterações futuras devem preservar as URLs, o formato quadrado e o acesso para
+Googlebot e Googlebot-Image.
 
 ## Product Analytics first-party
 
