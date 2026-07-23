@@ -64,15 +64,18 @@
     document.addEventListener('DOMContentLoaded', function () {
         const eventName = location.pathname === '/' ? 'landing_viewed'
             : location.pathname.startsWith('/painel') ? 'simulator_viewed'
+            : (location.pathname === '/guia-wyd' || location.pathname === '/guia-wyd.html') ? 'guide_viewed'
             : null;
         if (eventName) track(eventName, { logged_in: Boolean(currentUserId()) });
 
         document.querySelectorAll('[data-analytics-event]').forEach(function (element) {
             element.addEventListener('click', function () {
-                track(element.dataset.analyticsEvent, {
+                const properties = {
                     cta: element.dataset.analyticsCta || element.textContent.trim().slice(0, 60),
                     location: element.dataset.analyticsLocation || 'page'
-                });
+                };
+                if (element.dataset.analyticsSource) properties.source = element.dataset.analyticsSource;
+                track(element.dataset.analyticsEvent, properties);
             });
         });
     });

@@ -154,6 +154,7 @@ Ao cancelar, `orders.canceled_was_paid` registra se o pedido estava efetivamente
 
 ### Compatibilidade dos webhooks Asaas
 
+- O endpoint público canônico é `https://webhook-website.phost.pro/api/webhook/asaas`. Preserve `webhook-website.phost.pro` tanto em `AllowedHosts` de `appsettings.json` quanto na lista `ForwardedHeadersOptions.AllowedHosts` de `Program.cs`; removê-lo faz o Host Filtering responder `400 Bad Request - Invalid Hostname` antes de alcançar o controlador.
 - O texto historico enviado ao criar uma cobranca dinamica era `Licença ({periodo}) - AnyDesk: {id}`. Preserve esse formato em qualquer fluxo dinamico legado.
 - O QR Code estatico continua recebendo esse texto no campo `description`, mas o Asaas cria a cobranca somente depois do pagamento e pode atribuir a ela a descricao automatica de Pix recebido. Portanto, a descricao presente no evento da cobranca nao e um identificador confiavel para esse fluxo.
 - Webhooks que compartilham a mesma conta Asaas devem reconhecer compras atuais da PremierHost pelo `payment.pixQrCodeId`, conciliando esse valor com `orders.asaas_pix_qr_code_id`. A descricao iniciada por `Licença` serve apenas como compatibilidade com cobrancas dinamicas antigas.
@@ -208,7 +209,7 @@ O vídeo compartilhado por essas duas telas fica em `wwwroot/vid/comofunciona.mp
 
 ### Indexação pública
 
-O arquivo `wwwroot/sitemap.xml` anuncia ao Google somente as URLs públicas canônicas `/`, `/painel` e `/privacidade`, e `wwwroot/robots.txt` referencia esse sitemap. Rotas administrativas, APIs, confirmação de e-mail e recuperação de senha não devem aparecer nos resultados de busca. Ao restringir bots conhecidos na Cloudflare, mantenha `/sitemap.xml` e `/robots.txt` liberados juntamente com as três páginas públicas e seus recursos de `/img/` e `/vid/`.
+O arquivo `wwwroot/sitemap.xml` anuncia ao Google somente as URLs públicas canônicas `/`, `/painel`, `/privacidade` e `/guia-wyd`, e `wwwroot/robots.txt` referencia esse sitemap. Rotas administrativas, APIs, confirmação de e-mail e recuperação de senha não devem aparecer nos resultados de busca. Ao restringir bots conhecidos na Cloudflare, mantenha `/sitemap.xml` e `/robots.txt` liberados juntamente com as quatro páginas públicas e seus recursos de `/img/` e `/vid/`. Essa lista não deve ser ampliada sem nova autorização.
 
 ## Product Analytics first-party
 
@@ -278,18 +279,20 @@ O painel administrativo fica em `wwwroot/admin/` e usa HTML estatico, CSS nativo
 
 Todas as telas administrativas mantêm estaticamente o mesmo cabeçalho lateral: logo, navegação completa — inclusive **Testes grátis** —, identificação do administrador e botão de logout. Durante o primeiro `GET /api/admin/session`, login e aplicação ficam ocultos por um estado neutro de validação. Depois da autenticação, os links canônicos sem `.html` trocam somente o conteúdo central via History API; o shell, o JavaScript, os modais e a sessão não são recarregados. Cada chamada de API continua validando a sessão no backend, inclusive depois dessa navegação interna.
 
-As cinco páginas públicas que usam utilitários Tailwind partem de `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`. O build copia sem transformação os CSS/JS públicos para `/assets/build/public.<nome>.<hash>.css/js` e atualiza somente as cinco páginas públicas; o conteúdo original continua sendo a fonte editável. O scanner ignora JavaScript de terceiros e todos os arquivos gerados. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O mesmo comando também cria `admin.<hash>.min.css/js` e atualiza as nove páginas administrativas. Em uma instalação nova, rode primeiro `npm ci`.
+As seis páginas públicas processadas pelo pipeline de assets partem de `/css/tailwind.css`, compilado a partir de `assets/tailwind.css`. O build copia sem transformação os CSS/JS públicos para `/assets/build/public.<nome>.<hash>.css/js` e atualiza somente essas seis páginas; o conteúdo original continua sendo a fonte editável. O scanner ignora JavaScript de terceiros e todos os arquivos gerados. Tailwind e esbuild estão fixados no `package-lock.json`. Execute `npm run assets:build` e versione os artefatos gerados sempre que alterar CSS ou JavaScript. O mesmo comando também cria `admin.<hash>.min.css/js` e atualiza as nove páginas administrativas. Em uma instalação nova, rode primeiro `npm ci`.
 
-Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 15 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript, shell autenticado simulado, Chart/fonte locais, navegação sem nova carga do shell ou da sessão, aplicação do período selecionado no Dashboard e ausência dos pesos tipográficos altos que causavam halo no tema escuro.
+Para preservar a CSP estrita, não adicione `<script>` ou `<style>` embutidos, atributos `on*` ou `style`. O verificador `tools/check-csp.mjs` também confere templates JavaScript e garante que todas as referências `data-csp-*` e `data-admin-*` possuam uma ação externa registrada. `tools/check-csp-browser.mjs` serve as 16 páginas completas somente em loopback, com a mesma política da aplicação, e verifica violações, exceções JavaScript, shell autenticado simulado, Chart/fonte locais, navegação sem nova carga do shell ou da sessão, aplicação do período selecionado no Dashboard e ausência dos pesos tipográficos altos que causavam halo no tema escuro.
 
 O procedimento completo de validação, testes manuais, implantação, monitoramento e rollback está em [`docs/csp-tailwind-rollout.md`](docs/csp-tailwind-rollout.md). Os testes automatizados não efetuam login nem mutações reais; fluxos autenticados e integrações com Asaas, AD, e-mail ou WhatsApp devem seguir a matriz de risco desse runbook.
 
-Arquivos mutáveis que definem a aplicação (`.html`, fontes editáveis `.css/.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador. Os assets públicos `/assets/build/public.<nome>.<hash>.css/js` e os assets administrativos `/admin/assets/build/admin.<hash>.min.css/js` recebem `public, max-age=31536000, immutable`, pois qualquer mudança de conteúdo gera outra URL. Somente `/`, `/painel` e `/privacidade` permitem microcache de 60 segundos exclusivamente na Cloudflare, com `stale-while-revalidate=30`; o navegador e outros intermediários continuam recebendo `no-store`. Respostas de API, login, confirmação, recuperação, chave TOTP e códigos de recuperação nunca entram nessas exceções. Cache Rules devem respeitar essa allowlist e nunca ampliar o cache para rotas autenticadas ou respostas `/api`.
+Arquivos mutáveis que definem a aplicação (`.html`, fontes editáveis `.css/.js`, `.json`, `.xml`, `.txt`, `.map` e `.webmanifest`) e todas as respostas `/api` são servidos com `no-store` no navegador. Os assets públicos `/assets/build/public.<nome>.<hash>.css/js` e os assets administrativos `/admin/assets/build/admin.<hash>.min.css/js` recebem `public, max-age=31536000, immutable`, pois qualquer mudança de conteúdo gera outra URL. Somente `/`, `/painel`, `/privacidade` e `/guia-wyd` permitem microcache de 60 segundos exclusivamente na Cloudflare, com `stale-while-revalidate=30`; o navegador e outros intermediários continuam recebendo `no-store`. Respostas de API, login, confirmação, recuperação, chave TOTP e códigos de recuperação nunca entram nessas exceções. Cache Rules devem respeitar essa allowlist e nunca ampliar o cache para rotas autenticadas ou respostas `/api`.
 
-Como a Cloudflare não torna HTML elegível para cache por padrão, o microcache requer uma Cache Rule com **Cache eligibility: Eligible for cache** limitada a `GET`/`HEAD`, hosts `phost.pro` e `www.phost.pro` e caminhos exatamente `/`, `/painel` e `/privacidade`. O Edge TTL deve respeitar os cabeçalhos da origem; não defina TTL global nem regra `Cache Everything` mais ampla. Sem essa regra, os três HTML continuam `DYNAMIC`, enquanto os assets com hash funcionam normalmente como `MISS` seguido de `HIT`.
+Como a Cloudflare não torna HTML elegível para cache por padrão, o microcache requer uma Cache Rule com **Cache eligibility: Eligible for cache** limitada a `GET`/`HEAD`, hosts `phost.pro` e `www.phost.pro` e caminhos exatamente `/`, `/painel`, `/privacidade` e `/guia-wyd`. O Edge TTL deve respeitar os cabeçalhos da origem; não defina TTL global nem regra `Cache Everything` mais ampla. Sem essa regra, os quatro HTML continuam `DYNAMIC`, enquanto os assets com hash funcionam normalmente como `MISS` seguido de `HIT`.
 
-A regra está ativa desde 22 de julho de 2026. Na validação publicada, cada HTML
-da allowlist passou de `MISS` para `HIT`; `REVALIDATED` depois do TTL também é
+A regra para as três rotas originais está ativa desde 22 de julho de 2026. Após
+publicar o guia, `/guia-wyd` deve ser incluída explicitamente na mesma Cache Rule
+e validada separadamente. Na validação publicada original, cada HTML então na
+allowlist passou de `MISS` para `HIT`; `REVALIDATED` depois do TTL também é
 esperado. A página inicial caiu de aproximadamente 2,25 s no primeiro `MISS`
 para 104 ms no `HIT`, e `/painel`, de aproximadamente 1,35 s para 86 ms. O
 primeiro acesso ainda pode ser mais lento quando o ponto de presença da
@@ -305,7 +308,7 @@ Cuidados operacionais do cache público:
   respostas com `Set-Cookie` ou qualquer conteúdo personalizado na Cache Rule.
 - O HTML pode permanecer no edge por até 60 segundos, com mais 30 segundos de
   `stale-while-revalidate`. Em correção urgente, limpe somente as URLs `/`,
-  `/painel` e `/privacidade`; assets com hash não precisam de purge.
+  `/painel`, `/privacidade` e `/guia-wyd`; assets com hash não precisam de purge.
 - Não edite arquivos gerados nem reutilize uma URL com hash para conteúdo novo.
   O build atual remove gerações públicas antigas; monitore 404 de hashes após
   publicação, pois um HTML antigo em algum edge pode apontar brevemente para um
