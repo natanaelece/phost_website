@@ -44,6 +44,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - A descrição convencional do computador `SRV01_01` corresponde ao grupo `ACESSO_SRV01-01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
 - Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
 - Indexação pública: somente `/`, `/painel`, `/privacidade` e `/guia-wyd`; preserve `robots.txt` e `sitemap.xml` e não amplie essa lista sem nova autorização.
+- Host público canônico, redirecionamento de `www` e favicons globais seguem os invariantes definidos em `rules.md`.
 - Arquivos mutáveis da aplicação mantêm `no-store` no navegador. Assets públicos e administrativos gerados com hash usam cache imutável de um ano. Somente `/`, `/painel`, `/privacidade` e `/guia-wyd` admitem microcache de 60 segundos na Cloudflare; APIs e demais rotas continuam `no-store`. Preserve os hashes e não amplie a allowlist por Cache Rule sem nova autorização.
 - O HTML da allowlist precisa ser público e idêntico para todos, sem sessão, personalização ou `Set-Cookie`. Se `/painel` passar a renderizar dados do usuário no servidor, retire-o do microcache antes de publicar. `/confirmar` e `/recuperar-senha` nunca entram na regra.
 - Não edite assets gerados nem reutilize uma URL com hash. Ao alterar a limpeza, retenha ao menos a geração pública anterior durante a janela do microcache para evitar 404 a partir de HTML antigo no edge.

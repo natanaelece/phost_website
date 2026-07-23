@@ -157,6 +157,14 @@ Não há JSON-LD ou script inline. O canonical é
 `https://phost.pro/guia-wyd`, a página declara `index,follow`, possui um único H1,
 Open Graph do tipo `article`, Twitter Card e imagem social própria já existente.
 
+### Host e favicon
+
+O canonical do Guia é `https://phost.pro/guia-wyd`; a variante com `www`
+redireciona em 301 para esse host. O favicon é definido por hostname e utiliza
+os arquivos globais `/favicon.ico` e `/favicon-96x96.png` da raiz pública. Após
+uma troca de favicon, a atualização visual no Google pode depender de novo
+rastreamento e do cache externo.
+
 ## Analytics e métricas
 
 Eventos first-party adicionados:
