@@ -213,6 +213,25 @@ namespace PremierAPI.Controllers
 
             pedido.Total = PricingRules.ApplyCommercialRounding(bruto - descPeriodo - descHardware - descIndicacao - descCupom);
 
+            await using var transaction = await db.BeginTransactionAsync();
+            int lockedUser = await db.QueryFirstOrDefaultAsync<int>(
+                "SELECT 1 FROM users WHERE id = @UserId FOR UPDATE",
+                new { UserId = pedido.UserId },
+                transaction);
+            if (lockedUser != 1)
+                return Unauthorized(new { erro = "Usuário não encontrado." });
+
+            Guid? pendingOrderId = await db.QueryFirstOrDefaultAsync<Guid?>(
+                @"SELECT id
+                  FROM orders
+                  WHERE user_id = @UserId AND status = 'pendente'
+                  ORDER BY created_at DESC
+                  LIMIT 1",
+                new { UserId = pedido.UserId },
+                transaction);
+            if (pendingOrderId.HasValue)
+                return Conflict(new { erro = "Você já possui um pedido pendente. Pague ou cancele esse pedido antes de gerar outro PIX." });
+
             string pixAddressKey = await GetActivePixAddressKeyAsync();
             if (string.IsNullOrWhiteSpace(pixAddressKey))
                 return BadRequest(new { erro = "Nenhuma chave Pix ativa foi encontrada na conta Asaas." });
@@ -258,7 +277,6 @@ namespace PremierAPI.Controllers
 
             try
             {
-                using var transaction = await db.BeginTransactionAsync();
                 string sqlOrder = @"INSERT INTO orders
                     (id, user_id, anydesk_id, wyd_server_name, computers, wyds_per_computer, period, days, total_price,
                      asaas_pix_qr_code_id, pix_payload, pix_encoded_image, pix_expires_at, status)

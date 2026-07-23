@@ -28,6 +28,7 @@ unit instalada e não adicione variáveis ou segredos inline.
 - `Services/PricingRules.cs` é a única fonte para limites, preços, descontos e arredondamentos. Frontends e controladores consomem `GET /api/checkout/pricing-rules` e `POST /api/checkout/pricing-quote`; não espalhe constantes comerciais.
 - Pedido criado no admin usa `created_manually=true`, começa `pendente` e não é automaticamente `paid_manually`. O cliente pode gerar PIX no próprio pedido; o QR expirado pode ser renovado. Marcar como pago é uma ação administrativa separada.
 - Preserve a validação do servidor WYD no backend e a regra de apenas um pedido pendente por cliente.
+- `POST /api/checkout/gerarpix` deve serializar tentativas concorrentes do mesmo usuário, verificar o pedido pendente sob o mesmo bloqueio transacional e responder `409 Conflict` antes de chamar o Asaas quando já houver pendência. A trava imediata e o acionador único do frontend são proteções de experiência, nunca substitutos dessa guarda autoritativa.
 
 ## Invariantes do Asaas
 

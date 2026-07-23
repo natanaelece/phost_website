@@ -5,6 +5,7 @@ let userData = null;
         let pixPollingInterval = null;
         let cupomAtivo = null;
         let pendingPixData = null;
+        let checkoutInFlight = false;
         let isLoggedIn = false;
         let pricingRulesPromise = null;
 
@@ -349,7 +350,6 @@ let userData = null;
             const btnPagar = document.getElementById('btnPagar');
             btnPagar.innerText = 'Entrar para gerar Pix';
             btnPagar.disabled = false;
-            btnPagar.onclick = goLogin;
 
             calcular();
         }
@@ -403,8 +403,6 @@ let userData = null;
                 const mobileProfileButton = document.getElementById('mobileProfileButton');
                 if (mobileProfileButton) mobileProfileButton.innerText = 'Editar Perfil';
                 document.getElementById('mobileLogoutButton')?.classList.remove('hidden');
-                const btnPagar = document.getElementById('btnPagar');
-                if (btnPagar) btnPagar.onclick = verificarERodarPix;
 
                 document.getElementById('welcomeText').innerText = `Olá, ${userData.name.split(' ')[0]}. Monte seu plano`;
                 document.getElementById('orderWa').value = userData.whatsapp;
@@ -1150,17 +1148,20 @@ let userData = null;
                 return;
             }
             if (pendingPixData) return; // Se já tem pendente, trava.
+            if (checkoutInFlight) return;
+            checkoutInFlight = true;
 
-            const pcsInput = document.getElementById('qtdPcs');
-            const wydsInput = document.getElementById('qtdWyds');
-            const diasInput = document.getElementById('qtdDias');
-            const periodo = document.querySelector('input[name="periodo"]:checked').value;
-            window.premierAnalytics?.track('checkout_attempted', {
-                period: periodo,
-                computers: parseInt(pcsInput.value) || 0,
-                instances: parseInt(wydsInput.value) || 0,
-                logged_in: true
-            });
+            try {
+                const pcsInput = document.getElementById('qtdPcs');
+                const wydsInput = document.getElementById('qtdWyds');
+                const diasInput = document.getElementById('qtdDias');
+                const periodo = document.querySelector('input[name="periodo"]:checked').value;
+                window.premierAnalytics?.track('checkout_attempted', {
+                    period: periodo,
+                    computers: parseInt(pcsInput.value) || 0,
+                    instances: parseInt(wydsInput.value) || 0,
+                    logged_in: true
+                });
 
             // Restoring strict block if someone tries to hack the DOM/bypass input filters
             if (!pcsInput.value || parseInt(pcsInput.value) < 1) { showError('qtdPcs'); return; }
@@ -1215,6 +1216,12 @@ let userData = null;
                 });
                 if (response.status === 401) { clearLocalSession(); configureGuestAccess(); return; }
                 const data = await response.json();
+                if (response.status === 409) {
+                    await checarPixPendente(userData.id);
+                    const pendingError = new Error(data.erro || 'Você já possui um pedido pendente.');
+                    pendingError.isPendingConflict = true;
+                    throw pendingError;
+                }
                 if (!response.ok && data.campo === 'wydServerName') {
                     marcarErroServidorWyd(data.erro || 'Revise o servidor de WYD informado.');
                     if (data.codigo === 'unsupported_wyd_server') abrirAvisoServidor();
@@ -1270,17 +1277,23 @@ let userData = null;
                 iniciarPixPolling(data.paymentId, secondsLeft);
 
             } catch (error) {
-                if (!error.isFieldError) {
+                if (error.isPendingConflict) {
+                    geralMsg.innerText = error.message;
+                    geralMsg.classList.remove('hidden');
+                } else if (!error.isFieldError) {
                     geralMsg.innerText = "Falha no gateway: " + error.message;
                     geralMsg.classList.remove('hidden');
                 }
                 window.premierAnalytics?.track('checkout_error', { error_code: 'pix_generation_failed', period: periodo });
-            } finally {
-                if(!pendingPixData) {
-                    btn.innerHTML = isLoggedIn ? 'Gerar PIX' : 'Faça login para gerar PIX';
-                    btn.disabled = false;
+                } finally {
+                    if(!pendingPixData) {
+                        btn.innerHTML = isLoggedIn ? 'Gerar PIX' : 'Faça login para gerar PIX';
+                        btn.disabled = false;
+                    }
+                    overlay.classList.add('hidden');
                 }
-                overlay.classList.add('hidden');
+            } finally {
+                checkoutInFlight = false;
             }
         }
 

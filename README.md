@@ -138,6 +138,26 @@ As automações usam as seções de configuração `AdProvisioning`, `AdExpirati
 
 Esse fluxo requer ao menos uma chave Pix ativa na conta Asaas do ambiente utilizado. O QR Code guarda o valor calculado pelo servidor; o pagador não pode escolher ou alterar esse valor.
 
+### Proteção contra pedidos duplicados
+
+O checkout mantém a regra autoritativa de apenas um pedido `pendente` por
+cliente. O botão **Gerar PIX** usa somente o dispatcher CSP e possui uma trava
+local imediata antes de qualquer operação assíncrona, evitando reenvios por
+clique duplo ou lentidão percebida no navegador.
+
+A interface é apenas a primeira proteção. No endpoint
+`POST /api/checkout/gerarpix`, o backend serializa as tentativas do mesmo
+usuário por meio do bloqueio transacional da linha do cadastro e consulta
+novamente os pedidos antes de chamar o Asaas. Se já existir um pedido
+`pendente`, nenhuma nova chamada de geração de QR é feita e a API responde
+`409 Conflict`, orientando o cliente a pagar ou cancelar o pedido atual. O
+painel então recarrega esse pedido, mantém o botão principal bloqueado e exibe
+as ações de pagamento e cancelamento.
+
+Essa proteção no servidor também cobre cliques simultâneos, múltiplas abas e
+requisições concorrentes. Não confie somente no estado do botão para preservar
+a regra comercial.
+
 ### Regras comerciais centralizadas
 
 `Services/PricingRules.cs` é a única fonte das quantidades, preços, descontos e arredondamentos comerciais. O backend expõe `GET /api/checkout/pricing-rules` para montar os controles e `POST /api/checkout/pricing-quote` para calcular o total autoritativo. Não replique valores em controladores ou JavaScript.
