@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http.Extensions;
 using PremierAPI.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Rewrite;
@@ -203,6 +204,18 @@ forwardedHeadersOptions.AllowedHosts.Add("www.phost.pro");
 forwardedHeadersOptions.AllowedHosts.Add("webhook-website.phost.pro");
 app.UseForwardedHeaders(forwardedHeadersOptions);
 app.UseHsts();
+
+// HOST CANONICO: consolida o trafego publico no dominio sem www.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Host.Host.Equals("www.phost.pro", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Redirect($"https://phost.pro{context.Request.GetEncodedPathAndQuery()}", permanent: true);
+        return;
+    }
+
+    await next();
+});
 
 // 2. HEADERS DE SEGURANÇA: Previne XSS, Clickjacking, Sniffing e data injection
 app.Use(async (context, next) =>
