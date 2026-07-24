@@ -1,5 +1,7 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PremierAPI.Services;
 using Xunit;
@@ -244,9 +246,75 @@ public sealed class MetaConversionsServiceTests
         Assert.Equal("TEST30146", json.RootElement.GetProperty("test_event_code").GetString());
     }
 
+    [Fact]
+    public async Task Http400Json_LogsOnlySanitizedGraphFields()
+    {
+        const string rawEmail = "person@example.test";
+        const string rawIp = "203.0.113.55";
+        const string rawCookie = "fb.1.1700000000.987654";
+        const string rawToken = "secret-test-token";
+        const string rawPhone = "+5511999999999";
+        string responseBody = JsonSerializer.Serialize(new
+        {
+            error = new
+            {
+                message = $"invalid {rawEmail} {rawIp} {rawCookie} token=another-secret {rawToken} {rawPhone}",
+                type = "OAuthException",
+                code = 100,
+                error_subcode = 33,
+                error_user_title = "ignored",
+                error_user_msg = "ignored",
+                fbtrace_id = "trace-safe"
+            }
+        });
+        var handler = new RecordingHandler(HttpStatusCode.BadRequest, responseBody);
+        var logger = new RecordingLogger();
+        MetaConversionsService service = Service(handler, new InMemoryEventStore(), logger);
+
+        MetaDeliveryResult result = await service.SendAsync(Event(consent: true));
+
+        Assert.Equal(MetaDeliveryStatus.Failed, result.Status);
+        string message = Assert.Single(logger.Messages);
+        Assert.Contains("OAuthException", message);
+        Assert.Contains("Code 100", message);
+        Assert.Contains("Subcode 33", message);
+        Assert.Contains("trace-safe", message);
+        Assert.DoesNotContain(rawEmail, message, StringComparison.Ordinal);
+        Assert.DoesNotContain(rawIp, message, StringComparison.Ordinal);
+        Assert.DoesNotContain(rawCookie, message, StringComparison.Ordinal);
+        Assert.DoesNotContain("another-secret", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(rawPhone, message, StringComparison.Ordinal);
+        Assert.DoesNotContain("error_user_title", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Http400NonJson_LogsOnlyContentMetadataAndLimitedSanitizedText()
+    {
+        const string rawEmail = "person@example.test";
+        const string rawIp = "2001:db8:abcd::1";
+        string responseBody = new string('x', 340) + $" {rawEmail} {rawIp}";
+        var handler = new RecordingHandler(
+            HttpStatusCode.BadRequest,
+            responseBody,
+            "text/plain");
+        var logger = new RecordingLogger();
+        MetaConversionsService service = Service(handler, new InMemoryEventStore(), logger);
+
+        MetaDeliveryResult result = await service.SendAsync(Event(consent: true));
+
+        Assert.Equal(MetaDeliveryStatus.Failed, result.Status);
+        string message = Assert.Single(logger.Messages);
+        Assert.Contains("ContentType text/plain", message);
+        Assert.Contains("ResponseLength", message);
+        Assert.DoesNotContain(rawEmail, message, StringComparison.Ordinal);
+        Assert.DoesNotContain(rawIp, message, StringComparison.Ordinal);
+        Assert.True(message.Length < 800);
+    }
+
     private static MetaConversionsService Service(
         HttpMessageHandler handler,
-        IMetaEventStore store)
+        IMetaEventStore store,
+        ILogger<MetaConversionsService>? logger = null)
     {
         var client = new HttpClient(handler);
         var factory = new SingleClientFactory(client);
@@ -263,7 +331,7 @@ public sealed class MetaConversionsServiceTests
             factory,
             store,
             options,
-            NullLogger<MetaConversionsService>.Instance);
+            logger ?? NullLogger<MetaConversionsService>.Instance);
     }
 
     private sealed class ExceptionHandler : HttpMessageHandler
@@ -324,10 +392,17 @@ public sealed class MetaConversionsServiceTests
     private sealed class RecordingHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _statusCode;
+        private readonly string _responseBody;
+        private readonly string _responseMediaType;
 
-        public RecordingHandler(HttpStatusCode statusCode)
+        public RecordingHandler(
+            HttpStatusCode statusCode,
+            string responseBody = "{}",
+            string responseMediaType = "application/json")
         {
             _statusCode = statusCode;
+            _responseBody = responseBody;
+            _responseMediaType = responseMediaType;
         }
 
         public int CallCount { get; private set; }
@@ -347,8 +422,29 @@ public sealed class MetaConversionsServiceTests
             AuthorizationScheme = request.Headers.Authorization?.Scheme;
             return new HttpResponseMessage(_statusCode)
             {
-                Content = new StringContent("{}")
+                Content = new StringContent(_responseBody, Encoding.UTF8, _responseMediaType)
             };
+        }
+    }
+
+    private sealed class RecordingLogger : ILogger<MetaConversionsService>
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Error)
+                Messages.Add(formatter(state, exception));
         }
     }
 

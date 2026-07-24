@@ -10,10 +10,31 @@ namespace PremierAPI.Services;
 
 public sealed class MetaConversionsService
 {
+    private const int MaximumGraphErrorTextLength = 300;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    private static readonly Regex EmailPattern = new(
+        @"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Ipv4Pattern = new(
+        @"\b(?:\d{1,3}\.){3}\d{1,3}\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex Ipv6Pattern = new(
+        @"(?i)(?<![A-Z0-9:])[0-9A-F]{1,4}(?::[0-9A-F]{0,4}){2,}(?![A-Z0-9:])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex MetaBrowserCookiePattern = new(
+        @"(?i)\bfb\.[0-9]+\.[0-9]+\.[^\s,;]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex TokenAssignmentPattern = new(
+        @"(?i)\b(?:access[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex PhonePattern = new(
+        @"(?<!\d)(?:\+?\d[\d\s().-]{7,}\d)(?!\d)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMetaEventStore _eventStore;
@@ -83,11 +104,9 @@ public sealed class MetaConversionsService
             if (!response.IsSuccessStatusCode)
             {
                 await _eventStore.MarkFailedAsync(conversionEvent.EventId, CancellationToken.None);
-                _logger.LogError(
-                    "[META CAPI] A Meta rejeitou o evento {EventName} ({EventId}) com HTTP {StatusCode}.",
-                    conversionEvent.EventName,
-                    conversionEvent.EventId,
-                    (int)response.StatusCode);
+                MetaGraphErrorDiagnostic diagnostic =
+                    await ReadGraphErrorDiagnosticAsync(response, cancellationToken);
+                LogRejectedResponse(conversionEvent, response, diagnostic);
                 return new MetaDeliveryResult(MetaDeliveryStatus.Failed);
             }
 
@@ -200,6 +219,100 @@ public sealed class MetaConversionsService
         return $"https://phost.pro{path}";
     }
 
+    internal static string SanitizeGraphErrorText(string? value)
+    {
+        string sanitized = NullIfWhiteSpace(value) ?? "indisponível";
+        sanitized = TokenAssignmentPattern.Replace(sanitized, "[token removido]");
+        sanitized = MetaBrowserCookiePattern.Replace(sanitized, "[cookie Meta removido]");
+        sanitized = EmailPattern.Replace(sanitized, "[e-mail removido]");
+        sanitized = Ipv4Pattern.Replace(sanitized, "[IP removido]");
+        sanitized = Ipv6Pattern.Replace(sanitized, "[IP removido]");
+        sanitized = PhonePattern.Replace(sanitized, "[telefone removido]");
+        return sanitized.Length <= MaximumGraphErrorTextLength
+            ? sanitized
+            : sanitized[..(MaximumGraphErrorTextLength - 3)] + "...";
+    }
+
+    private async Task<MetaGraphErrorDiagnostic> ReadGraphErrorDiagnosticAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        string contentType = response.Content.Headers.ContentType?.MediaType ?? "desconhecido";
+        string body = await response.Content.ReadAsStringAsync(cancellationToken);
+        int responseLength = Encoding.UTF8.GetByteCount(body);
+        body = body.Replace(_options.AccessToken, "[token removido]", StringComparison.Ordinal);
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(body);
+            if (!document.RootElement.TryGetProperty("error", out JsonElement error)
+                || error.ValueKind != JsonValueKind.Object)
+            {
+                return MetaGraphErrorDiagnostic.NonJson(contentType, responseLength, body);
+            }
+
+            return new MetaGraphErrorDiagnostic(
+                true,
+                contentType,
+                responseLength,
+                ReadSanitizedString(error, "type"),
+                ReadInteger(error, "code"),
+                ReadInteger(error, "error_subcode"),
+                ReadSanitizedString(error, "message"),
+                ReadSanitizedString(error, "fbtrace_id"),
+                null);
+        }
+        catch (JsonException)
+        {
+            return MetaGraphErrorDiagnostic.NonJson(contentType, responseLength, body);
+        }
+    }
+
+    private void LogRejectedResponse(
+        MetaConversionEvent conversionEvent,
+        HttpResponseMessage response,
+        MetaGraphErrorDiagnostic diagnostic)
+    {
+        if (diagnostic.IsGraphJson)
+        {
+            _logger.LogError(
+                "[META CAPI] A Meta rejeitou o evento {EventName} ({EventId}) com HTTP {StatusCode}. " +
+                "Type {GraphErrorType}; Code {GraphErrorCode}; Subcode {GraphErrorSubcode}; " +
+                "Message {GraphErrorMessage}; Fbtrace {GraphFbtraceId}.",
+                conversionEvent.EventName,
+                conversionEvent.EventId,
+                (int)response.StatusCode,
+                diagnostic.Type ?? "indisponível",
+                diagnostic.Code?.ToString(CultureInfo.InvariantCulture) ?? "indisponível",
+                diagnostic.Subcode?.ToString(CultureInfo.InvariantCulture) ?? "indisponível",
+                diagnostic.Message ?? "indisponível",
+                diagnostic.FbtraceId ?? "indisponível");
+            return;
+        }
+
+        _logger.LogError(
+            "[META CAPI] A Meta rejeitou o evento {EventName} ({EventId}) com HTTP {StatusCode}. " +
+            "ContentType {ContentType}; ResponseLength {ResponseLength}; ResponseText {ResponseText}.",
+            conversionEvent.EventName,
+            conversionEvent.EventId,
+            (int)response.StatusCode,
+            diagnostic.ContentType,
+            diagnostic.ResponseLength,
+            diagnostic.FallbackText ?? "indisponível");
+    }
+
+    private static string? ReadSanitizedString(JsonElement source, string propertyName) =>
+        source.TryGetProperty(propertyName, out JsonElement value)
+        && value.ValueKind == JsonValueKind.String
+            ? SanitizeGraphErrorText(value.GetString())
+            : null;
+
+    private static int? ReadInteger(JsonElement source, string propertyName) =>
+        source.TryGetProperty(propertyName, out JsonElement value)
+        && value.TryGetInt32(out int integer)
+            ? integer
+            : null;
+
     private static Dictionary<string, object?> RemoveEmptyValues(
         IReadOnlyDictionary<string, object?>? values)
     {
@@ -251,4 +364,31 @@ public sealed class MetaConversionsService
 
     private static string? NullIfWhiteSpace(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed record MetaGraphErrorDiagnostic(
+        bool IsGraphJson,
+        string ContentType,
+        int ResponseLength,
+        string? Type,
+        int? Code,
+        int? Subcode,
+        string? Message,
+        string? FbtraceId,
+        string? FallbackText)
+    {
+        public static MetaGraphErrorDiagnostic NonJson(
+            string contentType,
+            int responseLength,
+            string body) =>
+            new(
+                false,
+                contentType,
+                responseLength,
+                null,
+                null,
+                null,
+                null,
+                null,
+                SanitizeGraphErrorText(body));
+    }
 }
