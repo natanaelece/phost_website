@@ -739,7 +739,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             <td>${esc(u.username)}</td><td>${esc(u.fullName)}</td>
             <td>${u.isActive?'<span class="csp-d004">Ativo</span>':'<span class="csp-d005">Desativado</span>'}</td>
             <td class="csp-d006"><button class="btn btn-outline csp-d007" data-admin-click="open-ad-access" data-username="${esc(u.username)}" data-computers="${esc(computersCsv)}" data-allow-all="${u.allowAllComputers}">&#128187; Gerenciar Acessos</button><div class="csp-d008">${computerText}</div></td>
-            <td><div class="date-tools"><label class="inline-check"><input type="checkbox" id="never_${u.username}" data-admin-change="toggle-ad-never" data-username="${esc(u.username)}" ${expiresValue?'':'checked'}> Nunca</label><input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled'}><button class="btn btn-outline csp-d007" data-admin-click="set-ad-expire" data-username="${esc(u.username)}">&#10004;</button></div></td>
+            <td><div class="date-tools"><label class="inline-check"><input type="checkbox" id="never_${u.username}" data-admin-change="toggle-ad-never" data-username="${esc(u.username)}" ${expiresValue?'':'checked'}> Nunca</label><input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled hidden'}><button class="btn btn-outline csp-d007" data-admin-click="set-ad-expire" data-username="${esc(u.username)}">&#10004;</button></div></td>
             <td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
                 <button class="btn btn-outline csp-d009" data-admin-click="open-ad-edit" data-username="${esc(u.username)}">&#9998; Editar</button>
                 <button class="btn btn-outline csp-d010" data-admin-click="open-ad-password" data-username="${esc(u.username)}">&#128274; Senha</button>
@@ -1044,6 +1044,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const input = document.getElementById('exp_'+u);
         if(!never || !input) return;
         input.disabled = never.checked;
+        input.hidden = never.checked;
         if(never.checked) {
             input.value = '';
         } else if (!input.value) {
