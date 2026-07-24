@@ -289,6 +289,17 @@ try {
       `
     },
     {
+      name: 'home-register-deep-link',
+      page: '/?action=register',
+      script: `
+        return !document.getElementById('authModal').classList.contains('hidden')
+          && !document.getElementById('registerForm').classList.contains('hidden')
+          && document.getElementById('loginForm').classList.contains('hidden')
+          && location.pathname === '/'
+          && location.search === '';
+      `
+    },
+    {
       name: 'panel-help-modal',
       page: '/painel',
       script: `
@@ -325,6 +336,7 @@ try {
           && document.getElementById('nav-trials').classList.contains('active')
           && document.getElementById('sname').textContent === 'Admin Fixture'
           && Boolean(document.querySelector('.slogo svg'))
+          && document.getElementById('m-ad-edit-email')?.type === 'email'
           && document.querySelector('[title="Sair"]')?.classList.contains('csp-s006');
       `
     },
