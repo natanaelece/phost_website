@@ -426,6 +426,32 @@ try {
       `
     },
     {
+      name: 'admin-manual-order-daily-duration',
+      page: '/admin/pedidos?authenticated-fixture=1',
+      wait: 1900,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        document.querySelector('[data-csp-click="h050"]').click();
+        setTimeout(() => {
+          const period = document.getElementById('m-order-period');
+          const group = document.getElementById('m-order-days-group');
+          const weeklyHidden = group.classList.contains('hidden');
+          period.value = 'diaria';
+          period.dispatchEvent(new Event('change', { bubbles: true }));
+          setTimeout(() => {
+            const dailyVisible = !group.classList.contains('hidden');
+            period.value = 'mensal';
+            period.dispatchEvent(new Event('change', { bubbles: true }));
+            setTimeout(() => done(
+              weeklyHidden
+              && dailyVisible
+              && group.classList.contains('hidden')
+            ), 50);
+          }, 50);
+        }, 100);
+      `
+    },
+    {
       name: 'admin-navigation-without-shell-reload',
       page: '/admin/testes-gratis?authenticated-fixture=1',
       wait: 1750,

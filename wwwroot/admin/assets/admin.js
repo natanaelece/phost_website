@@ -293,6 +293,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         
         document.getElementById('m-order-period').value = 'semanal';
         document.getElementById('m-order-days').value = _pricingRules.weeklyDays;
+        document.getElementById('m-order-days-group').classList.add('hidden');
         document.getElementById('m-order-pcs').value = _pricingRules.minComputers;
         document.getElementById('m-order-slots').value = _pricingRules.minSlots;
         document.getElementById('m-order-price').value = Number(_pricingRules.minimumPrices.semanal).toFixed(2);
@@ -312,6 +313,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     async function syncManualOrderPeriod(){
         await loadPricingRules();
         const period=document.getElementById('m-order-period').value,days=document.getElementById('m-order-days'),pcs=document.getElementById('m-order-pcs');
+        document.getElementById('m-order-days-group').classList.toggle('hidden',period!=='diaria');
         if(period==='semanal')days.value=_pricingRules.weeklyDays;
         else if(period==='mensal')days.value=_pricingRules.monthlyDays;
         else{days.value=_pricingRules.minDailyDays;if(parseInt(pcs.value)<_pricingRules.minDailyComputers)pcs.value=_pricingRules.minDailyComputers;}
