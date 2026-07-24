@@ -30,14 +30,20 @@ namespace PremierAPI.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _config;
         private readonly EmailConfirmationService _emailConfirmation;
+        private readonly AdminNotificationEmailService _adminNotifications;
         private readonly AdPasswordProtectionService _adPasswordProtection;
+        private readonly MetaBusinessEventService _metaBusinessEvents;
+        private readonly MetaAttributionService _metaAttributions;
 
         public AuthController(
             IConfiguration config,
             ILogger<AuthController> logger,
             IHttpClientFactory httpClientFactory,
             EmailConfirmationService emailConfirmation,
-            AdPasswordProtectionService adPasswordProtection)
+            AdminNotificationEmailService adminNotifications,
+            AdPasswordProtectionService adPasswordProtection,
+            MetaBusinessEventService metaBusinessEvents,
+            MetaAttributionService metaAttributions)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -46,7 +52,10 @@ namespace PremierAPI.Controllers
             _turnstileSecret = config.GetValue<string>("Cloudflare:TurnstileSecretKey") ?? "";
             _httpClientFactory = httpClientFactory;
             _emailConfirmation = emailConfirmation;
+            _adminNotifications = adminNotifications;
             _adPasswordProtection = adPasswordProtection;
+            _metaBusinessEvents = metaBusinessEvents;
+            _metaAttributions = metaAttributions;
         }
 
         // =========================================================================
@@ -125,6 +134,10 @@ namespace PremierAPI.Controllers
                 await InsertUserActivityAsync(db, transaction, user.Id, "login", loginMetadata);
                 await transaction.CommitAsync();
             }
+            await _metaAttributions.TryAssociateWithUserAsync(
+                GetAttributionId(),
+                user.Id,
+                HttpContext.RequestAborted);
 
             if (_debugLogs) _logger.LogInformation("[LOGIN SUCESSO] {Email}", req.Email);
 
@@ -291,6 +304,10 @@ namespace PremierAPI.Controllers
                 new { UserId = userId, ProtectedPassword = protectedPassword }, transaction);
             await InsertUserActivityAsync(db, transaction, userId, "cadastro", registrationMetadata);
             await transaction.CommitAsync();
+            await _metaAttributions.TryAssociateWithUserAsync(
+                GetAttributionId(),
+                userId,
+                HttpContext.RequestAborted);
             try
             {
                 await _emailConfirmation.SendAsync(req.Email, req.Name, emailToken);
@@ -299,6 +316,7 @@ namespace PremierAPI.Controllers
             {
                 _logger.LogError(ex, "[SMTP ERROR] Falha ao disparar o e-mail inicial de ativação.");
             }
+            await _adminNotifications.TrySendNewUserAsync(userId);
 
             if (_debugLogs) _logger.LogInformation("[REGISTER SUCESSO] {Email} cadastrado.", req.Email);
             return Ok(new { success = true, mensagem = "Cadastro realizado! Verifique seu e-mail para ativar a conta." });
@@ -320,7 +338,7 @@ namespace PremierAPI.Controllers
                                email_confirmation_token = NULL,
                                email_confirmation_next_send_at = NULL
                            WHERE email_confirmation_token = @Token
-                           RETURNING name AS Name, email AS Email";
+                           RETURNING id AS Id, name AS Name, email AS Email";
 
             var confirmedUser = await db.QueryFirstOrDefaultAsync<ConfirmedEmailUser>(sql, new { Token = token });
 
@@ -334,6 +352,13 @@ namespace PremierAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[EMAIL CONFIRMACAO] E-mail confirmado, mas a notificacao de sucesso falhou.");
+            }
+
+            if (MetaBusinessEventPolicy.ShouldSendCompleteRegistration(emailConfirmedNow: true))
+            {
+                await _metaBusinessEvents.TrySendCompleteRegistrationAsync(
+                    confirmedUser.Id,
+                    HttpContext.RequestAborted);
             }
 
             return Ok(new { success = true, mensagem = "E-mail verificado com sucesso!", email = confirmedUser.Email });
@@ -608,6 +633,10 @@ namespace PremierAPI.Controllers
                 GetReferrerHost());
         }
 
+        private Guid? GetAttributionId() =>
+            MetaAttributionService.ParseAttributionId(
+                Request.Headers["X-Meta-Attribution-Id"].FirstOrDefault());
+
         private static Task InsertUserActivityAsync(
             NpgsqlConnection db,
             NpgsqlTransaction transaction,
@@ -729,6 +758,7 @@ namespace PremierAPI.Controllers
 
     internal class ConfirmedEmailUser
     {
+        public Guid Id { get; set; }
         public string Name { get; set; } = "";
         public string Email { get; set; } = "";
     }

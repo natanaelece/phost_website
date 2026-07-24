@@ -35,6 +35,7 @@ namespace PremierAPI.Controllers
         private readonly AdminMaintenanceService _maintenance;
         private readonly AdminSessionService _adminSessions;
         private readonly AdminTotpService _adminTotp;
+        private readonly MetaBusinessEventService _metaBusinessEvents;
 
         public AdminController(
             IConfiguration config,
@@ -47,7 +48,8 @@ namespace PremierAPI.Controllers
             FreeTrialService freeTrials,
             AdminMaintenanceService maintenance,
             AdminSessionService adminSessions,
-            AdminTotpService adminTotp)
+            AdminTotpService adminTotp,
+            MetaBusinessEventService metaBusinessEvents)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -62,6 +64,7 @@ namespace PremierAPI.Controllers
             _maintenance = maintenance;
             _adminSessions = adminSessions;
             _adminTotp = adminTotp;
+            _metaBusinessEvents = metaBusinessEvents;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -648,6 +651,11 @@ namespace PremierAPI.Controllers
             _logger.LogInformation(
                 "[ADMIN][TESTE GRATIS] Solicitação {RequestId} alterada para {Status}.",
                 id, result.Status?.Status);
+            if (MetaBusinessEventPolicy.ShouldSendStartTrial(
+                result.Success,
+                result.Changed,
+                result.Status?.Status))
+                await _metaBusinessEvents.TrySendStartTrialAsync(id, HttpContext.RequestAborted);
             return Ok(new { msg = result.Message, status = result.Status });
         }
 
@@ -663,6 +671,12 @@ namespace PremierAPI.Controllers
             _logger.LogInformation(
                 "[ADMIN][TESTE GRATIS] Teste liberado manualmente para o usuário {UserId} como solicitação {RequestId}.",
                 userId, result.Status?.RequestId);
+            if (MetaBusinessEventPolicy.ShouldSendStartTrial(
+                    result.Success,
+                    result.Changed,
+                    result.Status?.Status)
+                && result.Status?.RequestId is Guid requestId)
+                await _metaBusinessEvents.TrySendStartTrialAsync(requestId, HttpContext.RequestAborted);
             return Ok(new { msg = result.Message, status = result.Status });
         }
 
@@ -861,6 +875,7 @@ namespace PremierAPI.Controllers
                     WHERE id = @Id", new { Id = id }, transaction);
                 await _emailConfirmation.SendConfirmedAsync(user.Email, user.Name, HttpContext.RequestAborted);
                 await transaction.CommitAsync(HttpContext.RequestAborted);
+                await _metaBusinessEvents.TrySendCompleteRegistrationAsync(id, HttpContext.RequestAborted);
                 return Ok(new { msg = "E-mail confirmado manualmente e cliente notificado." });
             }
             catch (Exception ex)

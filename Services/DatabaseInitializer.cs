@@ -43,6 +43,36 @@ namespace PremierAPI.Services
 
                 "ALTER TABLE users DROP COLUMN IF EXISTS role;",
 
+                @"CREATE TABLE IF NOT EXISTS meta_attributions (
+                    id UUID PRIMARY KEY,
+                    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    source_attribution_id UUID REFERENCES meta_attributions(id) ON DELETE SET NULL,
+                    consent_status VARCHAR(10) NOT NULL
+                        CHECK (consent_status IN ('accepted', 'rejected')),
+                    consent_version VARCHAR(20) NOT NULL,
+                    consented_at TIMESTAMP,
+                    revoked_at TIMESTAMP,
+                    fbp VARCHAR(255),
+                    fbc VARCHAR(500),
+                    fbclid VARCHAR(500),
+                    client_ip_address INET,
+                    client_user_agent VARCHAR(512),
+                    source_url VARCHAR(500),
+                    captured_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );",
+
+                @"CREATE TABLE IF NOT EXISTS meta_conversion_events (
+                    event_id VARCHAR(100) PRIMARY KEY,
+                    event_name VARCHAR(60) NOT NULL,
+                    delivery_status VARCHAR(20) NOT NULL
+                        CHECK (delivery_status IN ('processing', 'sent', 'failed')),
+                    attempt_count INT NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_attempt_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    sent_at TIMESTAMP
+                );",
+
                 @"CREATE TABLE IF NOT EXISTS user_sessions (
                     id SERIAL PRIMARY KEY,
                     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -88,6 +118,8 @@ namespace PremierAPI.Services
                     period VARCHAR(20),
                     days INT,
                     total_price DECIMAL(10,2),
+                    paid_amount DECIMAL(10,2),
+                    paid_at TIMESTAMP,
                     asaas_payment_id VARCHAR(100),
                     asaas_customer_id VARCHAR(100),
                     asaas_pix_qr_code_id VARCHAR(100),
@@ -108,6 +140,7 @@ namespace PremierAPI.Services
                     ad_provisioning_attempts INT DEFAULT 0,
                     ad_provisioning_error VARCHAR(500),
                     ad_provisioning_next_attempt_at TIMESTAMP,
+                    meta_attribution_id UUID REFERENCES meta_attributions(id) ON DELETE SET NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );",
 
@@ -163,6 +196,10 @@ namespace PremierAPI.Services
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS ad_provisioning_next_attempt_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMP;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS wyd_server_name VARCHAR(50);",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_amount DECIMAL(10,2);",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS meta_attribution_id UUID REFERENCES meta_attributions(id) ON DELETE SET NULL;",
+                "ALTER TABLE meta_attributions ADD COLUMN IF NOT EXISTS source_attribution_id UUID REFERENCES meta_attributions(id) ON DELETE SET NULL;",
 
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_asaas_pix_qr_code_id ON orders(asaas_pix_qr_code_id) WHERE asaas_pix_qr_code_id IS NOT NULL;",
                 "CREATE INDEX IF NOT EXISTS idx_orders_ad_provisioning_pending ON orders(ad_provisioning_next_attempt_at, created_at) WHERE status = 'pago' AND ad_provisioned_at IS NULL;",
@@ -196,8 +233,11 @@ namespace PremierAPI.Services
                     used_at TIMESTAMP,
                     closed_at TIMESTAMP,
                     released_by VARCHAR(150),
+                    meta_attribution_id UUID REFERENCES meta_attributions(id) ON DELETE SET NULL,
                     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );",
+
+                "ALTER TABLE free_trial_requests ADD COLUMN IF NOT EXISTS meta_attribution_id UUID REFERENCES meta_attributions(id) ON DELETE SET NULL;",
 
                 @"CREATE TABLE IF NOT EXISTS free_trial_events (
                     id BIGSERIAL PRIMARY KEY,
@@ -240,6 +280,13 @@ namespace PremierAPI.Services
                     FROM user_activity_events e
                     WHERE e.user_id = u.id AND e.event_type = 'cadastro'
                   );",
+
+                "CREATE INDEX IF NOT EXISTS idx_meta_attributions_user_date ON meta_attributions(user_id, updated_at DESC) WHERE user_id IS NOT NULL;",
+                "CREATE INDEX IF NOT EXISTS idx_meta_attributions_source ON meta_attributions(source_attribution_id) WHERE source_attribution_id IS NOT NULL;",
+                "CREATE INDEX IF NOT EXISTS idx_meta_attributions_consent_date ON meta_attributions(consent_status, updated_at DESC);",
+                "CREATE INDEX IF NOT EXISTS idx_meta_conversion_events_status_date ON meta_conversion_events(delivery_status, last_attempt_at DESC);",
+                "DELETE FROM meta_conversion_events WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '13 months';",
+                "DELETE FROM meta_attributions WHERE updated_at < CURRENT_TIMESTAMP - INTERVAL '13 months';",
                 
                 "UPDATE users SET is_active = true WHERE is_active IS NULL;",
                 "UPDATE users SET email_confirmation_resend_count = 0 WHERE email_confirmation_resend_count IS NULL;",

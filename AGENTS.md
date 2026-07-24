@@ -59,6 +59,18 @@ chaves ausentes ou inválidas.
 Qualquer rotação de credenciais, alteração dos arquivos protegidos, mudança da
 unit ou reinicialização exige autorização explícita e janela operacional.
 
+## Notificação obrigatória de falhas
+
+Toda exceção capturada ou falha que impeça a operação de produzir seu efeito
+esperado deve ser registrada com `ILogger.LogError` ou `LogCritical`, incluindo
+o objeto da exceção quando disponível, para encaminhamento pelo provider do
+Telegram. Não descarte falhas silenciosamente nem use `Information` ou
+`Warning` quando a ação deixou de fazer o que deveria. `Warning` fica reservado
+a condições recuperáveis cujo efeito principal foi concluído ou possui
+reconciliação automática explícita. Nunca inclua segredos nesses registros e
+mantenha `Telegram:MinimumLevel` no máximo em `Error` (`Warning` recomendado);
+`Critical` e `None` são inválidos porque ocultam erros comuns.
+
 O estado do segundo fator administrativo fica em
 `/var/lib/premierapi/admin-totp.protected`, pertencente a `root` e com modo
 `0600`. Nunca exiba ou registre a chave TOTP, a URI `otpauth` nem os códigos de

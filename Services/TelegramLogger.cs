@@ -54,14 +54,17 @@ namespace PremierAPI.Services
                 levelText = "Information";
             }
 
-            string text = $"{emoji} *PremierHost API [{levelText}]*\n" +
-                          $"*Cat:* {_categoryName}\n\n" +
-                          $"*Msg:* {message}\n";
+            string text = $"{emoji} PremierHost API [{levelText}]\n" +
+                          $"Categoria: {_categoryName}\n\n" +
+                          $"Mensagem: {message}\n";
 
             if (exception != null)
             {
-                text += $"\n*Exception:* {exception.Message}\n";
+                text += $"\nExceção: {exception.Message}\n";
             }
+
+            if (text.Length > 4000)
+                text = text[..4000] + "\n[Mensagem truncada]";
 
             _ = SendTelegramMessageAsync(text);
         }
@@ -76,16 +79,23 @@ namespace PremierAPI.Services
                 var payload = new
                 {
                     chat_id = _chatId,
-                    text = text,
-                    parse_mode = "Markdown"
+                    text
                 };
 
                 var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-                await _httpClient.PostAsync(url, content);
+                using var response = await _httpClient.PostAsync(url, content);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.Error.WriteLine(
+                        $"[TELEGRAM LOGGER ERROR] API rejeitou a mensagem com status {(int)response.StatusCode}.");
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignorar erro do logger para não derrubar a aplicação
+                // O provider não pode registrar em si mesmo sem criar recursão.
+                // O fallback informa somente o tipo, sem URL, token ou conteúdo da mensagem.
+                Console.Error.WriteLine(
+                    $"[TELEGRAM LOGGER ERROR] Falha no envio ({ex.GetType().Name}).");
             }
         }
     }

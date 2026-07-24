@@ -17,6 +17,15 @@ var builder = WebApplication.CreateBuilder(args);
 // CONFIGURAÇÃO: Carrega as configurações do sistema
 builder.Configuration.AddEnvironmentVariables();
 
+if (args.Contains(MetaConversionsSmokeRunner.Command, StringComparer.Ordinal))
+{
+    Environment.ExitCode = await MetaConversionsSmokeRunner.RunAsync(
+        builder.Configuration,
+        Console.Out,
+        Console.Error);
+    return;
+}
+
 var invalidConfigKeys = StartupConfigurationValidator.FindInvalidKeys(builder.Configuration);
 if (invalidConfigKeys.Count > 0)
 {
@@ -57,6 +66,18 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("MetaConversions", client =>
+{
+    // O timeout efetivo e aplicado por evento para permitir cancelamento ligado
+    // ao request sem manter conexoes pendentes.
+    client.Timeout = Timeout.InfiniteTimeSpan;
+});
+var metaConversionsOptions = MetaConversionsOptions.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(metaConversionsOptions);
+builder.Services.AddSingleton<IMetaEventStore, PostgresMetaEventStore>();
+builder.Services.AddSingleton<MetaConversionsService>();
+builder.Services.AddSingleton<MetaAttributionService>();
+builder.Services.AddSingleton<MetaBusinessEventService>();
 builder.Services.AddHsts(options =>
 {
     options.MaxAge = TimeSpan.FromDays(180);
@@ -72,6 +93,7 @@ builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
 builder.Services.AddScoped<PremierAPI.Services.FreeTrialService>();
 builder.Services.AddSingleton<PremierAPI.Services.EmailConfirmationService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdCredentialEmailService>();
+builder.Services.AddSingleton<PremierAPI.Services.AdminNotificationEmailService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdPasswordProtectionService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdAccountProvisioningService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdminMaintenanceService>();
@@ -241,15 +263,15 @@ app.Use(async (context, next) =>
         "base-uri 'none'; " +
         "form-action 'self'; " +
         "frame-ancestors 'none'; " +
-        "script-src 'self' https://challenges.cloudflare.com; " +
+        "script-src 'self' https://challenges.cloudflare.com https://connect.facebook.net; " +
         "script-src-attr 'none'; " +
         "style-src 'self'; " +
         "style-src-attr 'none'; " +
         "font-src 'self'; " +
-        "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com; " +
+        "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com https://www.facebook.com; " +
         "media-src 'self' https://phost.pro https://www.phost.pro; " +
         "frame-src https://challenges.cloudflare.com https://*.cloudflare.com; " +
-        "connect-src 'self' https://challenges.cloudflare.com https://*.cloudflare.com; ";
+        "connect-src 'self' https://challenges.cloudflare.com https://*.cloudflare.com https://www.facebook.com; ";
     await next();
 });
 

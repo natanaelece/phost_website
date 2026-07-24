@@ -43,7 +43,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.
 - A descrição convencional do computador `SRV01_01` corresponde ao grupo `ACESSO_SRV01-01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
-- Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
+- Analytics de produto é first-party e não guarda PII. O Meta Pixel/CAPI é uma integração separada, opcional e condicionada ao consentimento de marketing; preserve deduplicação, atribuição do pedido e token somente no backend.
 - Indexação pública: somente `/`, `/painel`, `/privacidade` e `/guia-wyd`; preserve `robots.txt` e `sitemap.xml` e não amplie essa lista sem nova autorização.
 - Host público canônico, redirecionamento de `www` e favicons globais seguem os invariantes definidos em `rules.md`.
 - Arquivos mutáveis da aplicação mantêm `no-store` no navegador. Assets públicos e administrativos gerados com hash usam cache imutável de um ano. Somente `/`, `/painel`, `/privacidade` e `/guia-wyd` admitem microcache de 60 segundos na Cloudflare; APIs e demais rotas continuam `no-store`. Preserve os hashes e não amplie a allowlist por Cache Rule sem nova autorização.
@@ -57,6 +57,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 ## Segurança operacional
 
 Não faça chamadas com efeitos reais no Asaas nem mutações no AD para testar sem autorização expressa. Não exponha segredos, tokens ou configurações privadas em logs, diffs ou respostas.
+Toda exceção capturada ou falha que impeça o efeito esperado deve ser registrada com `ILogger.LogError` ou `LogCritical`, passando a exceção quando disponível; esses níveis seguem para o Telegram. Não descarte falhas silenciosamente nem use `Information`/`Warning` quando a ação deixou de cumprir seu objetivo. `Warning` é apenas para condição recuperável com efeito principal concluído ou reconciliação automática explícita. Preserve a sanitização e mantenha `Telegram:MinimumLevel` no máximo em `Error` (`Warning` recomendado), nunca `Critical` ou `None`.
 `premierapi` e `premierapi-startup-alert.service` carregam somente `/etc/premierapi/premierapi.env`, onde ficam centralizados todos os segredos, inclusive `Telegram__BotToken` e `Telegram__ChatId`. O arquivo pertence a `root`, mantém modo `0600` e nunca deve ter seus valores exibidos. Como o alerta externo usa o mesmo arquivo da aplicação, ele também falhará se `premierapi.env` estiver ausente ou tiver sintaxe inválida.
 O key ring do Data Protection é persistente e protegido por certificado; preserve `DataProtectionConfiguration` e nunca versione `.data-protection-keys`.
 O estado TOTP protegido fica em `/var/lib/premierapi/admin-totp.protected`, com arquivo `0600`. Nunca exponha chave, URI `otpauth` ou códigos de recuperação; faça backup dele junto do key ring e do certificado, pois o arquivo isolado não é recuperável.

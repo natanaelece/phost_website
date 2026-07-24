@@ -11,11 +11,16 @@ namespace PremierAPI.Controllers
     {
         private readonly FreeTrialService _freeTrials;
         private readonly ILogger<FreeTrialController> _logger;
+        private readonly MetaBusinessEventService _metaBusinessEvents;
 
-        public FreeTrialController(FreeTrialService freeTrials, ILogger<FreeTrialController> logger)
+        public FreeTrialController(
+            FreeTrialService freeTrials,
+            ILogger<FreeTrialController> logger,
+            MetaBusinessEventService metaBusinessEvents)
         {
             _freeTrials = freeTrials;
             _logger = logger;
+            _metaBusinessEvents = metaBusinessEvents;
         }
 
         [HttpGet("me")]
@@ -30,7 +35,9 @@ namespace PremierAPI.Controllers
         [HttpPost("request")]
         public async Task<IActionResult> RequestTrial()
         {
-            var result = await _freeTrials.RequestAsync(GetSessionToken());
+            Guid? attributionId = MetaAttributionService.ParseAttributionId(
+                Request.Headers["X-Meta-Attribution-Id"].FirstOrDefault());
+            var result = await _freeTrials.RequestAsync(GetSessionToken(), attributionId);
             if (result == null) return Unauthorized(new { erro = "Sessão expirada." });
             if (result.IneligibleDueToPaidOrder)
             {
@@ -61,10 +68,19 @@ namespace PremierAPI.Controllers
                 "[TESTE GRATIS] Solicitação {RequestId} registrada/consultada. Nova: {Created}.",
                 result.Status.RequestId, result.Created);
 
+            string? metaEventId = null;
+            if (MetaBusinessEventPolicy.ShouldSendLead(result.Created)
+                && result.Status.RequestId is Guid requestId)
+            {
+                metaEventId = MetaBusinessEventService.LeadEventId(requestId);
+                await _metaBusinessEvents.TrySendLeadAsync(requestId, HttpContext.RequestAborted);
+            }
+
             var payload = new
             {
                 msg = result.Created ? "Solicitação de teste grátis registrada." : "A solicitação já está registrada.",
-                status = result.Status
+                status = result.Status,
+                metaEventId
             };
             return result.Created ? StatusCode(StatusCodes.Status201Created, payload) : Ok(payload);
         }

@@ -72,8 +72,12 @@ public static class StartupConfigurationValidator
         ValidateIpAddress(configuration, "ReverseProxy:KnownProxy", invalid);
         ValidateAbsolutePath(configuration, "AdminSecurity:TotpSecretPath", invalid);
 
-        if (!Enum.TryParse<LogLevel>(configuration["Telegram:MinimumLevel"], true, out _))
+        if (!Enum.TryParse<LogLevel>(configuration["Telegram:MinimumLevel"], true, out var telegramMinimumLevel) ||
+            !Enum.IsDefined(telegramMinimumLevel) ||
+            telegramMinimumLevel > LogLevel.Error)
+        {
             invalid.Add("Telegram:MinimumLevel");
+        }
 
         try
         {

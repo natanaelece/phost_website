@@ -33,6 +33,8 @@ namespace PremierAPI.Controllers
         private readonly bool _dryRun;
         private readonly WhatsAppTemplateService _whatsAppTemplates;
         private readonly AdAccountProvisioningService _adProvisioning;
+        private readonly AdminNotificationEmailService _adminNotifications;
+        private readonly MetaBusinessEventService _metaBusinessEvents;
 
         // Variáveis para os tokens de segurança da Asaas
         private readonly string _apiToken;
@@ -42,11 +44,15 @@ namespace PremierAPI.Controllers
             IConfiguration config,
             ILogger<WebhookController> logger,
             WhatsAppTemplateService whatsAppTemplates,
-            AdAccountProvisioningService adProvisioning)
+            AdAccountProvisioningService adProvisioning,
+            AdminNotificationEmailService adminNotifications,
+            MetaBusinessEventService metaBusinessEvents)
         {
             _config = config;
             _whatsAppTemplates = whatsAppTemplates;
             _adProvisioning = adProvisioning;
+            _adminNotifications = adminNotifications;
+            _metaBusinessEvents = metaBusinessEvents;
             _connectionString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _dryRun = config.GetValue<bool>("Evolution:DryRun");
@@ -104,6 +110,10 @@ namespace PremierAPI.Controllers
                         && customerElement.ValueKind == JsonValueKind.String
                         ? customerElement.GetString() ?? ""
                         : "";
+                    decimal? paidAmount = payment.TryGetProperty("value", out var valueElement)
+                        && valueElement.TryGetDecimal(out decimal parsedPaidAmount)
+                        ? parsedPaidAmount
+                        : null;
 
                     using var db = new NpgsqlConnection(_connectionString);
 
@@ -115,10 +125,18 @@ namespace PremierAPI.Controllers
                             @"UPDATE orders
                               SET status = 'pago', asaas_payment_id = @PaymentId,
                                   asaas_customer_id = @CustomerId,
+                                  paid_amount = @PaidAmount,
+                                  paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP),
                                   pix_payload = NULL, pix_encoded_image = NULL
                               WHERE asaas_pix_qr_code_id = @QrCodeId
                                 AND status <> 'pago'",
-                            new { PaymentId = paymentId, CustomerId = asaasCustomerId, QrCodeId = pixQrCodeId });
+                            new
+                            {
+                                PaymentId = paymentId,
+                                CustomerId = asaasCustomerId,
+                                QrCodeId = pixQrCodeId,
+                                PaidAmount = paidAmount
+                            });
                     }
                     else
                     {
@@ -132,14 +150,17 @@ namespace PremierAPI.Controllers
                         updatedRows = await db.ExecuteAsync(
                             @"UPDATE orders
                               SET status = 'pago', asaas_customer_id = @CustomerId
+                                  , paid_amount = @PaidAmount
+                                  , paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP)
                               WHERE asaas_payment_id = @Id AND status <> 'pago'",
-                            new { Id = paymentId, CustomerId = asaasCustomerId });
+                            new { Id = paymentId, CustomerId = asaasCustomerId, PaidAmount = paidAmount });
                     }
 
                     // Busca os dados consolidados do Cliente e do Pedido para os e-mails/whatsapp
                     var orderData = await db.QueryFirstOrDefaultAsync<dynamic>(
                         @"SELECT o.id AS order_id, u.id AS user_id, u.whatsapp, u.email, u.name, o.period, o.days,
                                  o.total_price, o.computers, o.wyds_per_computer,
+                                 o.paid_amount,
                                  COALESCE(o.asaas_customer_id, @CustomerId) AS asaas_customer_id
                           FROM orders o JOIN users u ON o.user_id = u.id 
                           WHERE o.asaas_payment_id = @PaymentId
@@ -156,6 +177,9 @@ namespace PremierAPI.Controllers
                         return Ok(new { success = true, ignored = true });
                     }
 
+                    if (updatedRows > 0)
+                        await _adminNotifications.TrySendOrderPaidAsync((Guid)orderData.order_id);
+
                     string customerIdToSync = orderData.asaas_customer_id as string ?? asaasCustomerId;
                     if (!string.IsNullOrWhiteSpace(customerIdToSync))
                     {
@@ -169,6 +193,14 @@ namespace PremierAPI.Controllers
                     }
 
                     await _adProvisioning.TryProvisionOrderAsync((Guid)orderData.order_id, HttpContext.RequestAborted);
+                    if (MetaBusinessEventPolicy.ShouldSendPurchase(
+                        paymentReceived: eventType is "PAYMENT_RECEIVED" or "PAYMENT_CONFIRMED",
+                        orderMatched: true))
+                    {
+                        await _metaBusinessEvents.TrySendPurchaseAsync(
+                            (Guid)orderData.order_id,
+                            HttpContext.RequestAborted);
+                    }
 
                     if (updatedRows == 0)
                     {
@@ -238,7 +270,7 @@ namespace PremierAPI.Controllers
             catch (Exception ex)
             { 
                 // Loga o erro real no console/journalctl antes de retornar o BadRequest
-                _logger.LogError($"[WEBHOOK ASAAS ERRO] Falha ao processar: {ex.Message}");
+                _logger.LogError(ex, "[WEBHOOK ASAAS ERRO] Falha ao processar o webhook.");
                 return BadRequest(); 
             }
         }

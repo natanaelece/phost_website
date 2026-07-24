@@ -206,6 +206,10 @@ A tabela `user_activity_events` mantém a trilha first-party de `cadastro`, `log
 
 Se o e-mail continuar sem confirmação, o `EmailConfirmationReminderWorker` envia no máximo dois lembretes adicionais, sempre em dias diferentes do cadastro: o primeiro às 11:00 do dia seguinte e o segundo às 19:00 do outro dia, no fuso `America/Sao_Paulo`. Falhas SMTP são registradas e tentadas novamente sem consumir uma das duas entregas. Em **Admin > Usuários**, o operador pode reenviar manualmente sem consumir essa cota ou marcar o checkbox para confirmar o endereço manualmente. Quando já houve envio na data atual, o backend devolve a data e a interface exige confirmação explícita antes de permitir outro reenvio. A confirmação pelo link e a confirmação manual invalidam o token, cancelam lembretes pendentes e enviam ao cliente a mesma notificação de conta confirmada; na operação manual, falha do SMTP desfaz a confirmação para permitir nova tentativa coerente.
 
+O endereço configurado em `AdminEmail` também recebe notificações administrativas por e-mail quando um usuário conclui o cadastro público, gera um novo pedido, tem o pagamento confirmado pela primeira vez ou cancela um pedido pelo painel. As mensagens usam os dados já persistidos do usuário e do pedido, nunca incluem senha, token de sessão ou conteúdo do Pix, e uma falha SMTP é registrada sem desfazer a operação comercial concluída.
+
+Toda exceção capturada ou falha que impeça o efeito esperado de uma operação deve ser registrada com `ILogger.LogError` ou `LogCritical`, passando o objeto da exceção quando ele existir. O provider de logging encaminha esses níveis ao Telegram; não descarte exceções silenciosamente nem rebaixe para `Information`/`Warning` uma operação que deixou de fazer o que deveria. Condições recuperáveis podem usar `Warning` somente quando o efeito principal foi concluído ou existe reconciliação automática claramente registrada. Preserve a sanitização: mensagens e exceções nunca podem expor senhas, tokens, chaves, conteúdo Pix ou outros segredos. `Telegram:MinimumLevel` deve permanecer entre `Trace` e `Error` — `Warning` é o padrão recomendado — e a validação de inicialização rejeita `Critical` e `None`, pois eles silenciariam erros comuns. Como o próprio provider não pode registrar uma falha em si mesmo sem recursão, rejeições ou indisponibilidade da API do Telegram usam um fallback sanitizado em `stderr`, sem URL, token ou conteúdo da mensagem.
+
 O painel (`wwwroot/painel.html`) permite consulta pública do simulador de preços. Links no formato abaixo abrem diretamente a área de cálculo e deixam o período correspondente selecionado:
 
 ```text
@@ -251,9 +255,60 @@ O frontend utiliza `wwwroot/analytics.js` e o endpoint `POST /api/analytics/even
 
 O funil acompanha landing, simulador, autenticação, cadastro, tentativa de checkout, Pix gerado, pagamento recebido e acesso entregue. Eventos de pagamento e entrega são confirmados pelo backend. E-mail, WhatsApp, AnyDesk, senha, payload Pix e dados bancários não devem ser enviados como propriedades de analytics.
 
-Não há Google Analytics, Meta Pixel ou outro rastreador de terceiros instalado. Atualmente é registrada apenas a telemetria first-party permitida, incluindo a origem/referrer quando disponível; UTMs e identificadores de clique do Facebook/Google não são persistidos. Qualquer integração futura precisa de avaliação de privacidade, consentimento e CSP antes de ser adicionada.
+Essa telemetria first-party continua independente da preferência de marketing. Ela não usa Google Analytics e não recebe e-mail, WhatsApp, AnyDesk, senha, conteúdo Pix ou dados bancários.
 
 As contagens por evento e por sessão aparecem no bloco **Funil de produto** do Dashboard administrativo e respeitam o filtro de período já existente.
+
+## Meta Pixel e Conversions API
+
+A integração opcional de marketing utiliza o Meta Pixel no navegador e a
+Conversions API no backend. Nenhum script ou evento da Meta é ativado antes do
+consentimento específico de marketing. Cookies necessários e a telemetria
+first-party continuam funcionando quando a pessoa recusa.
+
+As configurações são lidas exclusivamente do ambiente:
+
+- `META_DATASET_ID`: identifica o dataset e o Pixel; pode ser devolvido pelo
+  endpoint público de configuração.
+- `META_CAPI_ACCESS_TOKEN`: usado somente no backend como Bearer token e nunca
+  entra em HTML, JavaScript, payload, URL ou logs.
+- `META_CAPI_TEST_EVENT_CODE`: opcional; quando definido, é enviado como
+  `test_event_code`.
+- `META_GRAPH_API_VERSION`: opcional, com padrão `v25.0`.
+
+O navegador guarda `phost_marketing_consent`, a versão da preferência e um UUID
+first-party de atribuição usando `Secure`, `SameSite=Lax` e `Path=/`. Depois da
+aceitação, a tabela `meta_attributions` pode guardar `_fbp`, `_fbc`, `fbclid`,
+IP, User-Agent, URL canônica, versão e momento do consentimento. O UUID associa
+essa captura ao usuário, ao teste e ao pedido; `orders.meta_attribution_id`
+preserva o snapshot que será usado pelo webhook. Cada snapshot referencia a
+captura original para que uma revogação também invalide eventos tardios. O IP e
+o User-Agent recebidos do Asaas nunca participam do evento `Purchase`.
+
+`meta_conversion_events` mantém a idempotência e o estado sanitizado das
+entregas. A evolução de schema é idempotente no `DatabaseInitializer.cs`; as
+atribuições e registros de entrega vencem após 13 meses. A revogação impede
+eventos futuros, limpa os identificadores Meta acessíveis na origem e não
+interfere nas funções essenciais.
+
+Eventos e gatilhos:
+
+- `PageView`: carregamento de cada página pública após consentimento, Pixel.
+- `ViewContent`: abertura de `/guia-wyd`, Pixel e CAPI com o mesmo UUID.
+- `Contact`: clique real em WhatsApp, Pixel e CAPI com o mesmo UUID.
+- `Lead`: nova solicitação de teste registrada, servidor e Pixel deduplicados.
+- `CompleteRegistration`: confirmação efetiva do e-mail, servidor, com ID
+  determinístico por usuário.
+- `StartTrial`: transição efetiva do teste para `liberado`, somente servidor,
+  com ID determinístico por solicitação.
+- `InitiateCheckout`: pedido criado e Pix válido gerado, servidor e Pixel
+  deduplicados com dados calculados pelo backend.
+- `Purchase`: primeira confirmação de pagamento pelo webhook Asaas, somente
+  servidor, com ID determinístico por pedido e valor efetivamente recebido.
+
+A Dataset Quality API e um dashboard de qualidade não fazem parte desta
+entrega. Permanecem como melhoria posterior; o runbook de validação está em
+[`docs/meta-conversions-testing.md`](docs/meta-conversions-testing.md).
 
 ## 🌐 Detalhes de Infraestrutura e Ambiente
 - **Ambiente de Hospedagem:** Container LXC dentro do Proxmox VE (Rodando Debian 12).
