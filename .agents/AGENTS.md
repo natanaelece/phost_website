@@ -36,6 +36,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - Teste grátis exige sessão local, possui um registro por usuário e trilha de eventos, e nunca aciona pedidos, Pix, Asaas, AD ou Evolution API. Metadados técnicos de cadastro ficam restritos ao admin.
 - Se `ad_username` já existe, o provisionamento pago reutiliza a conta vinculada e não cria outra.
 - A conta AD usa a mesma senha do site. Até o primeiro pagamento, ela fica reversivelmente protegida em `pending_ad_credentials`; apague o registro logo após criar e vincular a conta AD. Nunca envie ou registre a senha.
+- O e-mail enviado após o provisionamento informa o usuário do computador, o acesso web posterior à entrega por `https://acesso.phost.pro` com login do site e o contato para configuração via AnyDesk; nunca inclua a senha.
 - O vencimento comercial inclui todo o dia exibido: `accountExpires` vence à meia-noite seguinte; às 01:00 a conta sem outra licença ativa é desativada e movida para a OU configurada de inativos.
 - Confirmação de e-mail admite no máximo dois lembretes automáticos em dias distintos (11:00 e 19:00); o admin pode reenviar à parte ou confirmar manualmente.
 - Reenvio manual no mesmo dia exige confirmação explícita do operador, com a guarda aplicada também no backend.
