@@ -132,6 +132,28 @@ const server = http.createServer(async (request, response) => {
       response.end('[]');
       return;
     }
+    if (requestPath === '/api/admin/users') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({
+        total: 1,
+        page: 1,
+        limit: 20,
+        users: [{
+          id: '00000000-0000-0000-0000-000000000001',
+          name: 'Usuário Fixture',
+          email: 'fixture@example.com',
+          whatsapp: '11999999999',
+          isActive: true,
+          emailConfirmed: true,
+          adUsername: 'fixture.user',
+          totalOrders: 2,
+          totalSpent: 140,
+          activeLicenses: 1,
+          createdAt: '2026-07-01T12:00:00'
+        }]
+      }));
+      return;
+    }
     const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '');
     let filePath = path.resolve(webRoot, relativePath);
     if (filePath !== webRoot && !filePath.startsWith(`${webRoot}${path.sep}`)) {
@@ -386,6 +408,36 @@ try {
       `
     },
     {
+      name: 'admin-collapsible-sidebar',
+      page: '/admin/dashboard?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 1440, height: 900 },
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        const sidebar = document.getElementById('sidebar');
+        const main = document.getElementById('main');
+        const button = document.querySelector('.sidebar-collapse-toggle');
+        localStorage.removeItem('premier_admin_sidebar_collapsed');
+        if (sidebar.classList.contains('sidebar-collapsed')) button.click();
+        button.click();
+        setTimeout(() => {
+          const collapsed = sidebar.classList.contains('sidebar-collapsed')
+            && sidebar.getBoundingClientRect().width <= 80
+            && parseFloat(getComputedStyle(main).marginLeft) <= 80
+            && getComputedStyle(sidebar.querySelector('.slogo > div')).display === 'none'
+            && sidebar.querySelector('.ni').title.length > 0
+            && localStorage.getItem('premier_admin_sidebar_collapsed') === 'true';
+          button.click();
+          setTimeout(() => done(
+            collapsed
+            && !sidebar.classList.contains('sidebar-collapsed')
+            && sidebar.getBoundingClientRect().width >= 230
+            && localStorage.getItem('premier_admin_sidebar_collapsed') === 'false'
+          ), 250);
+        }, 250);
+      `
+    },
+    {
       name: 'admin-ad-actions-wide',
       page: '/admin/active-directory?authenticated-fixture=1',
       wait: 1900,
@@ -412,6 +464,32 @@ try {
       `
     },
     {
+      name: 'admin-user-actions-wide',
+      page: '/admin/usuarios?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 2400, height: 900 },
+      script: `
+        const card = document.getElementById('users-body').closest('.tbl-card');
+        const inline = card.querySelector('.user-actions-inline');
+        const more = card.querySelector('.user-actions-more');
+        return getComputedStyle(inline).display !== 'none'
+          && getComputedStyle(more).display === 'none';
+      `
+    },
+    {
+      name: 'admin-user-actions-narrow',
+      page: '/admin/usuarios?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 900, height: 900 },
+      script: `
+        const card = document.getElementById('users-body').closest('.tbl-card');
+        const inline = card.querySelector('.user-actions-inline');
+        const more = card.querySelector('.user-actions-more');
+        return getComputedStyle(inline).display === 'none'
+          && getComputedStyle(more).display !== 'none';
+      `
+    },
+    {
       name: 'admin-ad-selected-computers-first',
       page: '/admin/active-directory?authenticated-fixture=1',
       wait: 1900,
@@ -423,6 +501,112 @@ try {
           && computers[0].checked
           && computers[1].value === 'SRV02'
           && !computers[1].checked;
+      `
+    },
+    {
+      name: 'admin-ad-mobile-actions-below-sidebar',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 390, height: 844 },
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        const actions = document.getElementById('ad-actions');
+        const toggle = document.querySelector('.mobile-nav-toggle');
+        const visibleBefore = getComputedStyle(actions).visibility === 'visible'
+          && actions.getBoundingClientRect().right <= window.innerWidth;
+        toggle.click();
+        setTimeout(() => {
+          const sidebar = document.getElementById('sidebar');
+          const hiddenWhileOpen = sidebar.classList.contains('mobile-open')
+            && getComputedStyle(actions).visibility === 'hidden'
+            && getComputedStyle(actions).pointerEvents === 'none';
+          document.querySelector('.sidebar-backdrop').click();
+          setTimeout(() => done(
+            visibleBefore
+            && hiddenWhileOpen
+            && !sidebar.classList.contains('mobile-open')
+            && getComputedStyle(actions).visibility === 'visible'
+          ), 50);
+        }, 50);
+      `
+    },
+    {
+      name: 'admin-manual-order-daily-duration',
+      page: '/admin/pedidos?authenticated-fixture=1',
+      wait: 1900,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        document.querySelector('[data-csp-click="h050"]').click();
+        setTimeout(() => {
+          const period = document.getElementById('m-order-period');
+          const group = document.getElementById('m-order-days-group');
+          const weeklyHidden = group.classList.contains('hidden');
+          period.value = 'diaria';
+          period.dispatchEvent(new Event('change', { bubbles: true }));
+          setTimeout(() => {
+            const dailyVisible = !group.classList.contains('hidden');
+            period.value = 'mensal';
+            period.dispatchEvent(new Event('change', { bubbles: true }));
+            setTimeout(() => done(
+              weeklyHidden
+              && dailyVisible
+              && group.classList.contains('hidden')
+            ), 50);
+          }, 50);
+        }, 100);
+      `
+    },
+    {
+      name: 'admin-manual-order-custom-period',
+      page: '/admin/pedidos?authenticated-fixture=1',
+      wait: 1900,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        document.querySelector('[data-csp-click="h050"]').click();
+        setTimeout(() => {
+          const period = document.getElementById('m-order-period');
+          period.value = 'personalizado';
+          period.dispatchEvent(new Event('change', { bubbles: true }));
+          setTimeout(() => {
+            const dates = document.getElementById('m-order-custom-dates');
+            const start = document.getElementById('m-order-start-date');
+            const end = document.getElementById('m-order-end-date');
+            const days = document.getElementById('m-order-days');
+            start.value = '2026-07-24';
+            end.value = '2026-08-08';
+            end.dispatchEvent(new Event('change', { bubbles: true }));
+            setTimeout(() => done(
+              !dates.classList.contains('hidden')
+              && document.getElementById('m-order-days-group').classList.contains('hidden')
+              && days.value === '15'
+              && document.getElementById('m-order-price').value === ''
+            ), 50);
+          }, 50);
+        }, 100);
+      `
+    },
+    {
+      name: 'admin-manual-order-price-mask',
+      page: '/admin/pedidos?authenticated-fixture=1',
+      wait: 1900,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        document.querySelector('[data-csp-click="h050"]').click();
+        setTimeout(() => {
+          const price = document.getElementById('m-order-price');
+          const initialUsesComma = price.value === '35,00';
+          price.value = '120';
+          price.dispatchEvent(new Event('input', { bubbles: true }));
+          price.dispatchEvent(new Event('blur'));
+          const integerGetsCents = price.value === '120,00';
+          price.value = '99,5';
+          price.dispatchEvent(new Event('input', { bubbles: true }));
+          price.dispatchEvent(new Event('blur'));
+          const decimalCompletes = price.value === '99,50';
+          price.value = '12.34';
+          price.dispatchEvent(new Event('input', { bubbles: true }));
+          done(initialUsesComma && integerGetsCents && decimalCompletes && !price.value.includes('.'));
+        }, 100);
       `
     },
     {

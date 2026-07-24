@@ -2,6 +2,14 @@
 
 > Atualizacao do painel admin: o painel administrativo fica em `wwwroot/admin/`, com nove telas HTML estaticas para Dashboard, Financeiro, CRM, Testes grátis, Pedidos, Usuários, Active Directory, Notificações e Logs. O `admin.html` permanece como entrada compatível para `/admin/dashboard`. O admin usa CSS nativo e Vanilla JavaScript; não usa Tailwind sem permissão explícita.
 
+No desktop, o menu lateral administrativo pode ser minimizado pelo controle na
+área do logotipo; nesse estado ficam visíveis apenas os ícones, e a preferência
+é lembrada no navegador. No mobile, o menu continua sendo uma gaveta e as ações
+da página ficam ocultas enquanto ela está aberta, evitando sobreposição.
+Nas tabelas de **Active Directory** e **Usuários**, os botões de cada registro
+aparecem diretamente quando há largura disponível; **Mais ações** é usado
+somente quando a tabela não comporta o conjunto completo.
+
 Plataforma de gerenciamento e automação para venda e gestão de slots/acessos (WYD) integrada com Active Directory e faturamento automático via Asaas (PIX).
 
 > [!IMPORTANT]
@@ -162,11 +170,25 @@ a regra comercial.
 
 `Services/PricingRules.cs` é a única fonte das quantidades, preços, descontos e arredondamentos comerciais. O backend expõe `GET /api/checkout/pricing-rules` para montar os controles e `POST /api/checkout/pricing-quote` para calcular o total autoritativo. Não replique valores em controladores ou JavaScript.
 
-O simulador e o pedido manual usam as mesmas regras: o padrão é 1 slot; diária começa no menor pacote permitido (3 computadores por 3 dias, atualmente R$ 51 após a regra de arredondamento), semanal no menor valor (R$ 35) e mensal no menor valor com desconto (R$ 105). O total do pedido manual continua editável pelo operador, mas seu preenchimento e recálculo partem sempre da cotação do servidor.
+O simulador e o pedido manual usam as mesmas regras: o padrão é 1 slot; diária começa no menor pacote permitido (3 computadores por 3 dias, atualmente R$ 51 após a regra de arredondamento), semanal no menor valor (R$ 35) e mensal no menor valor com desconto (R$ 105). No modal administrativo, **Dias (Duração)** aparece somente para a diária. O total dos planos tabelados continua editável pelo operador, mas seu preenchimento e recálculo partem sempre da cotação do servidor.
 
 ### Pedido criado manualmente
 
 Um pedido criado no admin é identificado por `orders.created_manually` e nasce como `pendente`, separado do conceito `paid_manually`. Ele exige os mesmos dados operacionais do checkout e respeita a regra de um pedido pendente por cliente, mas não cria pagamento fictício nem marca o pedido como pago.
+
+O plano **Personalizado** é exclusivo do pedido manual. Ao selecioná-lo, o
+operador informa **Do dia** e **Até o dia**; a diferença entre as datas determina
+`orders.days`, e computadores, slots e valor são preenchidos manualmente. As
+datas são um controle para calcular a duração, não novos campos persistidos: o
+vencimento continua seguindo a regra global `orders.created_at::date +
+orders.days`. O PIX posterior desse pedido preserva o valor informado pelo
+operador e valida apenas os limites operacionais, sem recalcular uma tabela
+comercial para o plano personalizado.
+
+O campo **Valor total** do pedido manual usa máscara monetária brasileira em
+todos os planos: aceita vírgula como separador, descarta ponto e completa duas
+casas decimais ao sair do campo. O frontend converte esse texto para número
+antes de enviá-lo, e o backend continua validando que o total seja positivo.
 
 O cliente visualiza esse pedido pendente no painel e pode usar **Gerar PIX**. O endpoint anexa ao próprio pedido um QR estático calculado pelas regras atuais; quando o QR de um pedido manual expira, ele pode ser gerado novamente. No admin, o operador pode marcar o pagamento manualmente ou excluir o rascunho enquanto ainda não existe QR. Depois que o QR existe, cancelamentos seguem o fluxo seguro de conciliação com o Asaas. A coluna e seus ajustes de schema são mantidos pelo `DatabaseInitializer.cs`.
 
@@ -429,6 +451,13 @@ Principais areas do painel:
 Toda comunicação LDAP deve permanecer encapsulada em `Services/ActiveDirectoryService.cs` e usar LDAPS. A tela de Active Directory permite criar, editar, duplicar e excluir grupos globais de segurança e objetos de computador usando os mesmos atributos dos registros atuais. Grupos limitam e validam nome e descrição; computadores usam nome compatível com NetBIOS, `sAMAccountName` terminado em `$`, `dNSHostName`, sistema operacional e estado ativo/desativado. A listagem de computadores também mostra suas associações de grupo e permite adicioná-las ou removê-las pelo modal **Gerenciar**.
 
 Em **Admin > Active Directory > Usuários > Mais ações > Editar**, o campo **E-mail** representa o atributo `mail` da conta no AD. Quando esse atributo ainda está vazio e existe um cadastro local vinculado pelo `ad_username`, o modal usa o e-mail do cadastro como valor inicial e identifica o campo como **E-mail (será atualizado)**; essa consulta não altera o diretório. O valor validado é gravado no atributo `mail` somente quando o administrador salva o formulário, e pode ser editado ou removido sem modificar o e-mail de login armazenado no cadastro local.
+
+Ao excluir uma conta pela tela do Active Directory, a operação remove primeiro
+o objeto no AD e depois limpa `users.ad_username` de todos os cadastros locais
+que apontavam para esse usuário, com comparação sem diferença entre maiúsculas
+e minúsculas. Assim, a tela **Usuários** volta a exibir a opção de vínculo e não
+mantém uma referência para uma conta AD inexistente. Falha em qualquer uma
+dessas etapas é registrada como erro e a API não informa sucesso completo.
 
 Na coluna **Vencimento**, contas marcadas como **Nunca** não exibem o campo de data; ele reaparece ao desmarcar essa opção. Na coluna **Ações**, os botões são mostrados diretamente quando cabem na largura disponível e são recolhidos em **Mais ações** somente quando a linha não comporta todos eles.
 

@@ -293,9 +293,15 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         
         document.getElementById('m-order-period').value = 'semanal';
         document.getElementById('m-order-days').value = _pricingRules.weeklyDays;
+        document.getElementById('m-order-days-group').classList.add('hidden');
+        document.getElementById('m-order-custom-dates').classList.add('hidden');
+        const customStart=new Date(),customEnd=new Date();
+        customEnd.setDate(customEnd.getDate()+_pricingRules.weeklyDays);
+        document.getElementById('m-order-start-date').value=formatDateInputValue(customStart);
+        document.getElementById('m-order-end-date').value=formatDateInputValue(customEnd);
         document.getElementById('m-order-pcs').value = _pricingRules.minComputers;
         document.getElementById('m-order-slots').value = _pricingRules.minSlots;
-        document.getElementById('m-order-price').value = Number(_pricingRules.minimumPrices.semanal).toFixed(2);
+        setManualOrderPrice(_pricingRules.minimumPrices.semanal);
         document.getElementById('m-order-anydesk').value = "";
         document.getElementById('m-order-server').value = "";
         
@@ -312,18 +318,63 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     async function syncManualOrderPeriod(){
         await loadPricingRules();
         const period=document.getElementById('m-order-period').value,days=document.getElementById('m-order-days'),pcs=document.getElementById('m-order-pcs');
+        document.getElementById('m-order-days-group').classList.toggle('hidden',period!=='diaria');
+        document.getElementById('m-order-custom-dates').classList.toggle('hidden',period!=='personalizado');
         if(period==='semanal')days.value=_pricingRules.weeklyDays;
         else if(period==='mensal')days.value=_pricingRules.monthlyDays;
-        else{days.value=_pricingRules.minDailyDays;if(parseInt(pcs.value)<_pricingRules.minDailyComputers)pcs.value=_pricingRules.minDailyComputers;}
+        else if(period==='diaria'){days.value=_pricingRules.minDailyDays;if(parseInt(pcs.value)<_pricingRules.minDailyComputers)pcs.value=_pricingRules.minDailyComputers;}
+        else{
+            syncManualOrderCustomDays();
+            document.getElementById('m-order-price').value='';
+            return;
+        }
         updateManualOrderSuggestedPrice();
     }
 
+    function formatDateInputValue(date){
+        const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+        return local.toISOString().slice(0,10);
+    }
+
+    function syncManualOrderCustomDays(){
+        const startValue=document.getElementById('m-order-start-date').value;
+        const endValue=document.getElementById('m-order-end-date').value;
+        if(!startValue||!endValue)return 0;
+        const start=new Date(`${startValue}T00:00:00`);
+        const end=new Date(`${endValue}T00:00:00`);
+        const days=Math.round((end-start)/86400000);
+        document.getElementById('m-order-days').value=days>0?days:'';
+        return days;
+    }
+
+    function setManualOrderPrice(value){
+        document.getElementById('m-order-price').value=Number(value).toFixed(2).replace('.',',');
+    }
+
+    function formatManualOrderPriceInput(input,finalize){
+        let value=input.value.replace(/\./g,'').replace(/[^\d,]/g,'');
+        const comma=value.indexOf(',');
+        if(comma>=0)value=value.slice(0,comma+1)+value.slice(comma+1).replace(/,/g,'');
+        let [integer='',decimal='']=value.split(',');
+        integer=integer.replace(/^0+(?=\d)/,'');
+        decimal=decimal.slice(0,2);
+        if(!integer&&!decimal){input.value='';return;}
+        if(!integer)integer='0';
+        input.value=finalize
+            ? `${integer},${decimal.padEnd(2,'0')}`
+            : `${integer}${comma>=0?','+decimal:''}`;
+    }
+
     async function updateManualOrderSuggestedPrice(){
+        if(document.getElementById('m-order-period').value==='personalizado'){
+            syncManualOrderCustomDays();
+            return;
+        }
         const requestId=++_manualPriceRequest;
         const payload={period:document.getElementById('m-order-period').value,days:parseInt(document.getElementById('m-order-days').value),computers:parseInt(document.getElementById('m-order-pcs').value),slots:parseInt(document.getElementById('m-order-slots').value)};
         const response=await fetch('/api/checkout/pricing-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         const data=await response.json().catch(()=>({}));if(requestId!==_manualPriceRequest)return;
-        if(response.ok)document.getElementById('m-order-price').value=Number(data.total).toFixed(2);
+        if(response.ok)setManualOrderPrice(data.total);
         else showAdminMessage('error',data.erro||'Não foi possível calcular o valor sugerido.');
     }
 
@@ -334,16 +385,23 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const wydServerName=document.getElementById('m-order-server').value.trim();
         if(anyDeskId.length<6||anyDeskId.length>15)return showAdminMessage('error','Informe um ID do AnyDesk válido, com 6 a 15 números.');
         if(!wydServerName)return showAdminMessage('error','Informe o servidor WYD.');
+        const period=document.getElementById('m-order-period').value;
+        const customStartDate=document.getElementById('m-order-start-date').value;
+        const customEndDate=document.getElementById('m-order-end-date').value;
+        const customDays=period==='personalizado'?syncManualOrderCustomDays():0;
+        if(period==='personalizado'&&customDays<1)return showAdminMessage('error','Informe uma data final posterior à data inicial.');
 
         const req = {
             userId,
             anyDeskId,
             wydServerName,
-            period: document.getElementById('m-order-period').value,
+            period,
             days: parseInt(document.getElementById('m-order-days').value) || 7,
+            customStartDate: period==='personalizado'?customStartDate:null,
+            customEndDate: period==='personalizado'?customEndDate:null,
             computers: parseInt(document.getElementById('m-order-pcs').value) || 1,
             wydsPerComputer: parseInt(document.getElementById('m-order-slots').value) || 1,
-            totalPrice: parseFloat(document.getElementById('m-order-price').value) || 0
+            totalPrice: parseFloat(document.getElementById('m-order-price').value.replace(',','.')) || 0
         };
 
         const r = await fetch('/api/admin/orders/manual', {
@@ -1211,6 +1269,7 @@ function showApp(){
   setupAdminNavigation();
   loadCurrentView();
   setupMaintenanceControls();
+  setupAdminSidebarCollapse();
   resumeMaintenanceState();
 }
 function setupAdminMobileNavigation(){
@@ -1223,6 +1282,42 @@ function setupAdminMobileNavigation(){
   const close=()=>{document.getElementById('sidebar')?.classList.remove('mobile-open');backdrop.classList.remove('active');button.setAttribute('aria-expanded','false');};
   button.addEventListener('click',()=>{const sidebar=document.getElementById('sidebar');const open=!sidebar.classList.contains('mobile-open');sidebar.classList.toggle('mobile-open',open);backdrop.classList.toggle('active',open);button.setAttribute('aria-expanded',String(open));});
   backdrop.addEventListener('click',close);document.querySelectorAll('.ni').forEach(link=>link.addEventListener('click',close));
+}
+
+const ADMIN_SIDEBAR_COLLAPSED_KEY='premier_admin_sidebar_collapsed';
+function setupAdminSidebarCollapse(){
+  const sidebar=document.getElementById('sidebar');
+  const logo=sidebar?.querySelector('.slogo');
+  if(!sidebar||!logo)return;
+  let button=sidebar.querySelector('.sidebar-collapse-toggle');
+  if(!button){
+    button=document.createElement('button');
+    button.type='button';
+    button.className='sidebar-collapse-toggle';
+    button.setAttribute('aria-controls','sidebar');
+    logo.appendChild(button);
+  }
+  sidebar.querySelectorAll('.ni').forEach(link=>{
+    if(!link.title)link.title=link.textContent.trim();
+  });
+  const apply=collapsed=>{
+    sidebar.classList.toggle('sidebar-collapsed',collapsed);
+    button.textContent=collapsed?'›':'‹';
+    button.setAttribute('aria-expanded',String(!collapsed));
+    button.setAttribute('aria-label',collapsed?'Expandir menu lateral':'Minimizar menu lateral');
+  };
+  let collapsed=false;
+  try{collapsed=localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_KEY)==='true';}catch{}
+  apply(collapsed);
+  if(button.dataset.wired==='true')return;
+  button.dataset.wired='true';
+  button.addEventListener('click',()=>{
+    const next=!sidebar.classList.contains('sidebar-collapsed');
+    apply(next);
+    try{localStorage.setItem(ADMIN_SIDEBAR_COLLAPSED_KEY,String(next));}catch{}
+    scheduleAdActionLayout();
+    scheduleUserActionLayout();
+  });
 }
 
 const MAINTENANCE_JOB_KEY='premier_admin_maintenance_job';
@@ -1808,6 +1903,7 @@ function showRegistrationInfo(button){
 }
 window.addEventListener('resize',hideRegistrationInfo);
 window.addEventListener('resize',scheduleAdActionLayout);
+window.addEventListener('resize',scheduleUserActionLayout);
 window.addEventListener('scroll',hideRegistrationInfo,true);
 function registrationInfo(u){
   const lines=[];
@@ -1831,7 +1927,12 @@ async function loadUsers(p){
   if(!data.users?.length){body.innerHTML='<tr><td colspan="10" class="empty">Nenhum usuario encontrado.</td></tr>';}
   else {
       _allLocalUsers = data.users;
-      body.innerHTML=data.users.map(u=>`<tr>
+      body.innerHTML=data.users.map(u=>{
+        const actionButtons=`
+            <button class="btn btn-outline csp-d031" title="Editar" data-admin-click="open-local-user" data-user-id="${esc(u.id)}">Editar</button>
+            <button class="btn btn-outline local-user-toggle ${u.isActive?'is-deactivate':'is-activate'}" data-admin-click="toggle-local-user" data-user-id="${esc(u.id)}" data-activate="${!u.isActive}" title="${u.id === S.user?.id ? 'Voc&ecirc; n&atilde;o pode inativar sua pr&oacute;pria conta' : (u.isActive?'Inativar cadastro':'Ativar cadastro')}" ${u.id === S.user?.id && u.isActive ? 'disabled' : ''}>${u.isActive?'Inativar':'Ativar'}</button>
+            <button class="btn btn-outline csp-d032" title="Excluir" data-admin-click="delete-local-user" data-user-id="${esc(u.id)}" data-has-ad="${!!u.adUsername}">Excluir</button>`;
+        return `<tr>
           <td><div class="ucell"><div class="avatar avatar-lg">${initial(u.name)}</div><div><div class="ucell-name">${esc(u.name)}</div><div class="ucell-email">${esc(u.email)}</div></div></div></td>
           <td class="muted">${esc(u.whatsapp||'-')}</td>
           <td>${u.isActive?'<span class="badge b-ok">Ativa</span>':'<span class="badge b-err">Inativa</span>'}</td>
@@ -1842,15 +1943,29 @@ async function loadUsers(p){
           <td>${u.emailConfirmed?'<label class="inline-check"><input type="checkbox" checked disabled><span>Confirmado</span></label>':`<div class="email-confirmation-actions"><input type="checkbox" data-user-id="${esc(u.id)}" data-admin-change="confirm-email" aria-label="Confirmar e-mail manualmente" title="Confirmar e-mail manualmente"><button class="btn btn-outline" data-admin-click="resend-email" data-user-id="${esc(u.id)}">Reenviar</button></div>`}</td>
           <td class="muted"><span class="registration-date">${fmtDate(u.createdAt)} ${registrationInfo(u)}</span></td>
           <td>
-              <details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
-                  <button class="btn btn-outline csp-d031" title="Editar" data-admin-click="open-local-user" data-user-id="${esc(u.id)}">Editar</button>
-                  <button class="btn btn-outline local-user-toggle ${u.isActive?'is-deactivate':'is-activate'}" data-admin-click="toggle-local-user" data-user-id="${esc(u.id)}" data-activate="${!u.isActive}" title="${u.id === S.user?.id ? 'Voc&ecirc; n&atilde;o pode inativar sua pr&oacute;pria conta' : (u.isActive?'Inativar cadastro':'Ativar cadastro')}" ${u.id === S.user?.id && u.isActive ? 'disabled' : ''}>${u.isActive?'Inativar':'Ativar'}</button>
-                  <button class="btn btn-outline csp-d032" title="Excluir" data-admin-click="delete-local-user" data-user-id="${esc(u.id)}" data-has-ad="${!!u.adUsername}">Excluir</button>
-              </div></details>
+              <div class="user-actions-inline">${actionButtons}</div>
+              <details class="action-details user-actions-more"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">${actionButtons}</div></details>
           </td>
-      </tr>`).join('');
+      </tr>`;
+      }).join('');
+      scheduleUserActionLayout();
   }
   renderPag('users',data.total,S.usrPage,20);
+}
+
+let userActionLayoutFrame=null;
+function scheduleUserActionLayout(){
+  if(userActionLayoutFrame!==null)cancelAnimationFrame(userActionLayoutFrame);
+  userActionLayoutFrame=requestAnimationFrame(()=>{
+    userActionLayoutFrame=null;
+    const body=document.getElementById('users-body');
+    const card=body?.closest('.tbl-card');
+    const wrapper=card?.querySelector('.tbl-wrap');
+    const table=wrapper?.querySelector('table');
+    if(!card||!wrapper||!table)return;
+    card.classList.remove('user-actions-collapsed');
+    card.classList.toggle('user-actions-collapsed',table.scrollWidth>wrapper.clientWidth+1);
+  });
 }
 let st_=null;function handleSearch(v){S.usrSearch=v;S.usrPage=1;clearTimeout(st_);st_=setTimeout(()=>loadUsers(),400);}
 

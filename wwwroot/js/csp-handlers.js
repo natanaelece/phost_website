@@ -135,7 +135,9 @@
     h131: function (event) { limparErroReset('newPass', 'newPassError') },
     h132: function (event) { limparErroReset('confirmPass', 'confirmPassError') },
     h133: function (event) { copiarMeuCodigo() },
-    h134: function (event) { removerCupom() }
+    h134: function (event) { removerCupom() },
+    h135: function (event) { formatManualOrderPriceInput(this, false) },
+    h136: function (event) { formatManualOrderPriceInput(this, true) }
   });
 
   const dispatch = (eventType, event) => {

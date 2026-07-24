@@ -407,8 +407,18 @@ namespace PremierAPI.Controllers
             decimal total = (decimal)order.total_price;
             if (!Regex.IsMatch(anydesk, @"^\d{6,15}$")) return BadRequest(new { erro = "O pedido possui um ID do AnyDesk inválido. Fale com o suporte." });
             if (string.IsNullOrWhiteSpace(server) || server.Length > 50 || IsUnsupportedWydServer(server)) return BadRequest(new { erro = "O servidor WYD do pedido precisa ser corrigido pelo suporte." });
-            try { PricingRules.Calculate(period, computers, wyds, days); }
-            catch (ArgumentException ex) { return BadRequest(new { erro = $"A configuração do pedido precisa ser corrigida pelo suporte: {ex.Message}" }); }
+            if (period == "personalizado")
+            {
+                if (days < 1 || days > 3650 ||
+                    computers < PricingRules.MinComputers || computers > PricingRules.MaxComputers ||
+                    wyds < PricingRules.MinSlots || wyds > PricingRules.MaxSlots)
+                    return BadRequest(new { erro = "A configuração do pedido personalizado precisa ser corrigida pelo suporte." });
+            }
+            else
+            {
+                try { PricingRules.Calculate(period, computers, wyds, days); }
+                catch (ArgumentException ex) { return BadRequest(new { erro = $"A configuração do pedido precisa ser corrigida pelo suporte: {ex.Message}" }); }
+            }
             if (total <= 0) return BadRequest(new { erro = "O valor do pedido precisa ser corrigido pelo suporte." });
 
             string pixAddressKey = await GetActivePixAddressKeyAsync();

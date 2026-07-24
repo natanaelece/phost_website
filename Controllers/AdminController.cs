@@ -1243,10 +1243,25 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
 
             string period = (req.Period ?? "").Trim().ToLowerInvariant();
-            PricingQuote pricingQuote;
-            try { pricingQuote = PricingRules.Calculate(period, req.Computers, req.WydsPerComputer, req.Days); }
-            catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
-            int days = pricingQuote.Days;
+            int days;
+            if (period == "personalizado")
+            {
+                if (!req.CustomStartDate.HasValue || !req.CustomEndDate.HasValue || req.CustomEndDate <= req.CustomStartDate)
+                    return BadRequest(new { erro = "Informe uma data final posterior à data inicial." });
+                days = req.CustomEndDate.Value.DayNumber - req.CustomStartDate.Value.DayNumber;
+                if (days > 3650)
+                    return BadRequest(new { erro = "O período personalizado não pode ultrapassar 10 anos." });
+                if (req.Computers < PricingRules.MinComputers || req.Computers > PricingRules.MaxComputers ||
+                    req.WydsPerComputer < PricingRules.MinSlots || req.WydsPerComputer > PricingRules.MaxSlots)
+                    return BadRequest(new { erro = "Quantidade de computadores ou slots inválida." });
+            }
+            else
+            {
+                PricingQuote pricingQuote;
+                try { pricingQuote = PricingRules.Calculate(period, req.Computers, req.WydsPerComputer, req.Days); }
+                catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
+                days = pricingQuote.Days;
+            }
             string anydesk = Regex.Replace(req.AnyDeskId ?? "", @"\D", "");
             string server = (req.WydServerName ?? "").Trim();
             if (!Regex.IsMatch(anydesk, @"^\d{6,15}$")) return BadRequest(new { erro = "O ID do AnyDesk deve conter de 6 a 15 números." });
@@ -1578,8 +1593,23 @@ namespace PremierAPI.Controllers
             try
             {
                 await ad.DeleteUserAsync(username);
-                _logger.LogInformation("[ADMIN][AD] Usuario removido: {Username}.", username);
-                return Ok(new { msg = "Usuario removido do AD." });
+                using var db = new NpgsqlConnection(_connString);
+                int clearedLinks = await db.ExecuteAsync(
+                    @"UPDATE users
+                      SET ad_username = NULL
+                      WHERE ad_username IS NOT NULL
+                        AND LOWER(ad_username) = LOWER(@Username)",
+                    new { Username = username });
+                _logger.LogInformation(
+                    "[ADMIN][AD] Usuario removido: {Username}. Vinculos locais limpos: {ClearedLinks}.",
+                    username,
+                    clearedLinks);
+                return Ok(new
+                {
+                    msg = clearedLinks > 0
+                        ? "Usuario removido do AD e vínculo com o cadastro do site limpo."
+                        : "Usuario removido do AD."
+                });
             }
             catch (Exception ex)
             {
@@ -1826,6 +1856,8 @@ namespace PremierAPI.Controllers
         public Guid UserId { get; set; }
         public string Period { get; set; } = "";
         public int Days { get; set; }
+        public DateOnly? CustomStartDate { get; set; }
+        public DateOnly? CustomEndDate { get; set; }
         public int Computers { get; set; }
         public int WydsPerComputer { get; set; }
         public decimal TotalPrice { get; set; }
