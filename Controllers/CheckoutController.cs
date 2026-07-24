@@ -29,6 +29,7 @@ namespace PremierAPI.Controllers
         private readonly bool _debugLogs;
         private readonly string _connString;
         private readonly AdminNotificationEmailService _adminNotifications;
+        private readonly MetaBusinessEventService _metaBusinessEvents;
 
         private sealed class ReferralDiscountData
         {
@@ -47,10 +48,12 @@ namespace PremierAPI.Controllers
         public CheckoutController(
             ILogger<CheckoutController> logger,
             IConfiguration config,
-            AdminNotificationEmailService adminNotifications)
+            AdminNotificationEmailService adminNotifications,
+            MetaBusinessEventService metaBusinessEvents)
         {
             _logger = logger;
             _adminNotifications = adminNotifications;
+            _metaBusinessEvents = metaBusinessEvents;
             _asaasApiKey = config["Asaas:ApiKey"] ?? ""; 
 			_asaasSandBoxApiKey = config["Asaas:SandBoxApiKey"] ?? ""; 
             _debugLogs = config.GetValue<bool>("PremierConfig:EnableDebugLogs");
@@ -242,6 +245,10 @@ namespace PremierAPI.Controllers
                 return BadRequest(new { erro = "Nenhuma chave Pix ativa foi encontrada na conta Asaas." });
 
             Guid orderId = Guid.NewGuid();
+            Guid? metaAttributionId = await CreateMetaAttributionSnapshotAsync(
+                db,
+                pedido.UserId,
+                transaction);
             const int pixExpirationSeconds = 900;
             DateTime pixExpiresAt = DateTime.Now.AddSeconds(pixExpirationSeconds);
             var asaasPayload = new
@@ -284,10 +291,10 @@ namespace PremierAPI.Controllers
             {
                 string sqlOrder = @"INSERT INTO orders
                     (id, user_id, anydesk_id, wyd_server_name, computers, wyds_per_computer, period, days, total_price,
-                     asaas_pix_qr_code_id, pix_payload, pix_encoded_image, pix_expires_at, status)
+                     asaas_pix_qr_code_id, pix_payload, pix_encoded_image, pix_expires_at, status, meta_attribution_id)
                     VALUES
                     (@Id, @UserId, @Anydesk, @WydServerName, @Comps, @Wyds, @Period, @Days, @Total,
-                     @QrCodeId, @PixPayload, @EncodedImage, @PixExpiresAt, 'pendente')";
+                     @QrCodeId, @PixPayload, @EncodedImage, @PixExpiresAt, 'pendente', @MetaAttributionId)";
                 await db.ExecuteAsync(sqlOrder, new {
                     Id = orderId,
                     UserId = pedido.UserId,
@@ -301,7 +308,8 @@ namespace PremierAPI.Controllers
                     QrCodeId = qrCodeId,
                     PixPayload = pixPayload,
                     EncodedImage = encodedImage,
-                    PixExpiresAt = pixExpiresAt
+                    PixExpiresAt = pixExpiresAt,
+                    MetaAttributionId = metaAttributionId
                 }, transaction);
 
                 if (pedido.UsouDescontoIndicacao)
@@ -333,6 +341,13 @@ namespace PremierAPI.Controllers
             }
 
             await _adminNotifications.TrySendOrderCreatedAsync(orderId);
+            await _metaBusinessEvents.TrySendInitiateCheckoutAsync(orderId, HttpContext.RequestAborted);
+            string metaEventId = MetaBusinessEventService.InitiateCheckoutEventId(orderId);
+            var metaCustomData = MetaBusinessEventService.BuildCommerceCustomData(
+                orderId,
+                pedido.Periodo,
+                pedido.Pcs,
+                pedido.Total);
 
             return Ok(new
             {
@@ -341,7 +356,14 @@ namespace PremierAPI.Controllers
                 paymentId = qrCodeId,
                 total = pedido.Total,
                 expiresAt = pixExpiresAt,
-                expiresInSeconds = pixExpirationSeconds
+                expiresInSeconds = pixExpirationSeconds,
+                metaEventId,
+                metaEvent = new
+                {
+                    eventName = "InitiateCheckout",
+                    eventId = metaEventId,
+                    customData = metaCustomData
+                }
             });
         }
 
@@ -414,19 +436,52 @@ namespace PremierAPI.Controllers
                 return BadRequest(new { erro = "O gateway retornou um QR Code incompleto." });
             }
 
+            Guid? metaAttributionId = await CreateMetaAttributionSnapshotAsync(
+                db,
+                (Guid)order.user_id);
             int updated = await db.ExecuteAsync(
                 @"UPDATE orders SET asaas_pix_qr_code_id = @QrCodeId, pix_payload = @PixPayload,
-                                    pix_encoded_image = @EncodedImage, pix_expires_at = @PixExpiresAt
+                                    pix_encoded_image = @EncodedImage, pix_expires_at = @PixExpiresAt,
+                                    meta_attribution_id = COALESCE(@MetaAttributionId, meta_attribution_id)
                   WHERE id = @OrderId AND status = 'pendente' AND created_manually = true
                     AND asaas_pix_qr_code_id IS NULL",
-                new { QrCodeId = qrCodeId, PixPayload = pixPayload, EncodedImage = encodedImage, PixExpiresAt = pixExpiresAt, OrderId = orderId });
+                new
+                {
+                    QrCodeId = qrCodeId,
+                    PixPayload = pixPayload,
+                    EncodedImage = encodedImage,
+                    PixExpiresAt = pixExpiresAt,
+                    OrderId = orderId,
+                    MetaAttributionId = metaAttributionId
+                });
             if (updated != 1)
             {
                 await _httpClient.DeleteAsync($"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}");
                 return Conflict(new { erro = "O estado deste pedido mudou. Atualize a página." });
             }
 
-            return Ok(new { encodedImage, payload = pixPayload, paymentId = qrCodeId, total, expiresAt = pixExpiresAt, expiresInSeconds = pixExpirationSeconds });
+            await _metaBusinessEvents.TrySendInitiateCheckoutAsync(orderId, HttpContext.RequestAborted);
+            string metaEventId = MetaBusinessEventService.InitiateCheckoutEventId(orderId);
+            return Ok(new
+            {
+                encodedImage,
+                payload = pixPayload,
+                paymentId = qrCodeId,
+                total,
+                expiresAt = pixExpiresAt,
+                expiresInSeconds = pixExpirationSeconds,
+                metaEventId,
+                metaEvent = new
+                {
+                    eventName = "InitiateCheckout",
+                    eventId = metaEventId,
+                    customData = MetaBusinessEventService.BuildCommerceCustomData(
+                        orderId,
+                        period,
+                        computers,
+                        total)
+                }
+            });
         }
 
         [HttpPost("manual/{orderId}/cancel")]
@@ -629,6 +684,59 @@ namespace PremierAPI.Controllers
             }
 
             return string.Empty;
+        }
+
+        private async Task<Guid?> CreateMetaAttributionSnapshotAsync(
+            NpgsqlConnection db,
+            Guid userId,
+            NpgsqlTransaction? transaction = null)
+        {
+            Guid? requestedId = MetaAttributionService.ParseAttributionId(
+                Request.Headers["X-Meta-Attribution-Id"].FirstOrDefault());
+            if (!requestedId.HasValue) return null;
+
+            const string savepoint = "meta_attribution_snapshot";
+            try
+            {
+                if (transaction != null)
+                    await db.ExecuteAsync($"SAVEPOINT {savepoint}", transaction: transaction);
+
+                Guid? snapshotId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
+                    INSERT INTO meta_attributions
+                        (id, user_id, source_attribution_id,
+                         consent_status, consent_version, consented_at,
+                         fbp, fbc, fbclid, client_ip_address, client_user_agent,
+                         source_url, captured_at, updated_at)
+                    SELECT
+                        gen_random_uuid(), @UserId, COALESCE(source_attribution_id, id),
+                        consent_status, consent_version,
+                        consented_at, fbp, fbc, fbclid, client_ip_address,
+                        client_user_agent, source_url, CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP
+                    FROM meta_attributions
+                    WHERE id = @Id
+                      AND consent_status = 'accepted'
+                    RETURNING id;",
+                    new { Id = requestedId.Value, UserId = userId },
+                    transaction);
+
+                if (transaction != null)
+                    await db.ExecuteAsync($"RELEASE SAVEPOINT {savepoint}", transaction: transaction);
+                return snapshotId;
+            }
+            catch (Exception ex)
+            {
+                if (transaction != null)
+                {
+                    await db.ExecuteAsync($"ROLLBACK TO SAVEPOINT {savepoint}", transaction: transaction);
+                    await db.ExecuteAsync($"RELEASE SAVEPOINT {savepoint}", transaction: transaction);
+                }
+                _logger.LogError(
+                    ex,
+                    "[META ATRIBUICAO] Falha ao criar snapshot de atribuição do usuário {UserId}; checkout continuará sem marketing.",
+                    userId);
+                return null;
+            }
         }
         
         [HttpGet("status/{paymentId}")]

@@ -43,7 +43,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.
 - A descrição convencional do computador `SRV01_01` corresponde ao grupo `ACESSO_SRV01-01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
-- Analytics é first-party e não guarda PII. Não há Google Analytics nem Meta Pixel.
+- Analytics de produto é first-party e não guarda PII. O Meta Pixel/CAPI é uma integração separada, opcional e condicionada ao consentimento de marketing; preserve deduplicação, atribuição do pedido e token somente no backend.
 - Indexação pública: somente `/`, `/painel`, `/privacidade` e `/guia-wyd`; preserve `robots.txt` e `sitemap.xml` e não amplie essa lista sem nova autorização.
 - Host público canônico, redirecionamento de `www` e favicons globais seguem os invariantes definidos em `rules.md`.
 - Arquivos mutáveis da aplicação mantêm `no-store` no navegador. Assets públicos e administrativos gerados com hash usam cache imutável de um ano. Somente `/`, `/painel`, `/privacidade` e `/guia-wyd` admitem microcache de 60 segundos na Cloudflare; APIs e demais rotas continuam `no-store`. Preserve os hashes e não amplie a allowlist por Cache Rule sem nova autorização.

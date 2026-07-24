@@ -57,6 +57,18 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("MetaConversions", client =>
+{
+    // O timeout efetivo e aplicado por evento para permitir cancelamento ligado
+    // ao request sem manter conexoes pendentes.
+    client.Timeout = Timeout.InfiniteTimeSpan;
+});
+var metaConversionsOptions = MetaConversionsOptions.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(metaConversionsOptions);
+builder.Services.AddSingleton<IMetaEventStore, PostgresMetaEventStore>();
+builder.Services.AddSingleton<MetaConversionsService>();
+builder.Services.AddSingleton<MetaAttributionService>();
+builder.Services.AddSingleton<MetaBusinessEventService>();
 builder.Services.AddHsts(options =>
 {
     options.MaxAge = TimeSpan.FromDays(180);
@@ -242,15 +254,15 @@ app.Use(async (context, next) =>
         "base-uri 'none'; " +
         "form-action 'self'; " +
         "frame-ancestors 'none'; " +
-        "script-src 'self' https://challenges.cloudflare.com; " +
+        "script-src 'self' https://challenges.cloudflare.com https://connect.facebook.net; " +
         "script-src-attr 'none'; " +
         "style-src 'self'; " +
         "style-src-attr 'none'; " +
         "font-src 'self'; " +
-        "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com; " +
+        "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com https://www.facebook.com; " +
         "media-src 'self' https://phost.pro https://www.phost.pro; " +
         "frame-src https://challenges.cloudflare.com https://*.cloudflare.com; " +
-        "connect-src 'self' https://challenges.cloudflare.com https://*.cloudflare.com; ";
+        "connect-src 'self' https://challenges.cloudflare.com https://*.cloudflare.com https://www.facebook.com; ";
     await next();
 });
 

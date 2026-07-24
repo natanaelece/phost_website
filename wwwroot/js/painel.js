@@ -234,7 +234,12 @@ let userData = null;
             action.textContent = 'Registrando...';
             feedback.classList.add('hidden');
             try {
-                const response = await fetch('/api/free-trial/request', { method: 'POST', headers: { 'X-Session-Token': localStorage.getItem('premier_token') } });
+                const response = await fetch('/api/free-trial/request', {
+                    method: 'POST',
+                    headers: window.premierMeta?.withAttributionHeaders({
+                        'X-Session-Token': localStorage.getItem('premier_token')
+                    }) || { 'X-Session-Token': localStorage.getItem('premier_token') }
+                });
                 const data = await response.json().catch(() => null);
                 const status = data?.status?.status ? data.status : data?.status;
                 if (response.status === 403 && status?.hasPaidOrder) {
@@ -248,6 +253,11 @@ let userData = null;
                 feedback.textContent = data?.msg || 'Solicitação registrada.';
                 feedback.className = 'mt-3 text-xs font-bold text-green-400';
                 window.premierAnalytics?.track('free_trial_requested', { result: 'success' });
+                window.premierMeta?.trackServerEvent(
+                    'Lead',
+                    { content_name: 'Teste gratuito Premier Host' },
+                    data?.metaEventId
+                );
                 sessionStorage.removeItem('premier_post_auth_intent');
             } catch (error) {
                 feedback.textContent = error.message || 'Não foi possível registrar a solicitação.';
@@ -627,7 +637,10 @@ let userData = null;
                 action.disabled=true;action.innerText='Gerando PIX...';
                 try {
                     const response=await fetch(`/api/checkout/manual/${pendingPixData.orderId}/generate-pix`,{
-                        method:'POST',headers:{'X-Session-Token':localStorage.getItem('premier_token')}
+                        method:'POST',
+                        headers:window.premierMeta?.withAttributionHeaders({
+                            'X-Session-Token':localStorage.getItem('premier_token')
+                        })||{'X-Session-Token':localStorage.getItem('premier_token')}
                     });
                     const data=await response.json().catch(()=>({}));
                     if(response.status===401){clearLocalSession();configureGuestAccess();return;}
@@ -636,6 +649,11 @@ let userData = null;
                     document.getElementById('pendingPixDescription').innerText='Você tem um Pix aguardando pagamento.';
                     action.innerText='Continuar pagamento';
                     window.premierAnalytics?.track('pix_created',{source:'manual_order'});
+                    window.premierMeta?.trackServerEvent(
+                        data.metaEvent?.eventName,
+                        data.metaEvent?.customData,
+                        data.metaEvent?.eventId
+                    );
                 } catch(e) {
                     const geralMsg=document.getElementById('geralErrorMsg');geralMsg.innerText=e.message;geralMsg.classList.remove('hidden');
                     action.disabled=false;action.innerText='Gerar PIX';return;
@@ -1196,8 +1214,15 @@ let userData = null;
                 const response = await fetch('/api/checkout/gerarpix', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-Session-Token': localStorage.getItem('premier_token')
+                        ...(
+                            window.premierMeta?.withAttributionHeaders({
+                                'Content-Type': 'application/json',
+                                'X-Session-Token': localStorage.getItem('premier_token')
+                            }) || {
+                                'Content-Type': 'application/json',
+                                'X-Session-Token': localStorage.getItem('premier_token')
+                            }
+                        )
                     },
                     body: JSON.stringify({
                         UserId: userData.id,
@@ -1265,6 +1290,11 @@ let userData = null;
                     instances: wyds,
                     days: diasEnvio
                 });
+                window.premierMeta?.trackServerEvent(
+                    data.metaEvent?.eventName,
+                    data.metaEvent?.customData,
+                    data.metaEvent?.eventId
+                );
 
                 // Queima o desconto visualmente do frontend, já que no Backend já foi queimado.
                 if (eligibleForDiscount) {

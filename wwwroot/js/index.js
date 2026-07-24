@@ -187,7 +187,9 @@ let authModalTrigger = null;
                 const cfResponse = document.querySelector('#loginForm [name="cf-turnstile-response"]')?.value;
 
                 const res = await fetch('/api/auth/login', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST',
+                    headers: window.premierMeta?.withAttributionHeaders({ 'Content-Type': 'application/json' })
+                        || { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         Email: emailInput.value,
                         Password: passInput.value,
@@ -237,7 +239,9 @@ let authModalTrigger = null;
                 const cfResponse = document.querySelector('#registerForm [name="cf-turnstile-response"]')?.value;
 
                 const res = await fetch('/api/auth/register', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST',
+                    headers: window.premierMeta?.withAttributionHeaders({ 'Content-Type': 'application/json' })
+                        || { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         Name: nameInput.value.trim(),
                         Email: emailInput.value.trim(),

@@ -11,10 +11,14 @@ namespace PremierAPI.Services
         };
 
         private readonly string _connectionString;
+        private readonly ILogger<FreeTrialService> _logger;
 
-        public FreeTrialService(IConfiguration configuration)
+        public FreeTrialService(
+            IConfiguration configuration,
+            ILogger<FreeTrialService> logger)
         {
             _connectionString = configuration.GetConnectionString("DefaultConnection") ?? "";
+            _logger = logger;
         }
 
         public async Task<FreeTrialStatusDto?> GetMineAsync(string? sessionToken)
@@ -50,7 +54,9 @@ namespace PremierAPI.Services
             return row == null ? null : ToStatus(row);
         }
 
-        public async Task<FreeTrialRequestResult?> RequestAsync(string? sessionToken)
+        public async Task<FreeTrialRequestResult?> RequestAsync(
+            string? sessionToken,
+            Guid? metaAttributionId = null)
         {
             if (string.IsNullOrWhiteSpace(sessionToken)) return null;
 
@@ -71,7 +77,8 @@ namespace PremierAPI.Services
                 WHERE s.token = @Token
                   AND s.expires_at > @Now
                   AND u.is_active = true
-                LIMIT 1;",
+                LIMIT 1
+                FOR UPDATE OF u;",
                 new { Token = sessionToken, Now = DateTime.UtcNow }, transaction);
 
             if (identity == null)
@@ -87,22 +94,7 @@ namespace PremierAPI.Services
                 return new FreeTrialRequestResult(ToStatus(ineligible!), false, false, true);
             }
 
-            Guid? insertedId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
-                INSERT INTO free_trial_requests (user_id)
-                VALUES (@UserId)
-                ON CONFLICT (user_id) DO NOTHING
-                RETURNING id;",
-                new { UserId = identity.UserId }, transaction);
-
-            if (insertedId.HasValue)
-            {
-                await InsertEventAsync(db, transaction, insertedId.Value, "solicitado", "usuario", identity.UserId.ToString());
-                var created = await GetUserStatusRowAsync(db, transaction, identity.UserId);
-                await transaction.CommitAsync();
-                return new FreeTrialRequestResult(ToStatus(created!), true, false, false);
-            }
-
-            var current = await db.QueryFirstAsync<FreeTrialUserRow>(@"
+            var current = await db.QueryFirstOrDefaultAsync<FreeTrialUserRow>(@"
                 SELECT
                     user_id AS ""UserId"",
                     id AS ""RequestId"",
@@ -123,6 +115,41 @@ namespace PremierAPI.Services
                 FOR UPDATE OF f;",
                 new { UserId = identity.UserId }, transaction);
 
+            Guid? insertedId = null;
+            if (current == null)
+            {
+                Guid? snapshotId = await TryCreateMetaAttributionSnapshotAsync(
+                    db,
+                    transaction,
+                    metaAttributionId,
+                    identity.UserId);
+                insertedId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
+                    INSERT INTO free_trial_requests (user_id, meta_attribution_id)
+                    VALUES (@UserId, @MetaAttributionId)
+                    ON CONFLICT (user_id) DO NOTHING
+                    RETURNING id;",
+                    new { UserId = identity.UserId, MetaAttributionId = snapshotId },
+                    transaction);
+            }
+
+            if (insertedId.HasValue)
+            {
+                await InsertEventAsync(db, transaction, insertedId.Value, "solicitado", "usuario", identity.UserId.ToString());
+                var created = await GetUserStatusRowAsync(db, transaction, identity.UserId);
+                await transaction.CommitAsync();
+                return new FreeTrialRequestResult(ToStatus(created!), true, false, false);
+            }
+
+            current ??= await GetUserStatusRowAsync(db, transaction, identity.UserId);
+            if (current?.RequestId == null)
+            {
+                _logger.LogError(
+                    "[TESTE GRATIS] A solicitação do usuário {UserId} não foi criada nem localizada após o conflito.",
+                    identity.UserId);
+                await transaction.RollbackAsync();
+                throw new InvalidOperationException("Não foi possível registrar a solicitação de teste grátis.");
+            }
+
             if (current.UsedAt.HasValue || string.Equals(current.Status, "utilizado", StringComparison.Ordinal))
             {
                 await transaction.CommitAsync();
@@ -135,6 +162,11 @@ namespace PremierAPI.Services
                 return new FreeTrialRequestResult(ToStatus(current), false, false, false);
             }
 
+            Guid? reopenedSnapshotId = await TryCreateMetaAttributionSnapshotAsync(
+                db,
+                transaction,
+                metaAttributionId,
+                identity.UserId);
             await db.ExecuteAsync(@"
                 UPDATE free_trial_requests
                 SET status = 'solicitado',
@@ -143,9 +175,15 @@ namespace PremierAPI.Services
                     released_at = NULL,
                     released_by = NULL,
                     closed_at = NULL,
+                    meta_attribution_id = COALESCE(@MetaAttributionId, meta_attribution_id),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = @Id;",
-                new { Id = current.RequestId }, transaction);
+                new
+                {
+                    Id = current.RequestId,
+                    MetaAttributionId = reopenedSnapshotId
+                },
+                transaction);
             await InsertEventAsync(db, transaction, current.RequestId!.Value, "solicitado", "usuario", identity.UserId.ToString());
 
             var reopened = await GetUserStatusRowAsync(db, transaction, identity.UserId);
@@ -320,7 +358,13 @@ namespace PremierAPI.Services
                     closed_at = CASE WHEN @Status IN ('recusado', 'cancelado') THEN CURRENT_TIMESTAMP ELSE closed_at END,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = @Id;",
-                new { Status = targetStatus, Actor = actor, Id = requestId }, transaction);
+                new
+                {
+                    Status = targetStatus,
+                    Actor = actor,
+                    Id = requestId
+                },
+                transaction);
             await InsertEventAsync(db, transaction, requestId, targetStatus, "admin", actor);
 
             var updated = await GetUserStatusRowAsync(db, transaction, current.UserId);
@@ -429,6 +473,51 @@ namespace PremierAPI.Services
                     (@RequestId, @EventType, @ActorType, @ActorIdentifier);",
                 new { RequestId = requestId, EventType = eventType, ActorType = actorType, ActorIdentifier = actorIdentifier },
                 transaction);
+        }
+
+        private async Task<Guid?> TryCreateMetaAttributionSnapshotAsync(
+            NpgsqlConnection db,
+            NpgsqlTransaction transaction,
+            Guid? attributionId,
+            Guid userId)
+        {
+            if (!attributionId.HasValue) return null;
+
+            const string savepoint = "meta_attribution_snapshot";
+            await db.ExecuteAsync($"SAVEPOINT {savepoint}", transaction: transaction);
+            try
+            {
+                Guid? snapshotId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
+                    INSERT INTO meta_attributions
+                        (id, user_id, source_attribution_id,
+                         consent_status, consent_version, consented_at,
+                         fbp, fbc, fbclid, client_ip_address, client_user_agent,
+                         source_url, captured_at, updated_at)
+                    SELECT
+                        gen_random_uuid(), @UserId, COALESCE(source_attribution_id, id),
+                        consent_status, consent_version,
+                        consented_at, fbp, fbc, fbclid, client_ip_address,
+                        client_user_agent, source_url, CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP
+                    FROM meta_attributions
+                    WHERE id = @AttributionId
+                      AND consent_status = 'accepted'
+                    RETURNING id;",
+                    new { UserId = userId, AttributionId = attributionId.Value },
+                    transaction);
+                await db.ExecuteAsync($"RELEASE SAVEPOINT {savepoint}", transaction: transaction);
+                return snapshotId;
+            }
+            catch (Exception ex)
+            {
+                await db.ExecuteAsync($"ROLLBACK TO SAVEPOINT {savepoint}", transaction: transaction);
+                await db.ExecuteAsync($"RELEASE SAVEPOINT {savepoint}", transaction: transaction);
+                _logger.LogError(
+                    ex,
+                    "[META ATRIBUICAO] Falha ao criar snapshot para teste grátis do usuário {UserId}; solicitação continuará sem marketing.",
+                    userId);
+                return null;
+            }
         }
 
         private static Task<FreeTrialUserRow?> GetUserStatusRowAsync(

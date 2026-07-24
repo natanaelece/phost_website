@@ -16,6 +16,7 @@ const assets = [
   { key: 'recovery-style', source: 'css/recuperar-senha.css' },
   { key: 'shared-style', source: 'css/csp-static.css' },
   { key: 'analytics', source: 'analytics.js' },
+  { key: 'marketing', source: 'marketing.js' },
   { key: 'index-script', source: 'js/index.js' },
   { key: 'panel-script', source: 'js/painel.js' },
   { key: 'confirm-script', source: 'js/confirmar.js' },

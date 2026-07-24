@@ -27,7 +27,7 @@
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
     <link rel="stylesheet" href="/assets/build/public.tailwind.d11bb74f7974.css">
     <link rel="stylesheet" href="/assets/build/public.panel-style.f4a98dfb1b38.css">
-<link rel="stylesheet" href="/assets/build/public.shared-style.bf8678226c7f.css"></head>
+<link rel="stylesheet" href="/assets/build/public.shared-style.056131703d04.css"></head>
 <body class="min-h-screen text-slate-300 relative flex flex-col">
 
     <!-- FORÇA O TAILWIND A COMPILAR AS CLASSES DE ERRO DO JAVASCRIPT -->
@@ -522,10 +522,36 @@
 			<p class="text-xs text-slate-600 font-semibold text-center">
 				© 2026 Premier Host. Todos os direitos reservados.
 			</p>
+            <button type="button" data-manage-cookies class="manage-cookies">Gerenciar cookies</button>
 		</div>
 	</footer>
 
+    <div id="marketingConsentBanner" class="cookie-consent hidden" role="dialog" aria-label="Preferências de cookies" aria-live="polite">
+        <h2 class="cookie-consent__title">Sua escolha sobre marketing</h2>
+        <p class="cookie-consent__text">Cookies necessários e analytics próprios continuam ativos. O Meta Pixel e a API de Conversões só são usados se você aceitar marketing.</p>
+        <div class="cookie-consent__actions">
+            <button type="button" data-cookie-accept class="cookie-button">Aceitar marketing</button>
+            <button type="button" data-cookie-reject class="cookie-button">Recusar</button>
+            <button type="button" data-cookie-preferences class="cookie-button">Configurar preferências</button>
+        </div>
+    </div>
+    <div id="cookiePreferencesModal" class="cookie-preferences hidden" role="dialog" aria-modal="true" aria-labelledby="cookiePreferencesTitle">
+        <div class="cookie-preferences__panel">
+            <div class="cookie-preferences__header">
+                <h2 id="cookiePreferencesTitle">Preferências de cookies</h2>
+                <button type="button" data-cookie-close class="cookie-preferences__close" aria-label="Fechar">×</button>
+            </div>
+            <div class="cookie-preferences__item"><strong>Necessários e analytics próprios</strong><span>Sempre ativos</span><p>Mantêm segurança, sessão, checkout e medição first-party. Não dependem do consentimento de marketing.</p></div>
+            <div class="cookie-preferences__item"><strong>Marketing da Meta</strong><p>Permite Meta Pixel e API de Conversões para medição, atribuição, públicos e otimização de anúncios.</p></div>
+            <div class="cookie-preferences__actions">
+                <button type="button" data-cookie-accept class="cookie-button">Aceitar marketing</button>
+                <button type="button" data-cookie-reject class="cookie-button">Recusar marketing</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/assets/build/public.analytics.9df672116368.js"></script>
-    <script src="/assets/build/public.panel-script.8ec9bf6a3ba1.js"></script>
+    <script src="/assets/build/public.marketing.880dd01844b3.js"></script>
+    <script src="/assets/build/public.panel-script.49dbe81c0522.js"></script>
 <script src="/assets/build/public.shared-script.78b629c659aa.js"></script></body>
 </html>

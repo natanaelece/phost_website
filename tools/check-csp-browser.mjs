@@ -12,15 +12,15 @@ const csp = [
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "script-src 'self' https://challenges.cloudflare.com",
+  "script-src 'self' https://challenges.cloudflare.com https://connect.facebook.net",
   "script-src-attr 'none'",
   "style-src 'self'",
   "style-src-attr 'none'",
   "font-src 'self'",
-  "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com",
+  "img-src 'self' data: https://phost.pro https://www.phost.pro https://challenges.cloudflare.com https://www.facebook.com",
   "media-src 'self' https://phost.pro https://www.phost.pro",
   'frame-src https://challenges.cloudflare.com https://*.cloudflare.com',
-  "connect-src 'self' https://challenges.cloudflare.com https://*.cloudflare.com"
+  "connect-src 'self' https://challenges.cloudflare.com https://*.cloudflare.com https://www.facebook.com"
 ].join('; ');
 
 const pricingFixture = {
@@ -233,6 +233,18 @@ try {
   }
 
   const interactions = [
+    {
+      name: 'marketing-consent-default-off',
+      page: '/',
+      script: `
+        const resources = performance.getEntriesByType('resource').map(entry => entry.name);
+        const banner = document.getElementById('marketingConsentBanner');
+        return !banner.classList.contains('hidden')
+          && banner.querySelectorAll('.cookie-consent__actions > button').length === 3
+          && Boolean(document.querySelector('[data-manage-cookies]'))
+          && !resources.some(url => url.includes('connect.facebook.net') || url.includes('www.facebook.com/tr'));
+      `
+    },
     {
       name: 'home-auth-modal',
       page: '/',
