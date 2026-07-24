@@ -117,9 +117,11 @@
         const script = document.createElement('script');
         script.async = true;
         script.src = META_SCRIPT_URL;
-        document.head.appendChild(script);
+        fbq('consent', 'grant');
+        fbq('set', 'autoConfig', false, configuration.pixelId);
         fbq('init', configuration.pixelId);
         fbq('track', 'PageView');
+        document.head.appendChild(script);
     }
 
     function sendBrowserEvent(eventName, customData, eventId, contentName) {
@@ -294,11 +296,13 @@
         closeConsentModal();
 
         if (status === 'accepted') {
+            window.fbq?.('consent', 'grant');
             activationStarted = false;
             activateMarketing();
             return;
         }
 
+        window.fbq?.('consent', 'revoke');
         activationStarted = false;
         sessionStorage.removeItem(FBCLID_SESSION_KEY);
         deleteCookie('_fbp');
