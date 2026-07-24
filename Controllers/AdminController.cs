@@ -1593,8 +1593,23 @@ namespace PremierAPI.Controllers
             try
             {
                 await ad.DeleteUserAsync(username);
-                _logger.LogInformation("[ADMIN][AD] Usuario removido: {Username}.", username);
-                return Ok(new { msg = "Usuario removido do AD." });
+                using var db = new NpgsqlConnection(_connString);
+                int clearedLinks = await db.ExecuteAsync(
+                    @"UPDATE users
+                      SET ad_username = NULL
+                      WHERE ad_username IS NOT NULL
+                        AND LOWER(ad_username) = LOWER(@Username)",
+                    new { Username = username });
+                _logger.LogInformation(
+                    "[ADMIN][AD] Usuario removido: {Username}. Vinculos locais limpos: {ClearedLinks}.",
+                    username,
+                    clearedLinks);
+                return Ok(new
+                {
+                    msg = clearedLinks > 0
+                        ? "Usuario removido do AD e vínculo com o cadastro do site limpo."
+                        : "Usuario removido do AD."
+                });
             }
             catch (Exception ex)
             {

@@ -29,6 +29,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - O webhook canônico do Asaas é `https://webhook-website.phost.pro/api/webhook/asaas`; preserve esse hostname nas allowlists de `appsettings.json` e `Program.cs` para que o Host Filtering não rejeite a chamada antes do controlador.
 - Pedido administrativo nasce pendente com `created_manually`, não pago. O cliente pode gerar ou renovar o QR depois.
 - No pedido manual, a duração em dias só aparece para diária. O plano personalizado usa um intervalo de datas para calcular `orders.days`, deixa os demais campos manuais e pode gerar PIX depois sem cotação tabelada; ele não cria colunas de datas nem altera o vencimento global por `created_at + days`.
+- O valor do pedido manual usa máscara monetária brasileira em qualquer plano: vírgula decimal, ponto descartado e duas casas ao concluir a edição.
 - Regras comerciais não podem ser copiadas para JS/controladores: use `PricingRules` e os endpoints de regras/cotação.
 - Ordenação das tabelas mostra somente uma seta na coluna ativa; mobile deve preservar todas as informações em cartões.
 - Na lista de usuários AD, vencimento **Nunca** oculta a data e os botões de ação aparecem diretamente quando cabem, recorrendo a **Mais ações** apenas quando necessário.
@@ -46,6 +47,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.
 - A edição de usuário AD sinaliza **E-mail (será atualizado)** quando `mail` estava vazio e o valor veio do cadastro local. Em **Gerenciar acessos**, computadores já selecionados ficam no topo.
+- Excluir usuário pela tela do AD também limpa, após a remoção LDAP, todo `users.ad_username` local correspondente; falha nessa reconciliação é erro da operação.
 - A descrição convencional do computador `SRV01_01` corresponde ao grupo `ACESSO_SRV01-01`; somente computadores nesse padrão são reconciliados automaticamente com o grupo.
 - Analytics de produto é first-party e não guarda PII. O Meta Pixel/CAPI é uma integração separada, opcional e condicionada ao consentimento de marketing; preserve deduplicação, atribuição do pedido e token somente no backend.
 - Indexação pública: somente `/`, `/painel`, `/privacidade` e `/guia-wyd`; preserve `robots.txt` e `sitemap.xml` e não amplie essa lista sem nova autorização.
@@ -58,6 +60,7 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - Tailwind 3.4, Inter e Chart.js são locais; nunca reintroduza seus CDNs. A CSP não aceita `'unsafe-inline'`: não crie scripts, estilos, atributos `on*` ou `style` inline. Consulte `docs/csp-tailwind-rollout.md` para testes, implantação e rollback.
 - O shell do admin é uniforme e estático: logo, menu completo e logout existem em todas as telas. Preserve o gate neutro na validação inicial e a navegação interna que troca somente `.content`; ela não deve repetir `/api/admin/session` nem recarregar o shell.
 - O menu lateral do desktop pode ser recolhido para mostrar somente ícones e lembra a escolha no navegador. O mobile continua usando a gaveta e oculta as ações da página enquanto ela estiver aberta.
+- Active Directory e Usuários exibem ações diretamente quando a tabela cabe e recorrem a **Mais ações** quando há estouro; o cálculo acompanha redimensionamento e recolhimento do menu.
 
 ## Segurança operacional
 
