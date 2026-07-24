@@ -28,6 +28,7 @@ namespace PremierAPI.Controllers
         private readonly string _asaasBaseUrl;
         private readonly bool _debugLogs;
         private readonly string _connString;
+        private readonly AdminNotificationEmailService _adminNotifications;
 
         private sealed class ReferralDiscountData
         {
@@ -43,9 +44,13 @@ namespace PremierAPI.Controllers
             public decimal DiscountValue { get; set; }
         }
 
-        public CheckoutController(ILogger<CheckoutController> logger, IConfiguration config)
+        public CheckoutController(
+            ILogger<CheckoutController> logger,
+            IConfiguration config,
+            AdminNotificationEmailService adminNotifications)
         {
             _logger = logger;
+            _adminNotifications = adminNotifications;
             _asaasApiKey = config["Asaas:ApiKey"] ?? ""; 
 			_asaasSandBoxApiKey = config["Asaas:SandBoxApiKey"] ?? ""; 
             _debugLogs = config.GetValue<bool>("PremierConfig:EnableDebugLogs");
@@ -327,6 +332,8 @@ namespace PremierAPI.Controllers
                 throw;
             }
 
+            await _adminNotifications.TrySendOrderCreatedAsync(orderId);
+
             return Ok(new
             {
                 encodedImage,
@@ -436,6 +443,7 @@ namespace PremierAPI.Controllers
                     AND o.asaas_pix_qr_code_id IS NULL AND o.asaas_payment_id IS NULL",
                 new { OrderId = orderId, Token = token, Now = DateTime.UtcNow });
             if (updated != 1) return BadRequest(new { erro = "Este pedido não pode mais ser cancelado por este fluxo." });
+            await _adminNotifications.TrySendOrderCanceledAsync(orderId);
             return Ok(new { success = true });
         }
 
@@ -565,7 +573,7 @@ namespace PremierAPI.Controllers
             
             // Ensure the payment belongs to a valid session
             var order = await db.QueryFirstOrDefaultAsync(
-                @"SELECT o.user_id, o.asaas_pix_qr_code_id, o.status,
+                @"SELECT o.id AS order_id, o.user_id, o.asaas_pix_qr_code_id, o.status,
                          o.pix_expires_at, o.created_at
                   FROM orders o
                   INNER JOIN user_sessions s ON s.user_id = o.user_id
@@ -588,13 +596,16 @@ namespace PremierAPI.Controllers
             if (!deleteResponse.IsSuccessStatusCode && deleteResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
                 return BadRequest(new { erro = "Não foi possível cancelar o Pix no Asaas." });
 
-            await db.ExecuteAsync(
+            int updated = await db.ExecuteAsync(
                 @"UPDATE orders
                   SET status = @Status,
                       canceled_at = CASE WHEN @Status = 'cancelado' THEN CURRENT_TIMESTAMP ELSE NULL END,
                       pix_payload = NULL, pix_encoded_image = NULL
                   WHERE (asaas_pix_qr_code_id = @Id OR asaas_payment_id = @Id) AND status = 'pendente'",
                 new { Id = paymentId, Status = expired ? "expirado" : "cancelado" });
+
+            if (updated == 1 && !expired)
+                await _adminNotifications.TrySendOrderCanceledAsync((Guid)order.order_id);
             
             return Ok(new { success = true });
         }

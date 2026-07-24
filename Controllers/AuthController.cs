@@ -30,6 +30,7 @@ namespace PremierAPI.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _config;
         private readonly EmailConfirmationService _emailConfirmation;
+        private readonly AdminNotificationEmailService _adminNotifications;
         private readonly AdPasswordProtectionService _adPasswordProtection;
 
         public AuthController(
@@ -37,6 +38,7 @@ namespace PremierAPI.Controllers
             ILogger<AuthController> logger,
             IHttpClientFactory httpClientFactory,
             EmailConfirmationService emailConfirmation,
+            AdminNotificationEmailService adminNotifications,
             AdPasswordProtectionService adPasswordProtection)
         {
             _config = config;
@@ -46,6 +48,7 @@ namespace PremierAPI.Controllers
             _turnstileSecret = config.GetValue<string>("Cloudflare:TurnstileSecretKey") ?? "";
             _httpClientFactory = httpClientFactory;
             _emailConfirmation = emailConfirmation;
+            _adminNotifications = adminNotifications;
             _adPasswordProtection = adPasswordProtection;
         }
 
@@ -299,6 +302,7 @@ namespace PremierAPI.Controllers
             {
                 _logger.LogError(ex, "[SMTP ERROR] Falha ao disparar o e-mail inicial de ativação.");
             }
+            await _adminNotifications.TrySendNewUserAsync(userId);
 
             if (_debugLogs) _logger.LogInformation("[REGISTER SUCESSO] {Email} cadastrado.", req.Email);
             return Ok(new { success = true, mensagem = "Cadastro realizado! Verifique seu e-mail para ativar a conta." });

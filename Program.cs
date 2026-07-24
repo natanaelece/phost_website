@@ -72,6 +72,7 @@ builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
 builder.Services.AddScoped<PremierAPI.Services.FreeTrialService>();
 builder.Services.AddSingleton<PremierAPI.Services.EmailConfirmationService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdCredentialEmailService>();
+builder.Services.AddSingleton<PremierAPI.Services.AdminNotificationEmailService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdPasswordProtectionService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdAccountProvisioningService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdminMaintenanceService>();

@@ -17,5 +17,6 @@ Regras essenciais:
 - Preserve a indexacao publica definida em `robots.txt` e `sitemap.xml`.
 - `AdminToken` e somente o primeiro fator administrativo. Preserve TOTP, sessao curta em cookie `HttpOnly` e CSRF; nunca persista a chave permanente no frontend.
 - Preserve o proxy exato da origem, o HSTS sem subdominios/preload e as diretivas CSP seguras. Rode `node tools/check-csp.mjs` antes de alterar a CSP.
+- Toda excecao capturada ou falha que impeça o efeito esperado usa `LogError`/`LogCritical` com a excecao quando disponivel, para encaminhamento ao Telegram. Nao engula falhas nem as rebaixe para `Information`/`Warning`; preserve segredos e mantenha `Telegram:MinimumLevel` no maximo em `Error` (`Warning` recomendado).
 
 Antes de concluir, rode build, validacao de JavaScript e `git diff --check` conforme comandos documentados no README.

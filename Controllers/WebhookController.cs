@@ -33,6 +33,7 @@ namespace PremierAPI.Controllers
         private readonly bool _dryRun;
         private readonly WhatsAppTemplateService _whatsAppTemplates;
         private readonly AdAccountProvisioningService _adProvisioning;
+        private readonly AdminNotificationEmailService _adminNotifications;
 
         // Variáveis para os tokens de segurança da Asaas
         private readonly string _apiToken;
@@ -42,11 +43,13 @@ namespace PremierAPI.Controllers
             IConfiguration config,
             ILogger<WebhookController> logger,
             WhatsAppTemplateService whatsAppTemplates,
-            AdAccountProvisioningService adProvisioning)
+            AdAccountProvisioningService adProvisioning,
+            AdminNotificationEmailService adminNotifications)
         {
             _config = config;
             _whatsAppTemplates = whatsAppTemplates;
             _adProvisioning = adProvisioning;
+            _adminNotifications = adminNotifications;
             _connectionString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _dryRun = config.GetValue<bool>("Evolution:DryRun");
@@ -155,6 +158,9 @@ namespace PremierAPI.Controllers
                             paymentId, pixQrCodeId);
                         return Ok(new { success = true, ignored = true });
                     }
+
+                    if (updatedRows > 0)
+                        await _adminNotifications.TrySendOrderPaidAsync((Guid)orderData.order_id);
 
                     string customerIdToSync = orderData.asaas_customer_id as string ?? asaasCustomerId;
                     if (!string.IsNullOrWhiteSpace(customerIdToSync))
