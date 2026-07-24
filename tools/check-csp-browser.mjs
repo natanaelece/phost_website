@@ -289,6 +289,17 @@ try {
       `
     },
     {
+      name: 'home-register-deep-link',
+      page: '/?action=register',
+      script: `
+        return !document.getElementById('authModal').classList.contains('hidden')
+          && !document.getElementById('registerForm').classList.contains('hidden')
+          && document.getElementById('loginForm').classList.contains('hidden')
+          && location.pathname === '/'
+          && location.search === '';
+      `
+    },
+    {
       name: 'panel-help-modal',
       page: '/painel',
       script: `

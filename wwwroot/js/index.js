@@ -336,12 +336,14 @@ let authModalTrigger = null;
 				sessionStorage.setItem('premier_post_auth_intent', 'free-trial');
 			}
 
-			if (urlParams.get('action') === 'login') {
+			const action = urlParams.get('action');
+
+			if (action === 'login' || action === 'register') {
 				const emailParam = urlParams.get('email');
 
 				// Abre o modal primeiro para garantir que o input exista na tela
 				if (typeof abrirModalAuth === "function") {
-					abrirModalAuth('login');
+					abrirModalAuth(action);
 				}
 
 				// Preenche o campo usando o ID correto 'logEmail'
