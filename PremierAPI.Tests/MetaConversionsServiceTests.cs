@@ -8,6 +8,12 @@ namespace PremierAPI.Tests;
 
 public sealed class MetaConversionsServiceTests
 {
+    [Fact]
+    public void ConsentVersion_InvalidatesPreviousReviewChoice()
+    {
+        Assert.Equal("2", MetaConversionsOptions.DefaultConsentVersion);
+    }
+
     [Theory]
     [InlineData("  USER@Example.COM ", "user@example.com")]
     [InlineData("", null)]

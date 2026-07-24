@@ -12,6 +12,7 @@
     let activationStarted = false;
     let viewContentTracked = false;
     let pixelInitialized = false;
+    let modalReturnFocus = null;
 
     function readCookie(name) {
         const prefix = `${encodeURIComponent(name)}=`;
@@ -182,22 +183,94 @@
         }, 1000);
     }
 
-    function closePreferences() {
-        document.getElementById('cookiePreferencesModal')?.classList.add('hidden');
-        document.body.classList.remove('cookie-modal-open');
+    function setBackgroundInert(active) {
+        const modal = document.getElementById('marketingConsentModal');
+        Array.from(document.body.children).forEach(function (element) {
+            if (element === modal || element.tagName === 'SCRIPT') return;
+            if (active && !element.inert) {
+                element.inert = true;
+                element.dataset.cookieConsentInert = 'true';
+            } else if (!active && element.dataset.cookieConsentInert === 'true') {
+                element.inert = false;
+                delete element.dataset.cookieConsentInert;
+            }
+        });
     }
 
-    function openPreferences() {
-        document.getElementById('cookiePreferencesModal')?.classList.remove('hidden');
+    function showConsentView(showDetails) {
+        const modal = document.getElementById('marketingConsentModal');
+        if (!modal) return;
+        modal.querySelector('[data-cookie-summary]')?.classList.toggle('hidden', showDetails);
+        modal.querySelector('[data-cookie-details]')?.classList.toggle('hidden', !showDetails);
+        requestAnimationFrame(function () {
+            if (showDetails) modal.querySelector('[data-cookie-meta-control]')?.focus();
+            else modal.querySelector('[data-cookie-accept]')?.focus();
+        });
+    }
+
+    function closeConsentModal() {
+        document.getElementById('marketingConsentModal')?.classList.add('hidden');
+        setBackgroundInert(false);
+        document.body.classList.remove('cookie-modal-open');
+        if (modalReturnFocus?.isConnected) modalReturnFocus.focus();
+        modalReturnFocus = null;
+    }
+
+    function openConsentModal(showDetails, synchronizeControl) {
+        const modal = document.getElementById('marketingConsentModal');
+        if (!modal) return;
+        if (modal.classList.contains('hidden') && document.activeElement instanceof HTMLElement)
+            modalReturnFocus = document.activeElement;
+        if (synchronizeControl) {
+            const control = modal.querySelector('[data-cookie-meta-control]');
+            if (control) control.checked = marketingAccepted();
+        }
+        showConsentView(Boolean(showDetails));
+        modal.classList.remove('hidden');
+        setBackgroundInert(true);
         document.body.classList.add('cookie-modal-open');
-        document.querySelector('#cookiePreferencesModal button')?.focus();
+    }
+
+    function trapModalKeyboard(event) {
+        const modal = document.getElementById('marketingConsentModal');
+        if (!modal || modal.classList.contains('hidden')) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+
+        const focusable = Array.from(modal.querySelectorAll(
+            'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+        )).filter(function (element) {
+            return !element.closest('.hidden');
+        });
+        if (focusable.length === 0) {
+            event.preventDefault();
+            modal.querySelector('#cookieConsentTitle')?.focus();
+            return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!focusable.includes(document.activeElement)) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
     }
 
     function refreshConsentUi() {
         const choice = readCookie(CONSENT_COOKIE);
         const validVersion = readCookie(VERSION_COOKIE) === configuration.consentVersion;
         const decided = validVersion && (choice === 'accepted' || choice === 'rejected');
-        document.getElementById('marketingConsentBanner')?.classList.toggle('hidden', decided);
+        if (!decided) openConsentModal(false, false);
     }
 
     async function setConsent(status) {
@@ -205,8 +278,7 @@
         writeCookie(CONSENT_COOKIE, status);
         writeCookie(VERSION_COOKIE, configuration.consentVersion);
         attributionId(true);
-        refreshConsentUi();
-        closePreferences();
+        closeConsentModal();
 
         if (status === 'accepted') {
             activationStarted = false;
@@ -229,12 +301,22 @@
         document.querySelectorAll('[data-cookie-reject]').forEach(function (button) {
             button.addEventListener('click', function () { setConsent('rejected'); });
         });
-        document.querySelectorAll('[data-cookie-preferences], [data-manage-cookies]').forEach(function (button) {
-            button.addEventListener('click', openPreferences);
+        document.querySelectorAll('[data-cookie-customize]').forEach(function (button) {
+            button.addEventListener('click', function () { showConsentView(true); });
         });
-        document.querySelectorAll('[data-cookie-close]').forEach(function (button) {
-            button.addEventListener('click', closePreferences);
+        document.querySelectorAll('[data-cookie-back]').forEach(function (button) {
+            button.addEventListener('click', function () { showConsentView(false); });
         });
+        document.querySelectorAll('[data-cookie-save]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                const enabled = document.querySelector('[data-cookie-meta-control]')?.checked;
+                setConsent(enabled ? 'accepted' : 'rejected');
+            });
+        });
+        document.querySelectorAll('[data-manage-cookies]').forEach(function (button) {
+            button.addEventListener('click', function () { openConsentModal(true, true); });
+        });
+        document.getElementById('marketingConsentModal')?.addEventListener('keydown', trapModalKeyboard);
     }
 
     function bindWhatsAppContacts() {
@@ -253,7 +335,7 @@
             if (!response.ok) throw new Error('configuration unavailable');
             configuration = await response.json();
         } catch (_) {
-            configuration = { enabled: false, pixelId: null, consentVersion: '1' };
+            configuration = { enabled: false, pixelId: null, consentVersion: '2' };
         }
     }
 

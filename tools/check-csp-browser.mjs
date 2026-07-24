@@ -234,13 +234,33 @@ try {
 
   const interactions = [
     {
-      name: 'marketing-consent-default-off',
+      name: 'marketing-consent-default-on',
       page: '/',
       script: `
         const resources = performance.getEntriesByType('resource').map(entry => entry.name);
-        const banner = document.getElementById('marketingConsentBanner');
-        return !banner.classList.contains('hidden')
-          && banner.querySelectorAll('.cookie-consent__actions > button').length === 3
+        const modal = document.getElementById('marketingConsentModal');
+        const card = modal.querySelector('.cookie-consent-card');
+        const style = getComputedStyle(modal);
+        const cardWidth = card.getBoundingClientRect().width;
+        const buttons = [...modal.querySelectorAll('[data-cookie-summary] button')].map(button => button.textContent.trim());
+        const acceptFocused = document.activeElement === modal.querySelector('[data-cookie-accept]');
+        modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        modal.querySelector('[data-cookie-customize]').click();
+        const control = modal.querySelector('[data-cookie-meta-control]');
+        const defaultOn = control.checked;
+        control.click();
+        modal.querySelector('[data-cookie-back]').click();
+        modal.querySelector('[data-cookie-customize]').click();
+        const selectionPreserved = !control.checked;
+        return !modal.classList.contains('hidden')
+          && modal.getAttribute('aria-modal') === 'true'
+          && style.position === 'fixed'
+          && Number(style.zIndex) >= 1000
+          && cardWidth >= 460 && cardWidth <= 620
+          && acceptFocused
+          && buttons.join('|') === 'Aceitar todos os cookies|Recusar cookies opcionais|Personalizar'
+          && defaultOn
+          && selectionPreserved
           && Boolean(document.querySelector('[data-manage-cookies]'))
           && !resources.some(url => url.includes('connect.facebook.net') || url.includes('www.facebook.com/tr'));
       `

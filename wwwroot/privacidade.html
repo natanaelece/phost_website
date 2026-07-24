@@ -24,7 +24,7 @@
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96">
     <link rel="stylesheet" href="/assets/build/public.tailwind.d11bb74f7974.css">
     <link rel="stylesheet" href="/assets/build/public.privacy-style.31a5a267ddd1.css">
-<link rel="stylesheet" href="/assets/build/public.shared-style.056131703d04.css"></head>
+<link rel="stylesheet" href="/assets/build/public.shared-style.2ac9f680eccc.css"></head>
 <body class="min-h-screen font-sans text-slate-300 relative flex flex-col">
 
 	<a class="whatsapp-float" href="https://wa.me/5534999187189?text=Suporte+Premier+Host" target="_blank" rel="noopener">
@@ -80,7 +80,7 @@
                 <section>
                     <h2 class="text-xl font-bold text-white mb-3">5. Escolha e revogação do marketing</h2>
                     <p>O banner oferece opções para aceitar, recusar ou configurar as preferências de marketing, sem opção pré-marcada. A escolha fica em cookies first-party seguros e versionados.</p>
-                    <p class="mt-2">Você pode alterar ou revogar a decisão pelo link <strong>Gerenciar cookies</strong> no rodapé. Ao revogar, os eventos futuros de Pixel e Conversions API deixam de ser enviados e os cookies <code>_fbp</code> e <code>_fbc</code> da origem são removidos quando acessíveis ao site. Recusar marketing não impede cadastro, login, teste grátis, checkout, pagamento, suporte ou outras funções essenciais.</p>
+                    <p class="mt-2">Você pode alterar ou revogar a decisão pelo link <strong>Gerenciar cookies</strong> no rodapé. Ao revogar, os eventos futuros de Pixel e Conversions API deixam de ser enviados e os cookies <code>_fbp</code> e <code>_fbc</code> da origem são removidos quando acessíveis ao site. Recusar cookies opcionais não impede cadastro, login, teste grátis, checkout, pagamento, suporte ou outras funções essenciais.</p>
                 </section>
 
                 <section>
@@ -121,30 +121,41 @@
 		</div>
 	</footer>
 
-    <div id="marketingConsentBanner" class="cookie-consent hidden" role="dialog" aria-label="Preferências de cookies" aria-live="polite">
-        <h2 class="cookie-consent__title">Sua escolha sobre marketing</h2>
-        <p class="cookie-consent__text">Cookies necessários e analytics próprios continuam ativos. O Meta Pixel e a API de Conversões só são usados se você aceitar marketing.</p>
-        <div class="cookie-consent__actions">
-            <button type="button" data-cookie-accept class="cookie-button">Aceitar marketing</button>
-            <button type="button" data-cookie-reject class="cookie-button">Recusar</button>
-            <button type="button" data-cookie-preferences class="cookie-button">Configurar preferências</button>
-        </div>
-    </div>
-    <div id="cookiePreferencesModal" class="cookie-preferences hidden" role="dialog" aria-modal="true" aria-labelledby="cookiePreferencesTitle">
-        <div class="cookie-preferences__panel">
-            <div class="cookie-preferences__header">
-                <h2 id="cookiePreferencesTitle">Preferências de cookies</h2>
-                <button type="button" data-cookie-close class="cookie-preferences__close" aria-label="Fechar">×</button>
+    <div id="marketingConsentModal" class="cookie-consent-modal hidden" role="dialog" aria-modal="true" aria-labelledby="cookieConsentTitle" aria-describedby="cookieConsentDescription">
+        <div class="cookie-consent-card">
+            <h2 id="cookieConsentTitle" class="cookie-consent__title" tabindex="-1">Preferências de cookies</h2>
+            <div data-cookie-summary>
+                <p id="cookieConsentDescription" class="cookie-consent__text">Usamos cookies necessários para o site funcionar. Com sua permissão, também usamos cookies opcionais para entender o uso do site e melhorar o serviço. Você pode alterar sua escolha a qualquer momento.</p>
+                <div class="cookie-consent__actions">
+                    <button type="button" data-cookie-accept class="cookie-button">Aceitar todos os cookies</button>
+                    <button type="button" data-cookie-reject class="cookie-button cookie-button--secondary">Recusar cookies opcionais</button>
+                    <button type="button" data-cookie-customize class="cookie-button cookie-button--secondary">Personalizar</button>
+                </div>
             </div>
-            <div class="cookie-preferences__item"><strong>Necessários e analytics próprios</strong><span>Sempre ativos</span><p>Mantêm segurança, sessão, checkout e medição first-party. Não dependem do consentimento de marketing.</p></div>
-            <div class="cookie-preferences__item"><strong>Marketing da Meta</strong><p>Permite Meta Pixel e API de Conversões para medição, atribuição, públicos e otimização de anúncios.</p></div>
-            <div class="cookie-preferences__actions">
-                <button type="button" data-cookie-accept class="cookie-button">Aceitar marketing</button>
-                <button type="button" data-cookie-reject class="cookie-button">Recusar marketing</button>
+            <div data-cookie-details class="hidden">
+                <div class="cookie-preference-item">
+                    <div>
+                        <strong>Cookies necessários</strong>
+                        <p>Sempre ativos para segurança, sessão, checkout e analytics first-party. Não podem ser desativados.</p>
+                    </div>
+                    <input type="checkbox" checked disabled aria-label="Cookies necessários sempre ativos">
+                </div>
+                <label class="cookie-preference-item" for="metaOptionalCookies">
+                    <span>
+                        <strong>Cookies completos</strong>
+                        <span class="cookie-preference-default">Ativados</span>
+                        <p>Ajudam a entender o uso do site e melhorar o serviço.</p>
+                    </span>
+                    <input id="metaOptionalCookies" type="checkbox" data-cookie-meta-control checked>
+                </label>
+                <div class="cookie-preferences__actions">
+                    <button type="button" data-cookie-back class="cookie-button cookie-button--secondary">Voltar</button>
+                    <button type="button" data-cookie-save class="cookie-button">Salvar preferências</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="/assets/build/public.marketing.880dd01844b3.js"></script>
+    <script src="/assets/build/public.marketing.5929a5c9a27b.js"></script>
 </body>
 </html>
