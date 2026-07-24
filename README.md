@@ -2,6 +2,11 @@
 
 > Atualizacao do painel admin: o painel administrativo fica em `wwwroot/admin/`, com nove telas HTML estaticas para Dashboard, Financeiro, CRM, Testes grátis, Pedidos, Usuários, Active Directory, Notificações e Logs. O `admin.html` permanece como entrada compatível para `/admin/dashboard`. O admin usa CSS nativo e Vanilla JavaScript; não usa Tailwind sem permissão explícita.
 
+No desktop, o menu lateral administrativo pode ser minimizado pelo controle na
+área do logotipo; nesse estado ficam visíveis apenas os ícones, e a preferência
+é lembrada no navegador. No mobile, o menu continua sendo uma gaveta e as ações
+da página ficam ocultas enquanto ela está aberta, evitando sobreposição.
+
 Plataforma de gerenciamento e automação para venda e gestão de slots/acessos (WYD) integrada com Active Directory e faturamento automático via Asaas (PIX).
 
 > [!IMPORTANT]
@@ -162,11 +167,20 @@ a regra comercial.
 
 `Services/PricingRules.cs` é a única fonte das quantidades, preços, descontos e arredondamentos comerciais. O backend expõe `GET /api/checkout/pricing-rules` para montar os controles e `POST /api/checkout/pricing-quote` para calcular o total autoritativo. Não replique valores em controladores ou JavaScript.
 
-O simulador e o pedido manual usam as mesmas regras: o padrão é 1 slot; diária começa no menor pacote permitido (3 computadores por 3 dias, atualmente R$ 51 após a regra de arredondamento), semanal no menor valor (R$ 35) e mensal no menor valor com desconto (R$ 105). O total do pedido manual continua editável pelo operador, mas seu preenchimento e recálculo partem sempre da cotação do servidor.
+O simulador e o pedido manual usam as mesmas regras: o padrão é 1 slot; diária começa no menor pacote permitido (3 computadores por 3 dias, atualmente R$ 51 após a regra de arredondamento), semanal no menor valor (R$ 35) e mensal no menor valor com desconto (R$ 105). No modal administrativo, **Dias (Duração)** aparece somente para a diária. O total dos planos tabelados continua editável pelo operador, mas seu preenchimento e recálculo partem sempre da cotação do servidor.
 
 ### Pedido criado manualmente
 
 Um pedido criado no admin é identificado por `orders.created_manually` e nasce como `pendente`, separado do conceito `paid_manually`. Ele exige os mesmos dados operacionais do checkout e respeita a regra de um pedido pendente por cliente, mas não cria pagamento fictício nem marca o pedido como pago.
+
+O plano **Personalizado** é exclusivo do pedido manual. Ao selecioná-lo, o
+operador informa **Do dia** e **Até o dia**; a diferença entre as datas determina
+`orders.days`, e computadores, slots e valor são preenchidos manualmente. As
+datas são um controle para calcular a duração, não novos campos persistidos: o
+vencimento continua seguindo a regra global `orders.created_at::date +
+orders.days`. O PIX posterior desse pedido preserva o valor informado pelo
+operador e valida apenas os limites operacionais, sem recalcular uma tabela
+comercial para o plano personalizado.
 
 O cliente visualiza esse pedido pendente no painel e pode usar **Gerar PIX**. O endpoint anexa ao próprio pedido um QR estático calculado pelas regras atuais; quando o QR de um pedido manual expira, ele pode ser gerado novamente. No admin, o operador pode marcar o pagamento manualmente ou excluir o rascunho enquanto ainda não existe QR. Depois que o QR existe, cancelamentos seguem o fluxo seguro de conciliação com o Asaas. A coluna e seus ajustes de schema são mantidos pelo `DatabaseInitializer.cs`.
 
