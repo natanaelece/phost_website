@@ -48,7 +48,9 @@ unit instalada e não adicione variáveis ou segredos inline.
 - Renomear CN exige `ModifyDNRequest`; alteração comum de atributos usa `LdapModification`.
 - O vínculo local pode localizar usuários nas pastas ativos, expirados e website.
 - O admin cria grupos globais de segurança e objetos de computador. Valide nomes/atributos no backend. Criar o objeto não ingressa a máquina física no domínio.
+- Na edição de usuário AD, `mail` vazio pode usar o e-mail do cadastro local vinculado como valor inicial, identificado por **E-mail (será atualizado)**; a gravação no AD só ocorre ao salvar. Vencimento **Nunca** oculta o campo de data, e ações ficam visíveis diretamente somente quando a largura disponível comporta todos os botões.
 - Computadores expõem e gerenciam associações diretas com os grupos da OU configurada. A seleção manual de grupo durante o vínculo de acesso deve incluir o objeto do computador no grupo, permitindo reutilizar a associação nas próximas operações.
+- Em **Gerenciar acessos**, computadores já selecionados permanecem no topo; a ordenação escolhida por nome/descrição ou status é aplicada dentro dos grupos selecionado e não selecionado.
 - A convenção automática é descrição de computador `SRV01_01` para grupo `ACESSO_SRV01-01`: sublinhado na descrição e hífen no grupo. Reconcilie somente computadores que correspondam integralmente a esse padrão; ignore os demais.
 - Não crie, mova, habilite ou exclua objetos reais do AD apenas para testar sem autorização expressa.
 
