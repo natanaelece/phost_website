@@ -69,7 +69,8 @@ namespace PremierAPI.Controllers
                 result.Status.RequestId, result.Created);
 
             string? metaEventId = null;
-            if (result.Created && result.Status.RequestId is Guid requestId)
+            if (MetaBusinessEventPolicy.ShouldSendLead(result.Created)
+                && result.Status.RequestId is Guid requestId)
             {
                 metaEventId = MetaBusinessEventService.LeadEventId(requestId);
                 await _metaBusinessEvents.TrySendLeadAsync(requestId, HttpContext.RequestAborted);

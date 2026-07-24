@@ -651,7 +651,10 @@ namespace PremierAPI.Controllers
             _logger.LogInformation(
                 "[ADMIN][TESTE GRATIS] Solicitação {RequestId} alterada para {Status}.",
                 id, result.Status?.Status);
-            if (string.Equals(result.Status?.Status, "liberado", StringComparison.Ordinal))
+            if (MetaBusinessEventPolicy.ShouldSendStartTrial(
+                result.Success,
+                result.Changed,
+                result.Status?.Status))
                 await _metaBusinessEvents.TrySendStartTrialAsync(id, HttpContext.RequestAborted);
             return Ok(new { msg = result.Message, status = result.Status });
         }
@@ -668,7 +671,11 @@ namespace PremierAPI.Controllers
             _logger.LogInformation(
                 "[ADMIN][TESTE GRATIS] Teste liberado manualmente para o usuário {UserId} como solicitação {RequestId}.",
                 userId, result.Status?.RequestId);
-            if (result.Status?.RequestId is Guid requestId)
+            if (MetaBusinessEventPolicy.ShouldSendStartTrial(
+                    result.Success,
+                    result.Changed,
+                    result.Status?.Status)
+                && result.Status?.RequestId is Guid requestId)
                 await _metaBusinessEvents.TrySendStartTrialAsync(requestId, HttpContext.RequestAborted);
             return Ok(new { msg = result.Message, status = result.Status });
         }

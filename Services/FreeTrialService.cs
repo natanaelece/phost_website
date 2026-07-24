@@ -295,7 +295,7 @@ namespace PremierAPI.Services
                 "cancel" => "cancelado",
                 _ => ""
             };
-            if (string.IsNullOrEmpty(targetStatus)) return new FreeTrialAdminTransitionResult(false, "Ação inválida.", null);
+            if (string.IsNullOrEmpty(targetStatus)) return new FreeTrialAdminTransitionResult(false, "Ação inválida.", null, false);
 
             await using var db = new NpgsqlConnection(_connectionString);
             await db.OpenAsync();
@@ -324,7 +324,7 @@ namespace PremierAPI.Services
             if (string.Equals(current.Status, targetStatus, StringComparison.Ordinal))
             {
                 await transaction.CommitAsync();
-                return new FreeTrialAdminTransitionResult(true, "Estado já estava atualizado.", ToStatus(current));
+                return new FreeTrialAdminTransitionResult(true, "Estado já estava atualizado.", ToStatus(current), false);
             }
             if (action == "release" && current.HasPaidOrder)
             {
@@ -332,7 +332,8 @@ namespace PremierAPI.Services
                 return new FreeTrialAdminTransitionResult(
                     false,
                     "Cliente com pedido pago não é elegível para teste grátis.",
-                    ToStatus(current));
+                    ToStatus(current),
+                    false);
             }
 
             bool allowed = action switch
@@ -346,7 +347,7 @@ namespace PremierAPI.Services
             if (!allowed)
             {
                 await transaction.RollbackAsync();
-                return new FreeTrialAdminTransitionResult(false, "Transição incompatível com o estado atual.", ToStatus(current));
+                return new FreeTrialAdminTransitionResult(false, "Transição incompatível com o estado atual.", ToStatus(current), false);
             }
 
             await db.ExecuteAsync(@"
@@ -369,7 +370,7 @@ namespace PremierAPI.Services
 
             var updated = await GetUserStatusRowAsync(db, transaction, current.UserId);
             await transaction.CommitAsync();
-            return new FreeTrialAdminTransitionResult(true, "Situação atualizada.", ToStatus(updated!));
+            return new FreeTrialAdminTransitionResult(true, "Situação atualizada.", ToStatus(updated!), true);
         }
 
         public async Task<FreeTrialAdminTransitionResult?> ReleaseManuallyAsync(Guid userId, string actor)
@@ -401,12 +402,12 @@ namespace PremierAPI.Services
             if (identity.RequestId.HasValue)
             {
                 await transaction.RollbackAsync();
-                return new FreeTrialAdminTransitionResult(false, "Este usuário já possui uma solicitação de teste grátis.", null);
+                return new FreeTrialAdminTransitionResult(false, "Este usuário já possui uma solicitação de teste grátis.", null, false);
             }
             if (identity.HasPaidOrder)
             {
                 await transaction.RollbackAsync();
-                return new FreeTrialAdminTransitionResult(false, "Cliente com pedido pago não é elegível para teste grátis.", null);
+                return new FreeTrialAdminTransitionResult(false, "Cliente com pedido pago não é elegível para teste grátis.", null, false);
             }
 
             Guid? requestId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
@@ -421,13 +422,13 @@ namespace PremierAPI.Services
             if (!requestId.HasValue)
             {
                 await transaction.RollbackAsync();
-                return new FreeTrialAdminTransitionResult(false, "Este usuário já possui uma solicitação de teste grátis.", null);
+                return new FreeTrialAdminTransitionResult(false, "Este usuário já possui uma solicitação de teste grátis.", null, false);
             }
 
             await InsertEventAsync(db, transaction, requestId.Value, "liberado", "admin", actor);
             var created = await GetUserStatusRowAsync(db, transaction, userId);
             await transaction.CommitAsync();
-            return new FreeTrialAdminTransitionResult(true, "Teste grátis liberado manualmente.", ToStatus(created!));
+            return new FreeTrialAdminTransitionResult(true, "Teste grátis liberado manualmente.", ToStatus(created!), true);
         }
 
         public async Task<FreeTrialAdminDeleteResult?> DeleteResettableAsync(Guid requestId)
@@ -598,6 +599,10 @@ namespace PremierAPI.Services
 
     public sealed record FreeTrialAdminStatsDto(long NeverRequested, long NotUsed, long Requested, long Released, long Used);
     public sealed record FreeTrialAdminListDto(long Total, int Page, int Limit, FreeTrialAdminUserDto[] Users, FreeTrialAdminStatsDto Stats);
-    public sealed record FreeTrialAdminTransitionResult(bool Success, string Message, FreeTrialStatusDto? Status);
+    public sealed record FreeTrialAdminTransitionResult(
+        bool Success,
+        string Message,
+        FreeTrialStatusDto? Status,
+        bool Changed);
     public sealed record FreeTrialAdminDeleteResult(bool Success, string Message);
 }

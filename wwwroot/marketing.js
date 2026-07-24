@@ -28,6 +28,12 @@
         document.cookie = `${encodeURIComponent(name)}=; Max-Age=0; Path=/; Secure; SameSite=Lax`;
     }
 
+    function deleteMetaCookie(name) {
+        deleteCookie(name);
+        document.cookie = `${encodeURIComponent(name)}=; Max-Age=0; Domain=phost.pro; Path=/; Secure; SameSite=Lax`;
+        document.cookie = `${encodeURIComponent(name)}=; Max-Age=0; Domain=.phost.pro; Path=/; Secure; SameSite=Lax`;
+    }
+
     function randomId() {
         if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
         return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, function (digit) {
@@ -117,11 +123,9 @@
         const script = document.createElement('script');
         script.async = true;
         script.src = META_SCRIPT_URL;
-        fbq('consent', 'grant');
-        fbq('set', 'autoConfig', false, configuration.pixelId);
+        document.head.appendChild(script);
         fbq('init', configuration.pixelId);
         fbq('track', 'PageView');
-        document.head.appendChild(script);
     }
 
     function sendBrowserEvent(eventName, customData, eventId, contentName) {
@@ -296,17 +300,15 @@
         closeConsentModal();
 
         if (status === 'accepted') {
-            window.fbq?.('consent', 'grant');
             activationStarted = false;
             activateMarketing();
             return;
         }
 
-        window.fbq?.('consent', 'revoke');
         activationStarted = false;
         sessionStorage.removeItem(FBCLID_SESSION_KEY);
-        deleteCookie('_fbp');
-        deleteCookie('_fbc');
+        deleteMetaCookie('_fbp');
+        deleteMetaCookie('_fbc');
         await captureConsent('rejected');
         if (hadLoadedPixel) location.reload();
     }

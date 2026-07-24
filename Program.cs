@@ -17,6 +17,15 @@ var builder = WebApplication.CreateBuilder(args);
 // CONFIGURAÇÃO: Carrega as configurações do sistema
 builder.Configuration.AddEnvironmentVariables();
 
+if (args.Contains(MetaConversionsSmokeRunner.Command, StringComparer.Ordinal))
+{
+    Environment.ExitCode = await MetaConversionsSmokeRunner.RunAsync(
+        builder.Configuration,
+        Console.Out,
+        Console.Error);
+    return;
+}
+
 var invalidConfigKeys = StartupConfigurationValidator.FindInvalidKeys(builder.Configuration);
 if (invalidConfigKeys.Count > 0)
 {

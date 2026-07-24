@@ -341,7 +341,16 @@ namespace PremierAPI.Controllers
             }
 
             await _adminNotifications.TrySendOrderCreatedAsync(orderId);
-            await _metaBusinessEvents.TrySendInitiateCheckoutAsync(orderId, HttpContext.RequestAborted);
+            if (MetaBusinessEventPolicy.ShouldSendInitiateCheckout(
+                orderPersisted: true,
+                pixGenerated: !string.IsNullOrWhiteSpace(qrCodeId)
+                    && !string.IsNullOrWhiteSpace(encodedImage)
+                    && !string.IsNullOrWhiteSpace(pixPayload)))
+            {
+                await _metaBusinessEvents.TrySendInitiateCheckoutAsync(
+                    orderId,
+                    HttpContext.RequestAborted);
+            }
             string metaEventId = MetaBusinessEventService.InitiateCheckoutEventId(orderId);
             var metaCustomData = MetaBusinessEventService.BuildCommerceCustomData(
                 orderId,
@@ -460,7 +469,16 @@ namespace PremierAPI.Controllers
                 return Conflict(new { erro = "O estado deste pedido mudou. Atualize a página." });
             }
 
-            await _metaBusinessEvents.TrySendInitiateCheckoutAsync(orderId, HttpContext.RequestAborted);
+            if (MetaBusinessEventPolicy.ShouldSendInitiateCheckout(
+                orderPersisted: updated == 1,
+                pixGenerated: !string.IsNullOrWhiteSpace(qrCodeId)
+                    && !string.IsNullOrWhiteSpace(encodedImage)
+                    && !string.IsNullOrWhiteSpace(pixPayload)))
+            {
+                await _metaBusinessEvents.TrySendInitiateCheckoutAsync(
+                    orderId,
+                    HttpContext.RequestAborted);
+            }
             string metaEventId = MetaBusinessEventService.InitiateCheckoutEventId(orderId);
             return Ok(new
             {

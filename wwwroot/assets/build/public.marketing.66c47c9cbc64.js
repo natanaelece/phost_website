@@ -28,6 +28,12 @@
         document.cookie = `${encodeURIComponent(name)}=; Max-Age=0; Path=/; Secure; SameSite=Lax`;
     }
 
+    function deleteMetaCookie(name) {
+        deleteCookie(name);
+        document.cookie = `${encodeURIComponent(name)}=; Max-Age=0; Domain=phost.pro; Path=/; Secure; SameSite=Lax`;
+        document.cookie = `${encodeURIComponent(name)}=; Max-Age=0; Domain=.phost.pro; Path=/; Secure; SameSite=Lax`;
+    }
+
     function randomId() {
         if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
         return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, function (digit) {
@@ -301,8 +307,8 @@
 
         activationStarted = false;
         sessionStorage.removeItem(FBCLID_SESSION_KEY);
-        deleteCookie('_fbp');
-        deleteCookie('_fbc');
+        deleteMetaCookie('_fbp');
+        deleteMetaCookie('_fbc');
         await captureConsent('rejected');
         if (hadLoadedPixel) location.reload();
     }

@@ -206,6 +206,30 @@ public sealed class MetaConversionsServiceTests
     }
 
     [Fact]
+    public async Task MetaTimeout_DoesNotThrowOrInterruptCommercialFlow()
+    {
+        MetaConversionsService service = Service(
+            new ExceptionHandler(new TaskCanceledException("synthetic timeout")),
+            new InMemoryEventStore());
+
+        MetaDeliveryResult result = await service.SendAsync(Event(consent: true));
+
+        Assert.Equal(MetaDeliveryStatus.Failed, result.Status);
+    }
+
+    [Fact]
+    public async Task MetaTransportError_DoesNotThrowOrInterruptCommercialFlow()
+    {
+        MetaConversionsService service = Service(
+            new ExceptionHandler(new HttpRequestException("synthetic transport error")),
+            new InMemoryEventStore());
+
+        MetaDeliveryResult result = await service.SendAsync(Event(consent: true));
+
+        Assert.Equal(MetaDeliveryStatus.Failed, result.Status);
+    }
+
+    [Fact]
     public async Task HttpRequest_UsesBearerAndNeverPlacesTokenInUriOrBody()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK);
@@ -221,7 +245,7 @@ public sealed class MetaConversionsServiceTests
     }
 
     private static MetaConversionsService Service(
-        RecordingHandler handler,
+        HttpMessageHandler handler,
         IMetaEventStore store)
     {
         var client = new HttpClient(handler);
@@ -240,6 +264,21 @@ public sealed class MetaConversionsServiceTests
             store,
             options,
             NullLogger<MetaConversionsService>.Instance);
+    }
+
+    private sealed class ExceptionHandler : HttpMessageHandler
+    {
+        private readonly Exception _exception;
+
+        public ExceptionHandler(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(_exception);
     }
 
     private static MetaConversionEvent Event(

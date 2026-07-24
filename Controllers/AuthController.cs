@@ -354,9 +354,12 @@ namespace PremierAPI.Controllers
                 _logger.LogError(ex, "[EMAIL CONFIRMACAO] E-mail confirmado, mas a notificacao de sucesso falhou.");
             }
 
-            await _metaBusinessEvents.TrySendCompleteRegistrationAsync(
-                confirmedUser.Id,
-                HttpContext.RequestAborted);
+            if (MetaBusinessEventPolicy.ShouldSendCompleteRegistration(emailConfirmedNow: true))
+            {
+                await _metaBusinessEvents.TrySendCompleteRegistrationAsync(
+                    confirmedUser.Id,
+                    HttpContext.RequestAborted);
+            }
 
             return Ok(new { success = true, mensagem = "E-mail verificado com sucesso!", email = confirmedUser.Email });
         }

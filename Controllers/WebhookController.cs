@@ -193,9 +193,14 @@ namespace PremierAPI.Controllers
                     }
 
                     await _adProvisioning.TryProvisionOrderAsync((Guid)orderData.order_id, HttpContext.RequestAborted);
-                    await _metaBusinessEvents.TrySendPurchaseAsync(
-                        (Guid)orderData.order_id,
-                        HttpContext.RequestAborted);
+                    if (MetaBusinessEventPolicy.ShouldSendPurchase(
+                        paymentReceived: eventType is "PAYMENT_RECEIVED" or "PAYMENT_CONFIRMED",
+                        orderMatched: true))
+                    {
+                        await _metaBusinessEvents.TrySendPurchaseAsync(
+                            (Guid)orderData.order_id,
+                            HttpContext.RequestAborted);
+                    }
 
                     if (updatedRows == 0)
                     {
