@@ -15,6 +15,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
     let _adUsers = [];
     let _adSortField = 'fullName';
     let _adSortDirection = 'asc';
+    let adActionLayoutFrame = null;
     let adminToastTimer = null;
     let adminConfirmResolver = null;
     let adminLastModalTrigger = null;
@@ -163,6 +164,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('m-ad-edit-title').textContent = 'Editar: ' + username;
         document.getElementById('m-ad-edit-username').value = username;
         document.getElementById('m-ad-edit-fullname').value = 'Carregando...';
+        document.getElementById('m-ad-edit-email-label').textContent = 'E-mail';
         document.getElementById('m-ad-edit-email').value = '';
         document.getElementById('m-ad-edit-whatsapp').value = '';
         document.getElementById('m-ad-edit-password').value = '';
@@ -173,6 +175,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const u = await apiFetch('/api/admin/ad/users/' + encodeURIComponent(username));
         if (u) {
             document.getElementById('m-ad-edit-fullname').value = u.fullName || '';
+            document.getElementById('m-ad-edit-email-label').textContent = u.emailFromLocalFallback
+                ? 'E-mail (será atualizado)'
+                : 'E-mail';
             document.getElementById('m-ad-edit-email').value = u.email || '';
             document.getElementById('m-ad-edit-whatsapp').value = u.telephoneNumber || '';
             document.getElementById('m-ad-edit-active').checked = u.isActive;
@@ -731,20 +736,36 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
             ? '<span class="csp-d003">&#127760; Todos os computadores</span>'
             : (computers.length?computers.map(esc).join(', '):'Nenhum PC');
         const expiresValue=u.expiresAt?u.expiresAt.substring(0,10):'';
+        const actionButtons=`
+            <button class="btn btn-outline csp-d009" data-admin-click="open-ad-edit" data-username="${esc(u.username)}">&#9998; Editar</button>
+            <button class="btn btn-outline csp-d010" data-admin-click="open-ad-password" data-username="${esc(u.username)}">&#128274; Senha</button>
+            <button class="btn btn-outline csp-d011" data-admin-click="open-duplicate" data-username="${esc(u.username)}" data-full-name="${esc(u.fullName)}">&#128203; Duplicar</button>
+            ${u.ouPath==='USUARIOS'?`<button class="btn btn-outline csp-d012" data-admin-click="move-ou" data-username="${esc(u.username)}" data-archive="true">Arquivar</button>`:`<button class="btn btn-outline csp-d013" data-admin-click="move-ou" data-username="${esc(u.username)}" data-archive="false">${u.ouPath==='USUARIOS_WEBSITE'?'Mover para ativos':'Reativar'}</button>`}
+            <button class="btn btn-outline csp-d014" data-admin-click="delete-ad-user" data-username="${esc(u.username)}">Excluir</button>`;
         return `<tr>
             <td>${esc(u.username)}</td><td>${esc(u.fullName)}</td>
             <td>${u.isActive?'<span class="csp-d004">Ativo</span>':'<span class="csp-d005">Desativado</span>'}</td>
             <td class="csp-d006"><button class="btn btn-outline csp-d007" data-admin-click="open-ad-access" data-username="${esc(u.username)}" data-computers="${esc(computersCsv)}" data-allow-all="${u.allowAllComputers}">&#128187; Gerenciar Acessos</button><div class="csp-d008">${computerText}</div></td>
-            <td><div class="date-tools"><label class="inline-check"><input type="checkbox" id="never_${u.username}" data-admin-change="toggle-ad-never" data-username="${esc(u.username)}" ${expiresValue?'':'checked'}> Nunca</label><input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled'}><button class="btn btn-outline csp-d007" data-admin-click="set-ad-expire" data-username="${esc(u.username)}">&#10004;</button></div></td>
-            <td><details class="action-details"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">
-                <button class="btn btn-outline csp-d009" data-admin-click="open-ad-edit" data-username="${esc(u.username)}">&#9998; Editar</button>
-                <button class="btn btn-outline csp-d010" data-admin-click="open-ad-password" data-username="${esc(u.username)}">&#128274; Senha</button>
-                <button class="btn btn-outline csp-d011" data-admin-click="open-duplicate" data-username="${esc(u.username)}" data-full-name="${esc(u.fullName)}">&#128203; Duplicar</button>
-                ${u.ouPath==='USUARIOS'?`<button class="btn btn-outline csp-d012" data-admin-click="move-ou" data-username="${esc(u.username)}" data-archive="true">Arquivar</button>`:`<button class="btn btn-outline csp-d013" data-admin-click="move-ou" data-username="${esc(u.username)}" data-archive="false">${u.ouPath==='USUARIOS_WEBSITE'?'Mover para ativos':'Reativar'}</button>`}
-                <button class="btn btn-outline csp-d014" data-admin-click="delete-ad-user" data-username="${esc(u.username)}">Excluir</button>
-            </div></details></td>
+            <td><div class="date-tools"><label class="inline-check"><input type="checkbox" id="never_${u.username}" data-admin-change="toggle-ad-never" data-username="${esc(u.username)}" ${expiresValue?'':'checked'}> Nunca</label><input type="date" id="exp_${u.username}" value="${expiresValue}" ${expiresValue?'':'disabled hidden'}><button class="btn btn-outline csp-d007" data-admin-click="set-ad-expire" data-username="${esc(u.username)}">&#10004;</button></div></td>
+            <td><div class="ad-actions-inline">${actionButtons}</div><details class="action-details ad-actions-more"><summary class="btn btn-outline">Mais ações</summary><div class="action-menu-panel">${actionButtons}</div></details></td>
         </tr>`;
     }
+
+    function scheduleAdActionLayout() {
+        if(adActionLayoutFrame !== null) cancelAnimationFrame(adActionLayoutFrame);
+        adActionLayoutFrame = requestAnimationFrame(() => {
+            adActionLayoutFrame = null;
+            document.querySelectorAll('#ad-users-tbl, #ad-website-tbl, #ad-expired-tbl').forEach(card => {
+                if(card.classList.contains('hidden')) return;
+                const wrapper = card.querySelector('.tbl-wrap');
+                const table = wrapper?.querySelector('table');
+                if(!wrapper || !table) return;
+                card.classList.remove('ad-actions-collapsed');
+                card.classList.toggle('ad-actions-collapsed', table.scrollWidth > wrapper.clientWidth + 1);
+            });
+        });
+    }
+
     function renderAdCollections(){
         if(!document.getElementById('ad-users-body'))return;
         const userFields=['fullName','username','isActive','expiresAt'];
@@ -756,6 +777,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('ad-computers-body').innerHTML=computers.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.description||'-')}</td><td>${esc(c.operatingSystem||'-')}</td><td>${c.isActive!==false?'<span class="badge b-ok">Ativo</span>':'<span class="badge b-muted">Inativo</span>'}</td><td><div class="computer-groups">${(c.groups||[]).length?(c.groups||[]).map(group=>`<span class="badge b-accent">${esc(group)}</span>`).join(''):'<span class="muted">Nenhum</span>'}<button class="btn btn-outline ad-table-action" data-admin-click="open-ad-computer-groups" data-computer="${esc(c.name)}">Gerenciar</button></div></td><td><button class="btn btn-outline ad-table-action" data-admin-click="edit-ad-computer" data-computer="${esc(c.name)}">Editar</button></td><td><button class="btn btn-outline ad-table-action" data-admin-click="duplicate-ad-computer" data-computer="${esc(c.name)}">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" data-admin-click="delete-ad-computer" data-computer="${esc(c.name)}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty">Nenhum computador encontrado.</td></tr>';
         const groups=sortAdItems(_adGroups,['name','description'],'name');
         document.getElementById('ad-groups-body').innerHTML=groups.map(g=>`<tr><td>${esc(g.name)}</td><td>${esc(g.description||'-')}</td><td><button class="btn btn-outline ad-table-action" data-admin-click="edit-ad-group" data-group="${esc(g.name)}">Editar</button></td><td><button class="btn btn-outline ad-table-action" data-admin-click="duplicate-ad-group" data-group="${esc(g.name)}">Duplicar</button></td><td><button class="btn btn-outline ad-table-action danger-action" data-admin-click="delete-ad-group" data-group="${esc(g.name)}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum grupo encontrado.</td></tr>';
+        scheduleAdActionLayout();
     }
 
     async function loadAd() {
@@ -861,6 +883,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                     || normalizeComputerName(c.operatingSystem).includes(q);
             })
             .sort((a,b) => {
+                const aSelected = _adSelectedComputers.has(normalizeComputerName(a.name));
+                const bSelected = _adSelectedComputers.has(normalizeComputerName(b.name));
+                if(aSelected !== bSelected) return aSelected ? -1 : 1;
                 const factor = _adAccessSortDirection === 'asc' ? 1 : -1;
                 const av = _adAccessSortField === 'status'
                     ? (a.isActive !== false ? 'Ativo' : 'Inativo')
@@ -1040,6 +1065,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const input = document.getElementById('exp_'+u);
         if(!never || !input) return;
         input.disabled = never.checked;
+        input.hidden = never.checked;
         if(never.checked) {
             input.value = '';
         } else if (!input.value) {
@@ -1781,6 +1807,7 @@ function showRegistrationInfo(button){
   registrationInfoAnchor=button;
 }
 window.addEventListener('resize',hideRegistrationInfo);
+window.addEventListener('resize',scheduleAdActionLayout);
 window.addEventListener('scroll',hideRegistrationInfo,true);
 function registrationInfo(u){
   const lines=[];

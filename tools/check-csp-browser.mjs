@@ -100,6 +100,38 @@ const server = http.createServer(async (request, response) => {
       }, 1500);
       return;
     }
+    if (requestPath === '/api/admin/ad/status') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end('{"online":true}');
+      return;
+    }
+    if (requestPath === '/api/admin/ad/users') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify([{
+        username: 'fixture.user',
+        fullName: 'Fixture User',
+        isActive: true,
+        expiresAt: null,
+        groups: [],
+        computers: ['SRV01'],
+        ouPath: 'USUARIOS',
+        allowAllComputers: false
+      }]));
+      return;
+    }
+    if (requestPath === '/api/admin/ad/computers') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify([
+        { name: 'SRV02', description: 'Alpha', operatingSystem: 'Windows', isActive: true, groups: [] },
+        { name: 'SRV01', description: 'Zulu', operatingSystem: 'Windows', isActive: true, groups: [] }
+      ]));
+      return;
+    }
+    if (requestPath === '/api/admin/ad/groups') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end('[]');
+      return;
+    }
     const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '');
     let filePath = path.resolve(webRoot, relativePath);
     if (filePath !== webRoot && !filePath.startsWith(`${webRoot}${path.sep}`)) {
@@ -337,6 +369,7 @@ try {
           && document.getElementById('sname').textContent === 'Admin Fixture'
           && Boolean(document.querySelector('.slogo svg'))
           && document.getElementById('m-ad-edit-email')?.type === 'email'
+          && Boolean(document.getElementById('m-ad-edit-email-label'))
           && document.querySelector('[title="Sair"]')?.classList.contains('csp-s006');
       `
     },
@@ -350,6 +383,46 @@ try {
           && resources.some(url => url.includes('/admin/assets/vendor/chart.umd.min.js'))
           && resources.some(url => url.includes('/admin/assets/fonts/inter-latin-wght-normal.woff2'))
           && !resources.some(url => url.includes('cdn.jsdelivr.net') || url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com'));
+      `
+    },
+    {
+      name: 'admin-ad-actions-wide',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 2400, height: 900 },
+      script: `
+        const card = document.getElementById('ad-users-tbl');
+        const inline = card.querySelector('.ad-actions-inline');
+        const more = card.querySelector('.ad-actions-more');
+        return getComputedStyle(inline).display !== 'none'
+          && getComputedStyle(more).display === 'none';
+      `
+    },
+    {
+      name: 'admin-ad-actions-narrow',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 900, height: 900 },
+      script: `
+        const card = document.getElementById('ad-users-tbl');
+        const inline = card.querySelector('.ad-actions-inline');
+        const more = card.querySelector('.ad-actions-more');
+        return getComputedStyle(inline).display === 'none'
+          && getComputedStyle(more).display !== 'none';
+      `
+    },
+    {
+      name: 'admin-ad-selected-computers-first',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      script: `
+        document.querySelector('[data-admin-click="open-ad-access"]').click();
+        const computers = [...document.querySelectorAll('.ad-comp-cb')];
+        return computers.length === 2
+          && computers[0].value === 'SRV01'
+          && computers[0].checked
+          && computers[1].value === 'SRV02'
+          && !computers[1].checked;
       `
     },
     {
@@ -414,6 +487,12 @@ try {
   ];
 
   for (const interaction of interactions) {
+    if (interaction.windowSize) {
+      await webdriver(`/session/${sessionId}/window/rect`, {
+        method: 'POST',
+        body: interaction.windowSize
+      });
+    }
     await webdriver(`/session/${sessionId}/url`, {
       method: 'POST',
       body: { url: `http://${host}:${port}${interaction.page}` }
@@ -425,6 +504,12 @@ try {
     });
     if (!passed) interactionFailures += 1;
     console.log(`${passed ? 'PASS' : 'FAIL'}\tinteraction\t${interaction.name}`);
+    if (interaction.windowSize) {
+      await webdriver(`/session/${sessionId}/window/rect`, {
+        method: 'POST',
+        body: { width: 1280, height: 900 }
+      });
+    }
   }
 } finally {
   if (sessionId) {

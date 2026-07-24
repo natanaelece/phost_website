@@ -1625,13 +1625,18 @@ namespace PremierAPI.Controllers
                 if (string.IsNullOrWhiteSpace(user.Email))
                 {
                     await using var db = new NpgsqlConnection(_connString);
-                    user.Email = await db.QueryFirstOrDefaultAsync<string>(
+                    string localEmail = await db.QueryFirstOrDefaultAsync<string>(
                         @"SELECT email
                           FROM users
                           WHERE LOWER(ad_username) = LOWER(@Username)
                           ORDER BY created_at DESC
                           LIMIT 1",
                         new { Username = username }) ?? "";
+                    if (!string.IsNullOrWhiteSpace(localEmail))
+                    {
+                        user.Email = localEmail;
+                        user.EmailFromLocalFallback = true;
+                    }
                 }
 
                 return Ok(user);
