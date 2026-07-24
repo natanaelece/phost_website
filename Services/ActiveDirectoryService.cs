@@ -20,6 +20,7 @@ namespace PremierAPI.Services
         public string OuPath { get; set; } = ""; // "USUARIOS" ou "USUARIOS_EXPIRADOS"
         public bool AllowAllComputers { get; set; } // true quando userWorkstations está vazio no AD (sem restrição)
         public long? UserAccountControl { get; set; }
+        public string Email { get; set; } = "";
         public string TelephoneNumber { get; set; } = "";
         public bool PasswordNeverExpires => UserAccountControl.HasValue && (UserAccountControl.Value & 65536) != 0;
     }
@@ -621,7 +622,7 @@ namespace PremierAPI.Services
             }
         }
 
-        public async Task UpdateUserDetailsAsync(string username, string fullName, string? whatsapp, string? password, bool isActive, bool passwordNeverExpires)
+        public async Task UpdateUserDetailsAsync(string username, string fullName, string? email, string? whatsapp, string? password, bool isActive, bool passwordNeverExpires)
         {
             if (!await IsOnlineAsync()) throw new Exception("Servidor AD offline");
             using var conn = GetConnection();
@@ -651,6 +652,13 @@ namespace PremierAPI.Services
                 {
                     modifications.Add(new LdapModification(LdapModification.Replace, new LdapAttribute("telephoneNumber", cleanPhone)));
                 }
+            }
+
+            if (email != null)
+            {
+                modifications.Add(new LdapModification(
+                    LdapModification.Replace,
+                    new LdapAttribute("mail", email)));
             }
 
             var res = conn.Search(_baseDn, LdapConnection.ScopeSub,
@@ -708,7 +716,7 @@ namespace PremierAPI.Services
             using var conn = GetConnection();
             var res = conn.Search(_baseDn, LdapConnection.ScopeSub,
                 $"(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))",
-                new[] { "sAMAccountName", "displayName", "userAccountControl", "accountExpires", "memberOf", "userWorkstations", "telephoneNumber" }, false);
+                new[] { "sAMAccountName", "displayName", "userAccountControl", "accountExpires", "memberOf", "userWorkstations", "mail", "telephoneNumber" }, false);
             if (!res.HasMore()) return null;
             var entry = res.Next();
 
@@ -729,6 +737,7 @@ namespace PremierAPI.Services
                     : null,
                 IsActive = (uac & 2) == 0,
                 UserAccountControl = uac > 0 ? uac : null,
+                Email = GetAttribute(entry, "mail"),
                 TelephoneNumber = GetAttribute(entry, "telephoneNumber")
             };
 

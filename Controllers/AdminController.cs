@@ -1621,6 +1621,19 @@ namespace PremierAPI.Controllers
             {
                 var user = await ad.GetUserDetailsAsync(username);
                 if (user == null) return NotFound(new { erro = "Usuario nao encontrado no AD." });
+
+                if (string.IsNullOrWhiteSpace(user.Email))
+                {
+                    await using var db = new NpgsqlConnection(_connString);
+                    user.Email = await db.QueryFirstOrDefaultAsync<string>(
+                        @"SELECT email
+                          FROM users
+                          WHERE LOWER(ad_username) = LOWER(@Username)
+                          ORDER BY created_at DESC
+                          LIMIT 1",
+                        new { Username = username }) ?? "";
+                }
+
                 return Ok(user);
             }
             catch (Exception ex)
@@ -1636,7 +1649,22 @@ namespace PremierAPI.Controllers
             if (!await ValidateAdmin()) return Unauthorized();
             try
             {
-                await ad.UpdateUserDetailsAsync(username, req.FullName, req.Whatsapp, req.Password, req.IsActive, req.PasswordNeverExpires);
+                string? email = req.Email?.Trim();
+                if (!string.IsNullOrWhiteSpace(email))
+                {
+                    try
+                    {
+                        var address = new System.Net.Mail.MailAddress(email);
+                        if (!string.Equals(address.Address, email, StringComparison.OrdinalIgnoreCase))
+                            return BadRequest(new { erro = "Informe um e-mail valido." });
+                    }
+                    catch (FormatException)
+                    {
+                        return BadRequest(new { erro = "Informe um e-mail valido." });
+                    }
+                }
+
+                await ad.UpdateUserDetailsAsync(username, req.FullName, email, req.Whatsapp, req.Password, req.IsActive, req.PasswordNeverExpires);
                 _logger.LogInformation("[ADMIN][AD] Usuario atualizado: {Username}.", username);
                 return Ok(new { msg = "Usuario AD atualizado com sucesso." });
             }
@@ -1769,7 +1797,7 @@ namespace PremierAPI.Controllers
     public class ManualConfirmationUser { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Email { get; set; } = ""; public bool EmailConfirmed { get; set; } }
     public class UpdateWhatsAppTemplateRequest { public string Body { get; set; } = ""; }
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
-    public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }
+    public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Email { get; set; } public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }
     public class UpdateAdLinkRequest { public string? AdUsername { get; set; } }
     public class UpdateOrderDeliveryRequest { public bool Delivered { get; set; } }
     public class CreateAdUserRequest { public string Username { get; set; } = ""; public string FullName { get; set; } = ""; public string Password { get; set; } = ""; public string? Whatsapp { get; set; } }

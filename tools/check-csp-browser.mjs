@@ -336,6 +336,7 @@ try {
           && document.getElementById('nav-trials').classList.contains('active')
           && document.getElementById('sname').textContent === 'Admin Fixture'
           && Boolean(document.querySelector('.slogo svg'))
+          && document.getElementById('m-ad-edit-email')?.type === 'email'
           && document.querySelector('[title="Sair"]')?.classList.contains('csp-s006');
       `
     },
