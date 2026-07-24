@@ -1,6 +1,8 @@
 using Dapper;
 using Npgsql;
 using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace PremierAPI.Services
@@ -38,6 +40,7 @@ namespace PremierAPI.Services
                     used_referral_discount BOOLEAN DEFAULT false,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     password_reset_token VARCHAR(255),
+                    password_reset_token_hash CHAR(64),
                     password_reset_expires TIMESTAMP
                 );",
 
@@ -76,12 +79,37 @@ namespace PremierAPI.Services
                 @"CREATE TABLE IF NOT EXISTS user_sessions (
                     id SERIAL PRIMARY KEY,
                     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    token VARCHAR(255) UNIQUE NOT NULL,
+                    token VARCHAR(255) UNIQUE,
+                    token_hash CHAR(64) NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP NOT NULL
                 );",
 
-                @"CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(token);",
+                @"ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS token_hash CHAR(64);",
+                @"CREATE UNIQUE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);",
+
+                @"CREATE TABLE IF NOT EXISTS email_confirmation_tokens (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    token_hash CHAR(64) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL,
+                    sent_at TIMESTAMP,
+                    used_at TIMESTAMP,
+                    delivery_kind VARCHAR(20) NOT NULL DEFAULT 'migrated'
+                        CHECK (delivery_kind IN ('initial', 'reminder', 'manual', 'migrated')),
+                    claim_expires_at TIMESTAMP,
+                    failed_at TIMESTAMP,
+                    sanitized_failure_code VARCHAR(40)
+                );",
+                @"CREATE UNIQUE INDEX IF NOT EXISTS idx_email_confirmation_tokens_hash
+                   ON email_confirmation_tokens(token_hash);",
+                @"CREATE INDEX IF NOT EXISTS idx_email_confirmation_tokens_user_active
+                   ON email_confirmation_tokens(user_id, expires_at)
+                   WHERE used_at IS NULL;",
+                @"CREATE INDEX IF NOT EXISTS idx_email_confirmation_tokens_pending_claim
+                   ON email_confirmation_tokens(claim_expires_at)
+                   WHERE sent_at IS NULL AND failed_at IS NULL;",
 
                 @"CREATE TABLE IF NOT EXISTS pending_ad_credentials (
                     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -158,6 +186,9 @@ namespace PremierAPI.Services
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_encoded_image TEXT;",
                 "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_expires_at TIMESTAMP;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_token VARCHAR(255);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(255);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_hash CHAR(64);",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMP;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_resend_count INT DEFAULT 0;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_last_sent_at TIMESTAMP;",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_confirmation_next_send_at TIMESTAMP;",
@@ -293,9 +324,14 @@ namespace PremierAPI.Services
                 @"UPDATE users
                   SET email_confirmation_next_send_at = created_at::date + INTERVAL '1 day 11 hours'
                   WHERE email_confirmed = false
-                    AND email_confirmation_token IS NOT NULL
                     AND COALESCE(email_confirmation_resend_count, 0) < 2
-                    AND email_confirmation_next_send_at IS NULL;",
+                    AND email_confirmation_next_send_at IS NULL
+                    AND EXISTS (
+                        SELECT 1
+                        FROM email_confirmation_tokens t
+                        WHERE t.user_id = users.id
+                          AND t.used_at IS NULL
+                    );",
                 "UPDATE orders SET delivered = false WHERE delivered IS NULL;",
                 "UPDATE orders SET paid_manually = false WHERE paid_manually IS NULL;",
                 @"UPDATE orders
@@ -339,6 +375,8 @@ namespace PremierAPI.Services
                 }
             }
 
+            MigrateClientAuthTokens(conn);
+
             try
             {
                 WhatsAppTemplateService.SeedAsync(conn).GetAwaiter().GetResult();
@@ -350,6 +388,390 @@ namespace PremierAPI.Services
 
             // Realiza o backup da base de dados sempre que inicializa
             BackupDatabase(connString);
+        }
+
+        internal static void MigrateClientAuthTokens(NpgsqlConnection conn)
+        {
+            using var transaction = conn.BeginTransaction();
+            try
+            {
+                conn.Execute(
+                    "ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS token_hash CHAR(64);",
+                    transaction: transaction);
+                conn.Execute(
+                    "ALTER TABLE user_sessions ALTER COLUMN token DROP NOT NULL;",
+                    transaction: transaction);
+                conn.Execute(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_hash CHAR(64);",
+                    transaction: transaction);
+                conn.Execute(@"
+                    CREATE TABLE IF NOT EXISTS email_confirmation_tokens (
+                        id BIGSERIAL PRIMARY KEY,
+                        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        token_hash CHAR(64) NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP NOT NULL,
+                        sent_at TIMESTAMP,
+                        used_at TIMESTAMP,
+                        delivery_kind VARCHAR(20) NOT NULL DEFAULT 'migrated'
+                            CHECK (delivery_kind IN ('initial', 'reminder', 'manual', 'migrated')),
+                        claim_expires_at TIMESTAMP,
+                        failed_at TIMESTAMP,
+                        sanitized_failure_code VARCHAR(40)
+                    );",
+                    transaction: transaction);
+                conn.Execute(@"
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_email_confirmation_tokens_hash
+                    ON email_confirmation_tokens(token_hash);",
+                    transaction: transaction);
+
+                BackfillSessionTokenHashes(conn, transaction);
+                bool hasLegacyEmailHash = HasColumn(
+                    conn,
+                    transaction,
+                    "users",
+                    "email_confirmation_token_hash");
+                BackfillUserTokens(
+                    conn,
+                    transaction,
+                    hasLegacyEmailHash);
+
+                long sessionsWithoutHash = conn.QuerySingle<long>(
+                    "SELECT COUNT(*) FROM user_sessions WHERE token_hash IS NULL;",
+                    transaction: transaction);
+                long pendingResetWithoutHash = conn.QuerySingle<long>(@"
+                    SELECT COUNT(*)
+                    FROM users
+                    WHERE password_reset_token IS NOT NULL
+                      AND password_reset_token_hash IS NULL;",
+                    transaction: transaction);
+
+                if (sessionsWithoutHash != 0 || pendingResetWithoutHash != 0)
+                {
+                    throw new InvalidOperationException(
+                        "A migração de tokens não conseguiu preencher todos os hashes.");
+                }
+
+                conn.Execute(
+                    "UPDATE user_sessions SET token = NULL WHERE token IS NOT NULL;",
+                    transaction: transaction);
+                conn.Execute(@"
+                    UPDATE users
+                    SET email_confirmation_token = NULL,
+                        password_reset_token = NULL
+                    WHERE email_confirmation_token IS NOT NULL
+                       OR password_reset_token IS NOT NULL;",
+                    transaction: transaction);
+                if (hasLegacyEmailHash)
+                {
+                    conn.Execute(
+                        "UPDATE users SET email_confirmation_token_hash = NULL WHERE email_confirmation_token_hash IS NOT NULL;",
+                        transaction: transaction);
+                    conn.Execute(
+                        "DROP INDEX IF EXISTS idx_users_email_confirmation_token_hash;",
+                        transaction: transaction);
+                }
+
+                conn.Execute(
+                    "ALTER TABLE user_sessions ALTER COLUMN token_hash SET NOT NULL;",
+                    transaction: transaction);
+                conn.Execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);",
+                    transaction: transaction);
+                conn.Execute(@"
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_email_confirmation_tokens_hash
+                    ON email_confirmation_tokens(token_hash);",
+                    transaction: transaction);
+                conn.Execute(@"
+                    CREATE INDEX IF NOT EXISTS idx_email_confirmation_tokens_user_active
+                    ON email_confirmation_tokens(user_id, expires_at)
+                    WHERE used_at IS NULL;",
+                    transaction: transaction);
+                conn.Execute(@"
+                    CREATE INDEX IF NOT EXISTS idx_email_confirmation_tokens_pending_claim
+                    ON email_confirmation_tokens(claim_expires_at)
+                    WHERE sent_at IS NULL AND failed_at IS NULL;",
+                    transaction: transaction);
+                conn.Execute(@"
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_password_reset_token_hash
+                    ON users(password_reset_token_hash)
+                    WHERE password_reset_token_hash IS NOT NULL;",
+                    transaction: transaction);
+                conn.Execute(@"
+                    UPDATE users u
+                    SET email_confirmation_next_send_at =
+                        u.created_at::date + INTERVAL '1 day 11 hours'
+                    WHERE u.email_confirmed = false
+                      AND COALESCE(u.email_confirmation_resend_count, 0) < 2
+                      AND u.email_confirmation_next_send_at IS NULL
+                      AND EXISTS (
+                          SELECT 1
+                          FROM email_confirmation_tokens t
+                          WHERE t.user_id = u.id
+                            AND t.used_at IS NULL
+                      );",
+                    transaction: transaction);
+
+                ClientAuthStorageStatus status =
+                    GetClientAuthStorageStatus(conn, transaction);
+                if (status.SessionsWithoutHash != 0 ||
+                    status.LegacyTokensNotNull != 0 ||
+                    status.InvalidHashes != 0)
+                {
+                    throw new InvalidOperationException(
+                        "A verificação final do armazenamento de tokens falhou.");
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        private static void BackfillSessionTokenHashes(
+            NpgsqlConnection conn,
+            NpgsqlTransaction transaction)
+        {
+            var rows = conn.Query<LegacySessionToken>(@"
+                SELECT id AS Id, token AS Token, token_hash AS TokenHash
+                FROM user_sessions
+                WHERE token IS NOT NULL;",
+                transaction: transaction);
+
+            foreach (LegacySessionToken row in rows)
+            {
+                string expectedHash = HashLegacyToken(row.Token);
+                if (!string.IsNullOrWhiteSpace(row.TokenHash) &&
+                    !string.Equals(
+                        row.TokenHash,
+                        expectedHash,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "Uma sessão legada possui hash divergente.");
+                }
+
+                conn.Execute(@"
+                    UPDATE user_sessions
+                    SET token_hash = @TokenHash
+                    WHERE id = @Id;",
+                    new { row.Id, TokenHash = expectedHash },
+                    transaction);
+            }
+        }
+
+        private static void BackfillUserTokens(
+            NpgsqlConnection conn,
+            NpgsqlTransaction transaction,
+            bool hasLegacyEmailHash)
+        {
+            string legacyEmailHashSelection = hasLegacyEmailHash
+                ? "email_confirmation_token_hash"
+                : "NULL::char(64)";
+            string legacyEmailHashFilter = hasLegacyEmailHash
+                ? "OR email_confirmation_token_hash IS NOT NULL"
+                : string.Empty;
+            var rows = conn.Query<LegacyUserTokens>($@"
+                SELECT id AS Id,
+                       email_confirmation_token AS EmailConfirmationToken,
+                       {legacyEmailHashSelection} AS EmailConfirmationTokenHash,
+                       password_reset_token AS PasswordResetToken,
+                       password_reset_token_hash AS PasswordResetTokenHash,
+                       email_confirmed AS EmailConfirmed,
+                       created_at AS CreatedAt
+                FROM users
+                WHERE email_confirmation_token IS NOT NULL
+                   OR password_reset_token IS NOT NULL
+                   {legacyEmailHashFilter};",
+                transaction: transaction);
+
+            foreach (LegacyUserTokens row in rows)
+            {
+                if (!string.IsNullOrEmpty(row.EmailConfirmationToken))
+                {
+                    EnsureMigratedEmailConfirmationHash(
+                        conn,
+                        transaction,
+                        row,
+                        HashLegacyToken(row.EmailConfirmationToken));
+                }
+                if (!string.IsNullOrWhiteSpace(
+                        row.EmailConfirmationTokenHash))
+                {
+                    if (!SecurityTokenService.IsValidHash(
+                            row.EmailConfirmationTokenHash))
+                    {
+                        throw new InvalidOperationException(
+                            "Um hash intermediário de confirmação é inválido.");
+                    }
+                    EnsureMigratedEmailConfirmationHash(
+                        conn,
+                        transaction,
+                        row,
+                        row.EmailConfirmationTokenHash);
+                }
+
+                string? resetHash = VerifyOrHashLegacyToken(
+                    row.PasswordResetToken,
+                    row.PasswordResetTokenHash,
+                    "recuperação");
+
+                conn.Execute(@"
+                    UPDATE users
+                    SET password_reset_token_hash =
+                            COALESCE(@PasswordResetTokenHash, password_reset_token_hash)
+                    WHERE id = @Id;",
+                    new
+                    {
+                        row.Id,
+                        PasswordResetTokenHash = resetHash
+                    },
+                    transaction);
+            }
+        }
+
+        private static void EnsureMigratedEmailConfirmationHash(
+            NpgsqlConnection conn,
+            NpgsqlTransaction transaction,
+            LegacyUserTokens row,
+            string tokenHash)
+        {
+            DateTime createdAt = row.CreatedAt ?? DateTime.UtcNow;
+            conn.Execute(@"
+                INSERT INTO email_confirmation_tokens
+                    (user_id, token_hash, created_at, expires_at,
+                     sent_at, used_at, delivery_kind)
+                VALUES
+                    (@UserId, @TokenHash, @CreatedAt, 'infinity'::timestamp,
+                     @CreatedAt,
+                     CASE WHEN @EmailConfirmed THEN CURRENT_TIMESTAMP ELSE NULL END,
+                     'migrated')
+                ON CONFLICT (token_hash) DO NOTHING;",
+                new
+                {
+                    UserId = row.Id,
+                    TokenHash = tokenHash,
+                    CreatedAt = createdAt,
+                    row.EmailConfirmed
+                },
+                transaction);
+
+            bool belongsToUser = conn.QuerySingle<bool>(@"
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM email_confirmation_tokens
+                    WHERE user_id = @UserId
+                      AND token_hash = @TokenHash
+                );",
+                new { UserId = row.Id, TokenHash = tokenHash },
+                transaction);
+            if (!belongsToUser)
+            {
+                throw new InvalidOperationException(
+                    "Um hash legado de confirmação está associado a outro usuário.");
+            }
+        }
+
+        private static string? VerifyOrHashLegacyToken(
+            string? rawToken,
+            string? existingHash,
+            string tokenKind)
+        {
+            if (string.IsNullOrEmpty(rawToken)) return null;
+            string expectedHash = HashLegacyToken(rawToken);
+            if (!string.IsNullOrWhiteSpace(existingHash) &&
+                !string.Equals(existingHash, expectedHash, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Um token legado de {tokenKind} possui hash divergente.");
+            }
+
+            return expectedHash;
+        }
+
+        private static string HashLegacyToken(string rawToken) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)))
+                .ToLowerInvariant();
+
+        private static bool HasColumn(
+            NpgsqlConnection conn,
+            NpgsqlTransaction? transaction,
+            string tableName,
+            string columnName) =>
+            conn.QuerySingle<bool>(@"
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = @TableName
+                      AND column_name = @ColumnName
+                );",
+                new { TableName = tableName, ColumnName = columnName },
+                transaction);
+
+        public static ClientAuthStorageStatus GetClientAuthStorageStatus(
+            IConfiguration config)
+        {
+            string connectionString =
+                config.GetConnectionString("DefaultConnection") ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new InvalidOperationException("Banco de dados não configurado.");
+
+            using var conn = new NpgsqlConnection(connectionString);
+            conn.Open();
+            return GetClientAuthStorageStatus(conn, transaction: null);
+        }
+
+        private static ClientAuthStorageStatus GetClientAuthStorageStatus(
+            NpgsqlConnection conn,
+            NpgsqlTransaction? transaction)
+        {
+            bool hasLegacyEmailHash = HasColumn(
+                conn,
+                transaction,
+                "users",
+                "email_confirmation_token_hash");
+            string legacyEmailHashCount = hasLegacyEmailHash
+                ? @"
+                        +
+                        (SELECT COUNT(*)
+                         FROM users
+                         WHERE email_confirmation_token_hash IS NOT NULL)"
+                : string.Empty;
+
+            return conn.QuerySingle<ClientAuthStorageStatus>($@"
+                SELECT
+                    (SELECT COUNT(*)
+                     FROM user_sessions
+                     WHERE token_hash IS NULL) AS ""SessionsWithoutHash"",
+                    (
+                        (SELECT COUNT(*) FROM user_sessions WHERE token IS NOT NULL)
+                        +
+                        (SELECT COUNT(*)
+                         FROM users
+                         WHERE email_confirmation_token IS NOT NULL
+                            OR password_reset_token IS NOT NULL)
+                        {legacyEmailHashCount}
+                    ) AS ""LegacyTokensNotNull"",
+                    (
+                        (SELECT COUNT(*)
+                         FROM user_sessions
+                         WHERE token_hash IS NOT NULL
+                           AND token_hash !~ '^[0-9a-f]{{64}}$')
+                        +
+                        (SELECT COUNT(*)
+                         FROM email_confirmation_tokens
+                         WHERE token_hash !~ '^[0-9a-f]{{64}}$')
+                        +
+                        (SELECT COUNT(*)
+                         FROM users
+                         WHERE password_reset_token_hash IS NOT NULL
+                           AND password_reset_token_hash !~ '^[0-9a-f]{{64}}$')
+                    ) AS ""InvalidHashes"";",
+                transaction: transaction);
         }
 
         private static void CheckDatabaseEncoding(NpgsqlConnection conn)
@@ -435,5 +857,28 @@ namespace PremierAPI.Services
             public string Collation { get; set; } = "";
             public string CharacterType { get; set; } = "";
         }
+
+        private sealed class LegacySessionToken
+        {
+            public long Id { get; set; }
+            public string Token { get; set; } = "";
+            public string? TokenHash { get; set; }
+        }
+
+        private sealed class LegacyUserTokens
+        {
+            public Guid Id { get; set; }
+            public string? EmailConfirmationToken { get; set; }
+            public string? EmailConfirmationTokenHash { get; set; }
+            public string? PasswordResetToken { get; set; }
+            public string? PasswordResetTokenHash { get; set; }
+            public bool EmailConfirmed { get; set; }
+            public DateTime? CreatedAt { get; set; }
+        }
     }
+
+    public sealed record ClientAuthStorageStatus(
+        long SessionsWithoutHash,
+        long LegacyTokensNotNull,
+        long InvalidHashes);
 }

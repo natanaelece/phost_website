@@ -17,39 +17,30 @@ namespace PremierAPI.Controllers
         private readonly string _connString;
         private readonly ILogger<ProfileController> _logger;
         private readonly AdPasswordProtectionService _adPasswordProtection;
+        private readonly ClientSessionService _clientSessions;
         public ProfileController(
             IConfiguration config,
             ILogger<ProfileController> logger,
-            AdPasswordProtectionService adPasswordProtection)
+            AdPasswordProtectionService adPasswordProtection,
+            ClientSessionService clientSessions)
         {
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _adPasswordProtection = adPasswordProtection;
+            _clientSessions = clientSessions;
         }
 
-        private async Task<bool> ValidateSession(NpgsqlConnection db, Guid userId)
-        {
-            string? token = Request.Headers["X-Session-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(token)) return false;
-
-            int valid = await db.QueryFirstOrDefaultAsync<int>(
-                @"SELECT 1
-                  FROM user_sessions s
-                  INNER JOIN users u ON u.id = s.user_id
-                  WHERE s.token = @Token
-                    AND s.user_id = @UserId
-                    AND s.expires_at > @Now
-                    AND u.is_active = true",
-                new { Token = token, UserId = userId, Now = DateTime.UtcNow });
-
-            return valid == 1;
-        }
+        private async Task<bool> ValidateSession(Guid userId) =>
+            (await _clientSessions.FindUserIdAsync(
+                Request.Headers["X-Session-Token"].FirstOrDefault(),
+                userId,
+                HttpContext.RequestAborted)).HasValue;
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetProfile(Guid id)
         {
             using var db = new NpgsqlConnection(_connString);
-            if (!await ValidateSession(db, id)) return Unauthorized(new { erro = "Sessao expirada." });
+            if (!await ValidateSession(id)) return Unauthorized(new { erro = "Sessao expirada." });
             
             // Faz um JOIN na própria tabela para trazer o referral_code de quem o indicou
             var user = await db.QueryFirstOrDefaultAsync(
@@ -120,7 +111,7 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> SetReferralCode([FromBody] SetReferralRequest req)
         {
             using var db = new NpgsqlConnection(_connString);
-            if (!await ValidateSession(db, req.UserId)) return Unauthorized(new { erro = "Sessao expirada." });
+            if (!await ValidateSession(req.UserId)) return Unauthorized(new { erro = "Sessao expirada." });
             string code = req.Code.Trim().ToUpper();
             
             var exists = await db.QueryFirstOrDefaultAsync<int>("SELECT 1 FROM users WHERE referral_code = @Code", new { Code = code });
@@ -136,7 +127,7 @@ namespace PremierAPI.Controllers
 			using var db = new NpgsqlConnection(_connString);
 			
 			// Pega o código de indicação do usuário
-			if (!await ValidateSession(db, userId)) return Unauthorized(new { erro = "Sessao expirada." });
+			if (!await ValidateSession(userId)) return Unauthorized(new { erro = "Sessao expirada." });
 			string? referralCode = await db.QueryFirstOrDefaultAsync<string>(
 				"SELECT referral_code FROM users WHERE id = @Id",
 				new { Id = userId });
@@ -156,34 +147,64 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> UpdateProfile(Guid id, [FromBody] UpdateProfileRequest req, [FromServices] PremierAPI.Services.ActiveDirectoryService ad)
         {
             using var db = new NpgsqlConnection(_connString);
-            
-            if (!await ValidateSession(db, id)) return Unauthorized(new { erro = "Sessao expirada." });
-            var user = await db.QueryFirstOrDefaultAsync<dynamic>("SELECT id, password_hash, ad_username FROM users WHERE id = @Id", new { Id = id });
-            if (user == null) return NotFound(new { erro = "Usuário não encontrado." });
+            string? rawSessionToken =
+                Request.Headers["X-Session-Token"].FirstOrDefault();
+            bool changingPassword =
+                !string.IsNullOrWhiteSpace(req.CurrentPassword) ||
+                !string.IsNullOrWhiteSpace(req.NewPassword);
+            ClientSessionIssue? rotatedSession = null;
+            string? adUsername;
 
-            string? newHash = null;
-
-            if (!string.IsNullOrWhiteSpace(req.CurrentPassword) || !string.IsNullOrWhiteSpace(req.NewPassword))
+            if (changingPassword)
             {
                 if (string.IsNullOrWhiteSpace(req.CurrentPassword))
                     return BadRequest(new { erro = "Informe a senha atual para alterar a senha." });
-                    
-                if (string.IsNullOrWhiteSpace(req.NewPassword) || req.NewPassword.Length < 6)
+                if (string.IsNullOrWhiteSpace(req.NewPassword) ||
+                    req.NewPassword.Length < 6 ||
+                    req.NewPassword.Length > 72)
+                {
                     return BadRequest(new { erro = "A nova senha deve ter no mínimo 6 caracteres." });
+                }
 
-                if (!BCrypt.Net.BCrypt.Verify(req.CurrentPassword, (string)user.password_hash))
-                    return BadRequest(new { erro = "A senha atual está incorreta." });
-
-                newHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword, 12);
-            }
-
-            if (newHash != null)
-            {
                 await db.OpenAsync();
                 await using var transaction = await db.BeginTransactionAsync();
-                await db.ExecuteAsync("UPDATE users SET whatsapp = @Whatsapp, password_hash = @Hash WHERE id = @Id",
-                    new { Whatsapp = req.Whatsapp, Hash = newHash, Id = id }, transaction);
-                if (string.IsNullOrWhiteSpace((string?)user.ad_username))
+                Guid? authenticatedUserId = await _clientSessions.FindUserIdAsync(
+                    db,
+                    transaction,
+                    rawSessionToken,
+                    id,
+                    lockUser: true,
+                    HttpContext.RequestAborted);
+                if (!authenticatedUserId.HasValue)
+                {
+                    await transaction.RollbackAsync();
+                    return Unauthorized(new { erro = "Sessao expirada." });
+                }
+
+                var user = await db.QueryFirstOrDefaultAsync<dynamic>(
+                    "SELECT password_hash, ad_username FROM users WHERE id = @Id",
+                    new { Id = id },
+                    transaction);
+                if (user == null)
+                {
+                    await transaction.RollbackAsync();
+                    return NotFound(new { erro = "Usuário não encontrado." });
+                }
+                if (!BCrypt.Net.BCrypt.Verify(
+                        req.CurrentPassword,
+                        (string)user.password_hash))
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { erro = "A senha atual está incorreta." });
+                }
+
+                string newHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword, 12);
+                await db.ExecuteAsync(
+                    "UPDATE users SET whatsapp = @Whatsapp, password_hash = @Hash WHERE id = @Id",
+                    new { Whatsapp = req.Whatsapp, Hash = newHash, Id = id },
+                    transaction);
+                adUsername = (string?)user.ad_username;
+                if (string.IsNullOrWhiteSpace(adUsername))
                 {
                     string protectedPassword = _adPasswordProtection.Protect(req.NewPassword!);
                     await db.ExecuteAsync(@"
@@ -194,21 +215,31 @@ namespace PremierAPI.Controllers
                             updated_at = CURRENT_TIMESTAMP",
                         new { UserId = id, ProtectedPassword = protectedPassword }, transaction);
                 }
+                rotatedSession = await _clientSessions.RotateSessionAsync(
+                    db,
+                    transaction,
+                    id,
+                    HttpContext.RequestAborted);
                 await transaction.CommitAsync();
             }
             else
             {
+                if (!await ValidateSession(id))
+                    return Unauthorized(new { erro = "Sessao expirada." });
                 await db.ExecuteAsync("UPDATE users SET whatsapp = @Whatsapp WHERE id = @Id", 
                     new { Whatsapp = req.Whatsapp, Id = id });
+                adUsername = await db.QueryFirstOrDefaultAsync<string>(
+                    "SELECT ad_username FROM users WHERE id = @Id",
+                    new { Id = id });
             }
 
             // Reconsulta o vínculo após a gravação para cobrir provisionamento concorrente.
-            string? adUsername = await db.QueryFirstOrDefaultAsync<string>(
+            adUsername = await db.QueryFirstOrDefaultAsync<string>(
                 "SELECT ad_username FROM users WHERE id = @Id", new { Id = id });
             if (!string.IsNullOrWhiteSpace(adUsername))
             {
                 try {
-                    if (newHash != null && !string.IsNullOrWhiteSpace(req.NewPassword))
+                    if (changingPassword && !string.IsNullOrWhiteSpace(req.NewPassword))
                     {
                         await ad.SetUserPasswordAsync(adUsername, req.NewPassword, forceChangeOnNextLogon: false);
                         await db.ExecuteAsync("DELETE FROM pending_ad_credentials WHERE user_id = @Id", new { Id = id });
@@ -221,7 +252,13 @@ namespace PremierAPI.Controllers
                 }
             }
 
-            return Ok(new { success = true, msg = "Perfil atualizado com sucesso." });
+            return Ok(new
+            {
+                success = true,
+                msg = "Perfil atualizado com sucesso.",
+                token = rotatedSession?.Token,
+                expiresAt = rotatedSession?.ExpiresAt
+            });
         }
     }
     public class SetReferralRequest { public Guid UserId { get; set; } public string Code { get; set; } = ""; }

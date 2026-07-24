@@ -23,6 +23,7 @@ namespace PremierAPI.Controllers
         private readonly string _connString;
         private readonly AdminNotificationEmailService _adminNotifications;
         private readonly MetaBusinessEventService _metaBusinessEvents;
+        private readonly ClientSessionService _clientSessions;
 
         private sealed class ReferralDiscountData
         {
@@ -43,33 +44,23 @@ namespace PremierAPI.Controllers
             IConfiguration config,
             AsaasApiClient asaas,
             AdminNotificationEmailService adminNotifications,
-            MetaBusinessEventService metaBusinessEvents)
+            MetaBusinessEventService metaBusinessEvents,
+            ClientSessionService clientSessions)
         {
             _logger = logger;
             _asaas = asaas;
             _adminNotifications = adminNotifications;
             _metaBusinessEvents = metaBusinessEvents;
+            _clientSessions = clientSessions;
             _debugLogs = config.GetValue<bool>("PremierConfig:EnableDebugLogs");
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
         }
 
-        private async Task<bool> ValidateSession(NpgsqlConnection db, Guid userId)
-        {
-            string? token = Request.Headers["X-Session-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(token)) return false;
-
-            int valid = await db.QueryFirstOrDefaultAsync<int>(
-                @"SELECT 1
-                  FROM user_sessions s
-                  INNER JOIN users u ON u.id = s.user_id
-                  WHERE s.token = @Token
-                    AND s.user_id = @UserId
-                    AND s.expires_at > @Now
-                    AND u.is_active = true",
-                new { Token = token, UserId = userId, Now = DateTime.UtcNow });
-
-            return valid == 1;
-        }
+        private async Task<bool> ValidateSession(Guid userId) =>
+            (await _clientSessions.FindUserIdAsync(
+                Request.Headers["X-Session-Token"].FirstOrDefault(),
+                userId,
+                HttpContext.RequestAborted)).HasValue;
 
         [HttpGet("pricing-rules")]
         public IActionResult GetPricingRules()
@@ -118,7 +109,7 @@ namespace PremierAPI.Controllers
             await db.OpenAsync();
             
             // 1. Validar Sessão
-            if (!await ValidateSession(db, pedido.UserId)) 
+            if (!await ValidateSession(pedido.UserId))
                 return Unauthorized(new { erro = "Sessão expirada ou inválida." });
 
             PricingQuote baseQuote;
@@ -343,7 +334,10 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> GeneratePixForManualOrder(Guid orderId)
         {
             string? token = Request.Headers["X-Session-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(token)) return Unauthorized(new { erro = "Sessão inválida." });
+            Guid? sessionUserId = await _clientSessions.FindUserIdAsync(
+                token,
+                cancellationToken: HttpContext.RequestAborted);
+            if (!sessionUserId.HasValue) return Unauthorized(new { erro = "Sessão inválida." });
 
             using var db = new NpgsqlConnection(_connString);
             var order = await db.QueryFirstOrDefaultAsync(
@@ -351,11 +345,8 @@ namespace PremierAPI.Controllers
                          o.wyds_per_computer, o.period, o.days, o.total_price, o.status,
                          o.created_manually, o.asaas_pix_qr_code_id
                   FROM orders o
-                  INNER JOIN user_sessions s ON s.user_id = o.user_id
-                  INNER JOIN users u ON u.id = o.user_id
-                  WHERE o.id = @OrderId AND s.token = @Token AND s.expires_at > @Now
-                    AND u.is_active = true",
-                new { OrderId = orderId, Token = token, Now = DateTime.UtcNow });
+                  WHERE o.id = @OrderId AND o.user_id = @UserId",
+                new { OrderId = orderId, UserId = sessionUserId.Value });
             if (order == null) return Unauthorized(new { erro = "Pedido não encontrado para esta sessão." });
             if (!(order.created_manually as bool? ?? false)) return BadRequest(new { erro = "Este não é um pedido criado pela equipe." });
             if ((string)order.status != "pendente") return BadRequest(new { erro = "Este pedido não está mais pendente." });
@@ -475,15 +466,17 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> CancelManualOrderDraft(Guid orderId)
         {
             string? token = Request.Headers["X-Session-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(token)) return Unauthorized();
+            Guid? sessionUserId = await _clientSessions.FindUserIdAsync(
+                token,
+                cancellationToken: HttpContext.RequestAborted);
+            if (!sessionUserId.HasValue) return Unauthorized();
             using var db = new NpgsqlConnection(_connString);
             int updated = await db.ExecuteAsync(
-                @"UPDATE orders o SET status = 'cancelado', canceled_at = CURRENT_TIMESTAMP
-                  FROM user_sessions s
-                  WHERE o.id = @OrderId AND o.user_id = s.user_id AND s.token = @Token
-                    AND s.expires_at > @Now AND o.status = 'pendente' AND o.created_manually = true
-                    AND o.asaas_pix_qr_code_id IS NULL AND o.asaas_payment_id IS NULL",
-                new { OrderId = orderId, Token = token, Now = DateTime.UtcNow });
+                @"UPDATE orders SET status = 'cancelado', canceled_at = CURRENT_TIMESTAMP
+                  WHERE id = @OrderId AND user_id = @UserId
+                    AND status = 'pendente' AND created_manually = true
+                    AND asaas_pix_qr_code_id IS NULL AND asaas_payment_id IS NULL",
+                new { OrderId = orderId, UserId = sessionUserId.Value });
             if (updated != 1) return BadRequest(new { erro = "Este pedido não pode mais ser cancelado por este fluxo." });
             await _adminNotifications.TrySendOrderCanceledAsync(orderId);
             return Ok(new { success = true });
@@ -511,7 +504,7 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> GetPendingPix(Guid userId)
         {
             using var db = new NpgsqlConnection(_connString);
-            if (!await ValidateSession(db, userId)) return Unauthorized(new { erro = "Sessão inválida." });
+            if (!await ValidateSession(userId)) return Unauthorized(new { erro = "Sessão inválida." });
             
             var pendingOrder = await db.QueryFirstOrDefaultAsync(
                 @"SELECT id, asaas_payment_id, asaas_pix_qr_code_id, total_price, pix_payload,
@@ -619,7 +612,10 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> CancelPix(string paymentId)
         {
             string? token = Request.Headers["X-Session-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(token)) return Unauthorized();
+            Guid? sessionUserId = await _clientSessions.FindUserIdAsync(
+                token,
+                cancellationToken: HttpContext.RequestAborted);
+            if (!sessionUserId.HasValue) return Unauthorized();
 
             using var db = new NpgsqlConnection(_connString);
             
@@ -628,10 +624,9 @@ namespace PremierAPI.Controllers
                 @"SELECT o.id AS order_id, o.user_id, o.asaas_pix_qr_code_id, o.status,
                          o.pix_expires_at, o.created_at
                   FROM orders o
-                  INNER JOIN user_sessions s ON s.user_id = o.user_id
                   WHERE (o.asaas_pix_qr_code_id = @Id OR o.asaas_payment_id = @Id)
-                    AND s.token = @Token AND s.expires_at > @Now",
-                new { Id = paymentId, Token = token, Now = DateTime.UtcNow });
+                    AND o.user_id = @UserId",
+                new { Id = paymentId, UserId = sessionUserId.Value });
                 
             if (order == null) return Unauthorized(new { erro = "Não autorizado." });
             if ((string)order.status != "pendente")

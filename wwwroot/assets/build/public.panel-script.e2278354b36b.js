@@ -815,9 +815,10 @@ let userData = null;
             const passConfirm = document.getElementById('profPassConfirm').value;
             const passCurrent = document.getElementById('profPassCurrent').value;
             const whatsapp = document.getElementById('profWa').value;
+            const changingPassword = passNew.length > 0 || passConfirm.length > 0 || passCurrent.length > 0;
 
             // Validações locais caso o usuário queira trocar a senha
-            if (passNew.length > 0 || passConfirm.length > 0 || passCurrent.length > 0) {
+            if (changingPassword) {
                 if (!passCurrent) {
                     showError('profPassCurrent', 'profErrorMsg');
                     document.getElementById('profErrorMsg').innerText = "Informe a senha atual.";
@@ -858,6 +859,20 @@ let userData = null;
                     showError('profWa', 'profErrorMsg');
                     document.getElementById('profErrorMsg').innerText = data.erro || "Falha ao salvar.";
                 } else {
+                    if (changingPassword) {
+                        if (typeof data.token !== 'string' || !data.token) {
+                            clearLocalSession();
+                            configureGuestAccess();
+                            throw new Error('A sessão não pôde ser renovada. Entre novamente com a nova senha.');
+                        }
+                        try {
+                            localStorage.setItem('premier_token', data.token);
+                        } catch {
+                            clearLocalSession();
+                            configureGuestAccess();
+                            throw new Error('A sessão renovada não pôde ser salva. Entre novamente.');
+                        }
+                    }
                     document.getElementById('orderWa').value = whatsapp;
                     document.getElementById('profSuccessMsg').classList.remove('hidden');
                     // Reset fields
@@ -869,7 +884,8 @@ let userData = null;
                 }
             } catch (e) {
                 showError('profWa', 'profErrorMsg');
-                document.getElementById('profErrorMsg').innerText = "Erro de conexão.";
+                document.getElementById('profErrorMsg').innerText =
+                    e instanceof Error && e.message ? e.message : "Erro de conexão.";
             } finally {
                 btn.innerText = "Salvar Alterações";
                 btn.disabled = false;

@@ -28,7 +28,7 @@ namespace PremierAPI.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _turnstileSecret;
         private readonly AdAccountProvisioningService _adProvisioning;
-        private readonly EmailConfirmationService _emailConfirmation;
+        private readonly IEmailConfirmationSender _emailConfirmation;
         private readonly AdPasswordProtectionService _adPasswordProtection;
         private readonly AdminLogStore _adminLogStore;
         private readonly FreeTrialService _freeTrials;
@@ -37,13 +37,14 @@ namespace PremierAPI.Controllers
         private readonly AdminTotpService _adminTotp;
         private readonly MetaBusinessEventService _metaBusinessEvents;
         private readonly AsaasApiClient _asaas;
+        private readonly EmailConfirmationTokenService _emailConfirmationTokens;
 
         public AdminController(
             IConfiguration config,
             ILogger<AdminController> logger,
             IHttpClientFactory httpClientFactory,
             AdAccountProvisioningService adProvisioning,
-            EmailConfirmationService emailConfirmation,
+            IEmailConfirmationSender emailConfirmation,
             AdPasswordProtectionService adPasswordProtection,
             AdminLogStore adminLogStore,
             FreeTrialService freeTrials,
@@ -51,7 +52,8 @@ namespace PremierAPI.Controllers
             AdminSessionService adminSessions,
             AdminTotpService adminTotp,
             MetaBusinessEventService metaBusinessEvents,
-            AsaasApiClient asaas)
+            AsaasApiClient asaas,
+            EmailConfirmationTokenService emailConfirmationTokens)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -68,6 +70,7 @@ namespace PremierAPI.Controllers
             _adminTotp = adminTotp;
             _metaBusinessEvents = metaBusinessEvents;
             _asaas = asaas;
+            _emailConfirmationTokens = emailConfirmationTokens;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -849,112 +852,129 @@ namespace PremierAPI.Controllers
         public async Task<IActionResult> ConfirmEmailManual(Guid id)
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
-            using var db = new NpgsqlConnection(_connString);
-            await db.OpenAsync(HttpContext.RequestAborted);
-            await using var transaction = await db.BeginTransactionAsync(HttpContext.RequestAborted);
+            EmailConfirmationResult confirmation =
+                await _emailConfirmationTokens.ConfirmUserAsync(
+                    id,
+                    HttpContext.RequestAborted);
+            if (confirmation.Status == EmailConfirmationResultStatus.NotFound)
+                return NotFound(new { erro = "Usuario nao encontrado." });
+            if (confirmation.Status == EmailConfirmationResultStatus.AlreadyConfirmed)
+                return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
+
+            bool notificationSent = true;
             try
             {
-                var user = await db.QueryFirstOrDefaultAsync<ManualConfirmationUser>(@"
-                    SELECT id AS Id, name AS Name, email AS Email, email_confirmed AS EmailConfirmed
-                    FROM users
-                    WHERE id = @Id
-                    FOR UPDATE", new { Id = id }, transaction);
-                if (user == null)
-                {
-                    await transaction.RollbackAsync(HttpContext.RequestAborted);
-                    return NotFound(new { erro = "Usuario nao encontrado." });
-                }
-                if (user.EmailConfirmed)
-                {
-                    await transaction.RollbackAsync(HttpContext.RequestAborted);
-                    return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
-                }
-
-                await db.ExecuteAsync(@"
-                    UPDATE users
-                    SET email_confirmed = true,
-                        email_confirmation_token = NULL,
-                        email_confirmation_next_send_at = NULL
-                    WHERE id = @Id", new { Id = id }, transaction);
-                await _emailConfirmation.SendConfirmedAsync(user.Email, user.Name, HttpContext.RequestAborted);
-                await transaction.CommitAsync(HttpContext.RequestAborted);
-                await _metaBusinessEvents.TrySendCompleteRegistrationAsync(id, HttpContext.RequestAborted);
-                return Ok(new { msg = "E-mail confirmado manualmente e cliente notificado." });
+                await _emailConfirmation.SendConfirmedAsync(
+                    confirmation.Email!,
+                    confirmation.Name!,
+                    HttpContext.RequestAborted);
             }
             catch (Exception ex)
             {
-                if (transaction.Connection != null)
-                    await transaction.RollbackAsync(CancellationToken.None);
-                _logger.LogError(ex, "[EMAIL CONFIRMACAO] Falha ao confirmar manualmente ou notificar o usuario {UserId}.", id);
-                return StatusCode(502, new { erro = "Nao foi possivel confirmar o e-mail e notificar o cliente." });
+                notificationSent = false;
+                _logger.LogError(
+                    EmailConfirmationFailureSanitizer.SafeException(ex),
+                    "[EMAIL CONFIRMACAO] Usuario {UserId} confirmado manualmente, mas a notificacao falhou.",
+                    id);
             }
+            await _metaBusinessEvents.TrySendCompleteRegistrationAsync(
+                id,
+                HttpContext.RequestAborted);
+            if (!notificationSent)
+            {
+                return StatusCode(502, new
+                {
+                    erro = "Nao foi possivel confirmar o e-mail e notificar o cliente."
+                });
+            }
+            return Ok(new { msg = "E-mail confirmado manualmente e cliente notificado." });
         }
 
         [HttpPost("users/{id}/resend-confirmation")]
         public async Task<IActionResult> ResendEmailConfirmation(Guid id, [FromQuery] bool force = false)
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
-            using var db = new NpgsqlConnection(_connString);
-            await db.OpenAsync(HttpContext.RequestAborted);
-            await using var transaction = await db.BeginTransactionAsync(HttpContext.RequestAborted);
+            DateTime localNow = GetEmailConfirmationLocalNow();
+            EmailConfirmationPreparationResult preparation =
+                await _emailConfirmationTokens.PrepareManualAsync(
+                    id,
+                    force,
+                    localNow,
+                    HttpContext.RequestAborted);
+            if (preparation.Status == EmailConfirmationPreparationStatus.NotFound)
+                return NotFound(new { erro = "Usuario nao encontrado." });
+            if (preparation.Status == EmailConfirmationPreparationStatus.AlreadyConfirmed)
+                return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
+            if (preparation.Status ==
+                EmailConfirmationPreparationStatus.SameDayConfirmationRequired)
+            {
+                return Conflict(new
+                {
+                    requiresConfirmation = true,
+                    lastSentAt = preparation.LastSentAt,
+                    erro = "Ja houve um envio de confirmacao para este usuario hoje."
+                });
+            }
+            if (preparation.Status ==
+                EmailConfirmationPreparationStatus.DeliveryInProgress)
+            {
+                return Conflict(new
+                {
+                    requiresConfirmation = !force,
+                    lastSentAt = preparation.LastSentAt,
+                    erro = "Ja houve um envio de confirmacao para este usuario hoje."
+                });
+            }
+
+            EmailConfirmationTokenIssue issue = preparation.Issue!;
             try
             {
-                var user = await db.QueryFirstOrDefaultAsync<ResendConfirmationUser>(@"
-                    SELECT id AS Id,
-                           name AS Name,
-                           email AS Email,
-                           email_confirmed AS EmailConfirmed,
-                           email_confirmation_token AS EmailConfirmationToken,
-                           email_confirmation_last_sent_at AS EmailConfirmationLastSentAt
-                    FROM users
-                    WHERE id = @Id
-                    FOR UPDATE", new { Id = id }, transaction);
-                if (user == null)
-                {
-                    await transaction.RollbackAsync(HttpContext.RequestAborted);
-                    return NotFound(new { erro = "Usuario nao encontrado." });
-                }
-                if (user.EmailConfirmed)
-                {
-                    await transaction.RollbackAsync(HttpContext.RequestAborted);
-                    return BadRequest(new { erro = "Este e-mail ja foi confirmado." });
-                }
-
-                DateTime localNow = GetEmailConfirmationLocalNow();
-                if (!force && user.EmailConfirmationLastSentAt?.Date == localNow.Date)
-                {
-                    await transaction.RollbackAsync(HttpContext.RequestAborted);
-                    return Conflict(new
-                    {
-                        requiresConfirmation = true,
-                        lastSentAt = user.EmailConfirmationLastSentAt,
-                        erro = "Ja houve um envio de confirmacao para este usuario hoje."
-                    });
-                }
-
-                string token = user.EmailConfirmationToken ?? Guid.NewGuid().ToString();
-                if (user.EmailConfirmationToken == null)
-                {
-                    await db.ExecuteAsync(
-                        "UPDATE users SET email_confirmation_token = @Token WHERE id = @Id AND email_confirmed = false",
-                        new { Id = id, Token = token }, transaction);
-                }
-                await _emailConfirmation.SendAsync(user.Email, user.Name, token, HttpContext.RequestAborted);
-                await db.ExecuteAsync(@"
-                    UPDATE users
-                    SET email_confirmation_last_sent_at = @SentAt
-                    WHERE id = @Id AND email_confirmed = false",
-                    new { Id = id, SentAt = localNow }, transaction);
-                await transaction.CommitAsync(HttpContext.RequestAborted);
-                return Ok(new { msg = "E-mail de confirmacao reenviado." });
+                await _emailConfirmation.SendAsync(
+                    issue.Email,
+                    issue.Name,
+                    issue.Token,
+                    HttpContext.RequestAborted);
             }
             catch (Exception ex)
             {
-                if (transaction.Connection != null)
-                    await transaction.RollbackAsync(CancellationToken.None);
-                _logger.LogError(ex, "[EMAIL CONFIRMACAO] Falha no reenvio manual para o usuario {UserId}.", id);
+                try
+                {
+                    await _emailConfirmationTokens.MarkFailedAsync(
+                        issue.TokenId,
+                        EmailConfirmationFailureSanitizer.Code(ex),
+                        reminderRetryAt: null,
+                        CancellationToken.None);
+                }
+                catch (Exception persistenceException)
+                {
+                    _logger.LogError(
+                        persistenceException,
+                        "[EMAIL CONFIRMACAO] Falha ao registrar resultado sanitizado do reenvio manual para {UserId}.",
+                        id);
+                }
+                _logger.LogError(
+                    EmailConfirmationFailureSanitizer.SafeException(ex),
+                    "[EMAIL CONFIRMACAO] Falha no reenvio manual para o usuario {UserId}.",
+                    id);
                 return StatusCode(502, new { erro = "Nao foi possivel reenviar o e-mail de confirmacao." });
             }
+
+            try
+            {
+                await _emailConfirmationTokens.MarkSentAsync(
+                    issue.TokenId,
+                    localNow,
+                    HttpContext.RequestAborted);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "[EMAIL CONFIRMACAO] Reenvio manual aceito pelo SMTP, mas a marcacao de sucesso falhou para {UserId}.",
+                    id);
+                return StatusCode(502, new { erro = "Nao foi possivel reenviar o e-mail de confirmacao." });
+            }
+            return Ok(new { msg = "E-mail de confirmacao reenviado." });
         }
 
         private DateTime GetEmailConfirmationLocalNow()
@@ -1836,8 +1856,6 @@ namespace PremierAPI.Controllers
 
 
     public class CreateWhatsAppTemplateRequest { public string Title { get; set; } = ""; public string Audience { get; set; } = "Personalizada"; public string TriggerDescription { get; set; } = ""; public string Body { get; set; } = ""; }
-    public class ResendConfirmationUser { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Email { get; set; } = ""; public bool EmailConfirmed { get; set; } public string? EmailConfirmationToken { get; set; } public DateTime? EmailConfirmationLastSentAt { get; set; } }
-    public class ManualConfirmationUser { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Email { get; set; } = ""; public bool EmailConfirmed { get; set; } }
     public class UpdateWhatsAppTemplateRequest { public string Body { get; set; } = ""; }
     public class UpdateActiveRequest { public bool IsActive { get; set; } }
     public class UpdateAdUserDetailsRequest { public string FullName { get; set; } = ""; public string? Email { get; set; } public string? Whatsapp { get; set; } public string? Password { get; set; } public bool IsActive { get; set; } public bool PasswordNeverExpires { get; set; } }

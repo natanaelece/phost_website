@@ -9,13 +9,46 @@ using MimeKit;
 
 namespace PremierAPI.Services
 {
-    public class EmailConfirmationService
+    public static class EmailConfirmationFailureSanitizer
+    {
+        public static string Code(Exception exception) =>
+            exception switch
+            {
+                TimeoutException => "smtp_timeout",
+                OperationCanceledException => "smtp_canceled",
+                _ => "smtp_failure"
+            };
+
+        public static Exception SafeException(Exception exception) =>
+            new InvalidOperationException(
+                $"Falha sanitizada no envio de confirmação ({Code(exception)}).");
+    }
+
+    public interface IEmailConfirmationSender
+    {
+        Task SendAsync(
+            string email,
+            string name,
+            string token,
+            CancellationToken cancellationToken = default);
+
+        Task SendConfirmedAsync(
+            string email,
+            string name,
+            CancellationToken cancellationToken = default);
+    }
+
+    public class EmailConfirmationService : IEmailConfirmationSender
     {
         private readonly IConfiguration _config;
+        private readonly ILogger<EmailConfirmationService> _logger;
 
-        public EmailConfirmationService(IConfiguration config)
+        public EmailConfirmationService(
+            IConfiguration config,
+            ILogger<EmailConfirmationService> logger)
         {
             _config = config;
+            _logger = logger;
         }
 
         public async Task SendAsync(string email, string name, string token, CancellationToken cancellationToken = default)
@@ -66,12 +99,18 @@ namespace PremierAPI.Services
             message.Body = new TextPart("html") { Text = html };
 
             using var client = new SmtpClient();
+            client.Timeout = 60_000;
             await client.ConnectAsync(smtpServer, smtpPort, SecureSocketOptions.StartTls, cancellationToken);
             await client.AuthenticateAsync(smtpUser, smtpPassword, cancellationToken);
             await client.SendAsync(message, cancellationToken);
             // O servidor já aceitou a mensagem; falha ao encerrar a sessão não deve gerar envio duplicado.
             try { await client.DisconnectAsync(true, cancellationToken); }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    EmailConfirmationFailureSanitizer.SafeException(ex),
+                    "[EMAIL CONFIRMACAO] Mensagem aceita, mas a sessão SMTP não encerrou normalmente.");
+            }
         }
     }
 }

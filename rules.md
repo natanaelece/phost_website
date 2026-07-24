@@ -61,6 +61,21 @@ unit instalada e não adicione variáveis ou segredos inline.
 ## Segurança, SEO e telemetria
 
 - Não exponha segredos de `appsettings`, ambiente, tokens, chaves ou payloads sensíveis.
+- Sessões de cliente, confirmação de e-mail e recuperação de senha armazenam
+  somente SHA-256 hexadecimal. Gere tokens brutos com no mínimo 32 bytes de
+  `RandomNumberGenerator`, Base64 URL-safe sem padding; nunca use GUID, BCrypt
+  ou criptografia reversível para esses segredos. O contrato temporário do
+  cliente permanece `localStorage` + `X-Session-Token`, com sete dias e
+  múltiplas sessões.
+- Validação e logout de cliente calculam o hash antes do SQL e passam
+  exclusivamente por `ClientSessionService`, sempre verificando expiração e
+  `users.is_active`. Reset por link revoga todas as sessões; troca autenticada
+  revoga as demais e rotaciona a atual na mesma transação PostgreSQL.
+- Confirmação usa exclusivamente hashes em `email_confirmation_tokens` e pode
+  manter vários links válidos. Prepare hash/claim em transação curta, libere
+  conexão e locks antes do SMTP e marque sucesso ou falha sanitizada em nova
+  transação. Falha/timeout não apaga o token nem consome a cota; confirmar
+  qualquer link invalida todos os demais.
 - `AdminToken` é somente o primeiro fator administrativo: nunca o devolva em API, cookie, HTML ou `localStorage`. O admin usa sessão aleatória curta em cookie `HttpOnly`/`Secure`/`SameSite=Strict`, CSRF nas mutações e TOTP obrigatório.
 - O segredo TOTP fica exclusivamente no arquivo Data Protection definido por `AdminSecurity:TotpSecretPath` (atualmente `/var/lib/premierapi/admin-totp.protected`). Preserve modo `0600`, nunca registre chave, códigos ou URI `otpauth`, e inclua esse arquivo no mesmo conjunto de backup do key ring/certificado. Redefinição exige autorização e janela operacional.
 - Preserve o key ring persistente do ASP.NET Data Protection e sua proteção por certificado em `DataProtectionConfiguration`; não volte a persistir chaves XML sem encryptor nem registre materiais criptográficos.

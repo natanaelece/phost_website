@@ -29,21 +29,27 @@ namespace PremierAPI.Controllers
         private readonly string _turnstileSecret;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _config;
-        private readonly EmailConfirmationService _emailConfirmation;
+        private readonly IEmailConfirmationSender _emailConfirmation;
         private readonly AdminNotificationEmailService _adminNotifications;
         private readonly AdPasswordProtectionService _adPasswordProtection;
         private readonly MetaBusinessEventService _metaBusinessEvents;
         private readonly MetaAttributionService _metaAttributions;
+        private readonly SecurityTokenService _securityTokens;
+        private readonly ClientSessionService _clientSessions;
+        private readonly EmailConfirmationTokenService _emailConfirmationTokens;
 
         public AuthController(
             IConfiguration config,
             ILogger<AuthController> logger,
             IHttpClientFactory httpClientFactory,
-            EmailConfirmationService emailConfirmation,
+            IEmailConfirmationSender emailConfirmation,
             AdminNotificationEmailService adminNotifications,
             AdPasswordProtectionService adPasswordProtection,
             MetaBusinessEventService metaBusinessEvents,
-            MetaAttributionService metaAttributions)
+            MetaAttributionService metaAttributions,
+            SecurityTokenService securityTokens,
+            ClientSessionService clientSessions,
+            EmailConfirmationTokenService emailConfirmationTokens)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -56,6 +62,9 @@ namespace PremierAPI.Controllers
             _adPasswordProtection = adPasswordProtection;
             _metaBusinessEvents = metaBusinessEvents;
             _metaAttributions = metaAttributions;
+            _securityTokens = securityTokens;
+            _clientSessions = clientSessions;
+            _emailConfirmationTokens = emailConfirmationTokens;
         }
 
         // =========================================================================
@@ -120,17 +129,17 @@ namespace PremierAPI.Controllers
                     new { UserId = user.Id, ProtectedPassword = protectedPassword });
             }
 
-            string sessionToken = Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
-            DateTime sessionExpires = DateTime.UtcNow.AddDays(7);
-
             // Multiple sessions support: insere nova sessao sem derrubar as existentes.
             // O evento de login pertence à mesma transação, sem armazenar o token.
+            ClientSessionIssue session;
             if (db.State != System.Data.ConnectionState.Open) await db.OpenAsync();
             await using (var transaction = await db.BeginTransactionAsync())
             {
-                await db.ExecuteAsync(
-                    "INSERT INTO user_sessions (user_id, token, expires_at) VALUES (@Id, @Token, @Expires)",
-                    new { Id = user.Id, Token = sessionToken, Expires = sessionExpires }, transaction);
+                session = await _clientSessions.CreateSessionAsync(
+                    db,
+                    transaction,
+                    user.Id,
+                    HttpContext.RequestAborted);
                 await InsertUserActivityAsync(db, transaction, user.Id, "login", loginMetadata);
                 await transaction.CommitAsync();
             }
@@ -144,7 +153,7 @@ namespace PremierAPI.Controllers
             bool isAdmin = user.Email == _config["AdminEmail"];
             return Ok(new
             {
-                token = sessionToken,
+                token = session.Token,
                 isAdmin = isAdmin,
                 user = new UserDto
                 {
@@ -162,26 +171,20 @@ namespace PremierAPI.Controllers
             string? sessionToken = Request.Headers["X-Session-Token"].FirstOrDefault();
             if (string.IsNullOrWhiteSpace(sessionToken)) return Ok(new { msg = "Sessão já encerrada." });
 
-            await using var db = new NpgsqlConnection(_connString);
-            await db.OpenAsync();
-            await using var transaction = await db.BeginTransactionAsync();
-            Guid? userId = await db.QueryFirstOrDefaultAsync<Guid?>(@"
-                SELECT user_id
-                FROM user_sessions
-                WHERE token = @Token
-                FOR UPDATE;",
-                new { Token = sessionToken }, transaction);
-
-            if (!userId.HasValue)
+            RequestMetadata metadata = CaptureRequestMetadata();
+            Guid? userId = await _clientSessions.LogoutAsync(
+                sessionToken,
+                new ClientSessionActivity(
+                    metadata.IpAddress,
+                    metadata.UserAgent,
+                    metadata.AcceptLanguage,
+                    metadata.CountryCode,
+                    metadata.ReferrerHost),
+                HttpContext.RequestAborted);
+            return Ok(new
             {
-                await transaction.RollbackAsync();
-                return Ok(new { msg = "Sessão já encerrada." });
-            }
-
-            await InsertUserActivityAsync(db, transaction, userId.Value, "logout", CaptureRequestMetadata());
-            await db.ExecuteAsync("DELETE FROM user_sessions WHERE token = @Token", new { Token = sessionToken }, transaction);
-            await transaction.CommitAsync();
-            return Ok(new { msg = "Sessão encerrada." });
+                msg = userId.HasValue ? "Sessão encerrada." : "Sessão já encerrada."
+            });
         }
 
         // =========================================================================
@@ -261,21 +264,21 @@ namespace PremierAPI.Controllers
             // BCrypt com work factor 12 (≈250ms por hash — resistente a brute force)
             string hash = BCrypt.Net.BCrypt.HashPassword(req.Password, workFactor: 12);
             string protectedPassword = _adPasswordProtection.Protect(req.Password);
-            string emailToken = Guid.NewGuid().ToString();
+            EmailConfirmationTokenIssue confirmationIssue;
 
             DateTime registeredAt = GetConfiguredLocalNow();
             DateTime firstReminderAt = EmailConfirmationReminderWorker.GetFirstReminderAt(registeredAt);
             var registrationMetadata = CaptureRequestMetadata();
             string sql = @"INSERT INTO users
                               (name, email, whatsapp, password_hash, referred_by,
-                               email_confirmation_token, email_confirmed,
+                               email_confirmed,
                                email_confirmation_resend_count, email_confirmation_last_sent_at,
                                email_confirmation_next_send_at, created_at,
                                registration_ip, registration_user_agent, registration_accept_language,
                                registration_country_code, registration_referrer_host, registration_source)
                            VALUES
                               (@Name, @Email, @Whatsapp, @Hash, @RefId,
-                               @EmailToken, false, 0, @RegisteredAt, @FirstReminderAt, @RegisteredAt,
+                               false, 0, @RegisteredAt, @FirstReminderAt, @RegisteredAt,
                                CAST(@RegistrationIp AS inet), @RegistrationUserAgent, @RegistrationAcceptLanguage,
                                @RegistrationCountryCode, @RegistrationReferrerHost, 'site')
                            RETURNING id";
@@ -289,7 +292,6 @@ namespace PremierAPI.Controllers
                 req.Whatsapp,
                 Hash = hash,
                 RefId = referredBy,
-                EmailToken = emailToken,
                 RegisteredAt = registeredAt,
                 FirstReminderAt = firstReminderAt,
                 RegistrationIp = registrationMetadata.IpAddress,
@@ -302,19 +304,66 @@ namespace PremierAPI.Controllers
                 INSERT INTO pending_ad_credentials (user_id, protected_password)
                 VALUES (@UserId, @ProtectedPassword)",
                 new { UserId = userId, ProtectedPassword = protectedPassword }, transaction);
+            confirmationIssue =
+                await _emailConfirmationTokens.CreateInitialTokenAsync(
+                    db,
+                    transaction,
+                    userId,
+                    req.Name,
+                    req.Email,
+                    HttpContext.RequestAborted);
             await InsertUserActivityAsync(db, transaction, userId, "cadastro", registrationMetadata);
             await transaction.CommitAsync();
+            await db.CloseAsync();
             await _metaAttributions.TryAssociateWithUserAsync(
                 GetAttributionId(),
                 userId,
                 HttpContext.RequestAborted);
+            bool confirmationEmailSent = false;
             try
             {
-                await _emailConfirmation.SendAsync(req.Email, req.Name, emailToken);
+                await _emailConfirmation.SendAsync(
+                    req.Email,
+                    req.Name,
+                    confirmationIssue.Token,
+                    HttpContext.RequestAborted);
+                confirmationEmailSent = true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[SMTP ERROR] Falha ao disparar o e-mail inicial de ativação.");
+                try
+                {
+                    await _emailConfirmationTokens.MarkFailedAsync(
+                        confirmationIssue.TokenId,
+                        EmailConfirmationFailureSanitizer.Code(ex),
+                        reminderRetryAt: null,
+                        CancellationToken.None);
+                }
+                catch (Exception persistenceException)
+                {
+                    _logger.LogError(
+                        persistenceException,
+                        "[EMAIL CONFIRMACAO] Falha ao registrar o resultado sanitizado do envio inicial.");
+                }
+                _logger.LogError(
+                    EmailConfirmationFailureSanitizer.SafeException(ex),
+                    "[SMTP ERROR] Falha ao disparar o e-mail inicial de ativação.");
+            }
+            if (confirmationEmailSent)
+            {
+                try
+                {
+                    await _emailConfirmationTokens.MarkSentAsync(
+                        confirmationIssue.TokenId,
+                        registeredAt,
+                        HttpContext.RequestAborted);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "[EMAIL CONFIRMACAO] E-mail inicial aceito, mas a marcação de sucesso falhou.");
+                }
             }
             await _adminNotifications.TrySendNewUserAsync(userId);
 
@@ -330,38 +379,35 @@ namespace PremierAPI.Controllers
         {
             if (string.IsNullOrWhiteSpace(token))
                 return BadRequest(new { erro = "Token de confirmação inválido." });
-
-            using var db = new NpgsqlConnection(_connString);
-
-            string sql = @"UPDATE users
-                           SET email_confirmed = true,
-                               email_confirmation_token = NULL,
-                               email_confirmation_next_send_at = NULL
-                           WHERE email_confirmation_token = @Token
-                           RETURNING id AS Id, name AS Name, email AS Email";
-
-            var confirmedUser = await db.QueryFirstOrDefaultAsync<ConfirmedEmailUser>(sql, new { Token = token });
-
-            if (confirmedUser == null)
+            EmailConfirmationResult confirmation =
+                await _emailConfirmationTokens.ConfirmByTokenAsync(
+                    token,
+                    HttpContext.RequestAborted);
+            if (confirmation.Status != EmailConfirmationResultStatus.Confirmed)
                 return BadRequest(new { erro = "Token inválido ou já expirou." });
 
             try
             {
-                await _emailConfirmation.SendConfirmedAsync(confirmedUser.Email, confirmedUser.Name, HttpContext.RequestAborted);
+                await _emailConfirmation.SendConfirmedAsync(
+                    confirmation.Email!,
+                    confirmation.Name!,
+                    HttpContext.RequestAborted);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[EMAIL CONFIRMACAO] E-mail confirmado, mas a notificacao de sucesso falhou.");
+                _logger.LogError(
+                    EmailConfirmationFailureSanitizer.SafeException(ex),
+                    "[EMAIL CONFIRMACAO] E-mail confirmado, mas a notificacao de sucesso falhou.");
             }
 
             if (MetaBusinessEventPolicy.ShouldSendCompleteRegistration(emailConfirmedNow: true))
             {
                 await _metaBusinessEvents.TrySendCompleteRegistrationAsync(
-                    confirmedUser.Id,
+                    confirmation.UserId!.Value,
                     HttpContext.RequestAborted);
             }
 
-            return Ok(new { success = true, mensagem = "E-mail verificado com sucesso!", email = confirmedUser.Email });
+            return Ok(new { success = true, mensagem = "E-mail verificado com sucesso!", email = confirmation.Email });
         }
 
         // =========================================================================
@@ -395,14 +441,44 @@ namespace PremierAPI.Controllers
                 return Ok(new { success = true, mensagem = "Se o e-mail estiver cadastrado, você receberá um link de recuperação." });
             }
 
-            string resetToken = Guid.NewGuid().ToString("N");
+            string resetToken = _securityTokens.GenerateToken();
+            string resetTokenHash = _securityTokens.HashToken(resetToken);
             DateTime expiresAt = DateTime.UtcNow.AddHours(1);
 
-            await db.ExecuteAsync(
-                "UPDATE users SET password_reset_token = @Token, password_reset_expires = @Expires WHERE email = @Email",
-                new { Token = resetToken, Expires = expiresAt, Email = req.Email });
-
-            await EnviarEmailRecuperacao(user.email, user.name, resetToken);
+            await db.OpenAsync(HttpContext.RequestAborted);
+            await using (var transaction =
+                await db.BeginTransactionAsync(HttpContext.RequestAborted))
+            {
+                try
+                {
+                    await db.ExecuteAsync(@"
+                        UPDATE users
+                        SET password_reset_token = NULL,
+                            password_reset_token_hash = @TokenHash,
+                            password_reset_expires = @Expires
+                        WHERE id = @Id;",
+                        new
+                        {
+                            TokenHash = resetTokenHash,
+                            Expires = expiresAt,
+                            Id = (Guid)user.id
+                        },
+                        transaction);
+                    await EnviarEmailRecuperacao(
+                        (string)user.email,
+                        (string)user.name,
+                        resetToken);
+                    await transaction.CommitAsync(HttpContext.RequestAborted);
+                }
+                catch (Exception ex)
+                {
+                    if (transaction.Connection != null)
+                        await transaction.RollbackAsync(CancellationToken.None);
+                    _logger.LogError(
+                        ex,
+                        "[RECOVER] Falha ao preparar ou enviar a recuperação de senha.");
+                }
+            }
 
             if (_debugLogs) _logger.LogInformation("[RECOVER] Token gerado para {Email}", req.Email);
             return Ok(new { success = true, mensagem = "Se o e-mail estiver cadastrado, você receberá um link de recuperação." });
@@ -420,23 +496,43 @@ namespace PremierAPI.Controllers
             if (req.NewPassword.Length < 6 || req.NewPassword.Length > 72)
                 return BadRequest(new { erro = "A senha deve ter entre 6 e 72 caracteres." });
 
-            using var db = new NpgsqlConnection(_connString);
-
-            var user = await db.QueryFirstOrDefaultAsync(
-                "SELECT id, email, ad_username FROM users WHERE password_reset_token = @Token AND password_reset_expires > @Now",
-                new { Token = req.Token, Now = DateTime.UtcNow });
-
-            if (user == null)
+            if (!_securityTokens.TryHashToken(
+                    req.Token,
+                    SecurityTokenPurpose.PasswordReset,
+                    out string tokenHash))
+            {
                 return BadRequest(new { erro = "Token inválido ou expirado. Solicite um novo link de recuperação." });
+            }
 
             // BCrypt com work factor 12
             string hash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword, workFactor: 12);
 
+            using var db = new NpgsqlConnection(_connString);
             await db.OpenAsync();
+            dynamic? user;
             await using (var transaction = await db.BeginTransactionAsync())
             {
+                user = await db.QueryFirstOrDefaultAsync(
+                    @"SELECT id, email, ad_username
+                      FROM users
+                      WHERE password_reset_token_hash = @TokenHash
+                        AND password_reset_expires > @Now
+                      FOR UPDATE",
+                    new { TokenHash = tokenHash, Now = DateTime.UtcNow },
+                    transaction);
+                if (user == null)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { erro = "Token inválido ou expirado. Solicite um novo link de recuperação." });
+                }
+
                 await db.ExecuteAsync(
-                    "UPDATE users SET password_hash = @Hash, password_reset_token = NULL, password_reset_expires = NULL WHERE id = @Id",
+                    @"UPDATE users
+                      SET password_hash = @Hash,
+                          password_reset_token = NULL,
+                          password_reset_token_hash = NULL,
+                          password_reset_expires = NULL
+                      WHERE id = @Id",
                     new { Hash = hash, Id = user.id }, transaction);
 
                 if (string.IsNullOrWhiteSpace((string?)user.ad_username))
@@ -451,6 +547,11 @@ namespace PremierAPI.Controllers
                         new { UserId = (Guid)user.id, ProtectedPassword = protectedPassword }, transaction);
                 }
 
+                await _clientSessions.RevokeAllSessionsAsync(
+                    db,
+                    transaction,
+                    (Guid)user.id,
+                    HttpContext.RequestAborted);
                 await transaction.CommitAsync();
             }
                 
@@ -494,15 +595,22 @@ namespace PremierAPI.Controllers
         {
             if (string.IsNullOrWhiteSpace(token))
                 return BadRequest(new { valid = false, erro = "Token não informado." });
+            if (!_securityTokens.TryHashToken(
+                    token,
+                    SecurityTokenPurpose.PasswordReset,
+                    out string tokenHash))
+            {
+                return BadRequest(new { valid = false, erro = "Token inválido ou expirado." });
+            }
 
             using var db = new NpgsqlConnection(_connString);
 
             var exists = await db.QueryFirstOrDefaultAsync<int>(
                 @"SELECT COUNT(*)
                   FROM users
-                  WHERE password_reset_token = @Token
+                  WHERE password_reset_token_hash = @TokenHash
                   AND password_reset_expires > @Now",
-                new { Token = token, Now = DateTime.UtcNow });
+                new { TokenHash = tokenHash, Now = DateTime.UtcNow });
 
             if (exists <= 0)
                 return BadRequest(new { valid = false, erro = "Token inválido ou expirado." });
@@ -538,33 +646,33 @@ namespace PremierAPI.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError("[TURNSTILE ERROR] Falha crítica na API Cloudflare: {Msg}", ex.Message);
+                _logger.LogError(
+                    ex,
+                    "[TURNSTILE ERROR] Falha crítica na API Cloudflare.");
                 return false;
             }
         }
 
         private async Task EnviarEmailRecuperacao(string email, string name, string token)
         {
-            try
+            string smtpServer = _config["Smtp:Server"]!;
+            int smtpPort = _config.GetValue<int>("Smtp:Port");
+            string smtpUser = _config["Smtp:User"]!;
+            string smtpPassword = _config["Smtp:Password"]!;
+
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress(
+                _config["Smtp:FromName"]!,
+                _config["Smtp:FromEmail"]!));
+            message.To.Add(new MailboxAddress(name, email));
+            message.Subject = "Recuperação de senha — Premier Host";
+
+            string baseUrl = _config["PremierConfig:BaseUrlFront"]!;
+            string linkReset = $"{baseUrl}/recuperar-senha?token={token}";
+
+            message.Body = new TextPart("html")
             {
-                string smtpServer = _config["Smtp:Server"]!;
-                int smtpPort = _config.GetValue<int>("Smtp:Port");
-                string smtpUser = _config["Smtp:User"]!;
-                string smtpPassword = _config["Smtp:Password"]!;
-
-                var message = new MimeMessage();
-                message.From.Add(new MailboxAddress(
-                    _config["Smtp:FromName"]!,
-                    _config["Smtp:FromEmail"]!));
-                message.To.Add(new MailboxAddress(name, email));
-                message.Subject = "Recuperação de senha — Premier Host";
-
-                string baseUrl = _config["PremierConfig:BaseUrlFront"]!;
-                string linkReset = $"{baseUrl}/recuperar-senha?token={token}";
-
-                message.Body = new TextPart("html")
-                {
-                    Text = $@"
+                Text = $@"
                     <div style='font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;'>
                         <h2 style='color: #3b82f6; font-size: 22px; margin-bottom: 20px;'>Recuperação de senha — Premier Host</h2>
                         <p style='font-size: 14px;'>Olá, <strong>{name}</strong>!</p>
@@ -574,20 +682,21 @@ namespace PremierAPI.Controllers
                         <hr style='border: 0; border-top: 1px solid #eeeeee; margin: 24px 0;'>
                         <p style='color: #999999; font-size: 12px; margin: 0;'>Premier Host — Não responda este e-mail.</p>
                     </div>"
-                };
+            };
 
-                using var client = new SmtpClient();
-                await client.ConnectAsync(smtpServer, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
-                await client.AuthenticateAsync(smtpUser, smtpPassword);
-                await client.SendAsync(message);
-                await client.DisconnectAsync(true);
-
-                _logger.LogInformation("[EMAIL RECOVER] E-mail de recuperação enviado para {Email}", email);
-            }
+            using var client = new SmtpClient();
+            await client.ConnectAsync(smtpServer, smtpPort, MailKit.Security.SecureSocketOptions.StartTls);
+            await client.AuthenticateAsync(smtpUser, smtpPassword);
+            await client.SendAsync(message);
+            try { await client.DisconnectAsync(true); }
             catch (Exception ex)
             {
-                _logger.LogError("[SMTP ERROR] Falha ao enviar e-mail de recuperação para {Email}: {Msg}", email, ex.Message);
+                _logger.LogWarning(
+                    ex,
+                    "[EMAIL RECOVER] Mensagem aceita, mas a sessão SMTP não encerrou normalmente.");
             }
+
+            _logger.LogInformation("[EMAIL RECOVER] E-mail de recuperação enviado para {Email}", email);
         }
 
         private DateTime GetConfiguredLocalNow()
