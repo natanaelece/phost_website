@@ -655,20 +655,21 @@ namespace PremierAPI.Services
                 }
             }
 
-            if (email != null)
-            {
-                modifications.Add(new LdapModification(
-                    LdapModification.Replace,
-                    new LdapAttribute("mail", email)));
-            }
-
             var res = conn.Search(_baseDn, LdapConnection.ScopeSub,
                 $"(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))",
-                new[] { "userAccountControl" }, false);
+                new[] { "userAccountControl", "mail" }, false);
             
             if (res.HasMore())
             {
                 var entry = res.Next();
+                if (email != null)
+                {
+                    modifications.AddRange(BuildOptionalAttributeModification(
+                        "mail",
+                        GetAttribute(entry, "mail"),
+                        email));
+                }
+
                 long currentUac = GetAttributeAsLong(entry, "userAccountControl");
                 if (currentUac == 0) currentUac = 512; 
 
