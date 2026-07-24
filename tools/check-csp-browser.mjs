@@ -426,6 +426,33 @@ try {
       `
     },
     {
+      name: 'admin-ad-mobile-actions-below-sidebar',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 390, height: 844 },
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        const actions = document.getElementById('ad-actions');
+        const toggle = document.querySelector('.mobile-nav-toggle');
+        const visibleBefore = getComputedStyle(actions).visibility === 'visible'
+          && actions.getBoundingClientRect().right <= window.innerWidth;
+        toggle.click();
+        setTimeout(() => {
+          const sidebar = document.getElementById('sidebar');
+          const hiddenWhileOpen = sidebar.classList.contains('mobile-open')
+            && getComputedStyle(actions).visibility === 'hidden'
+            && getComputedStyle(actions).pointerEvents === 'none';
+          document.querySelector('.sidebar-backdrop').click();
+          setTimeout(() => done(
+            visibleBefore
+            && hiddenWhileOpen
+            && !sidebar.classList.contains('mobile-open')
+            && getComputedStyle(actions).visibility === 'visible'
+          ), 50);
+        }, 50);
+      `
+    },
+    {
       name: 'admin-manual-order-daily-duration',
       page: '/admin/pedidos?authenticated-fixture=1',
       wait: 1900,
