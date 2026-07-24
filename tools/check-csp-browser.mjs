@@ -386,6 +386,36 @@ try {
       `
     },
     {
+      name: 'admin-collapsible-sidebar',
+      page: '/admin/dashboard?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 1440, height: 900 },
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        const sidebar = document.getElementById('sidebar');
+        const main = document.getElementById('main');
+        const button = document.querySelector('.sidebar-collapse-toggle');
+        localStorage.removeItem('premier_admin_sidebar_collapsed');
+        if (sidebar.classList.contains('sidebar-collapsed')) button.click();
+        button.click();
+        setTimeout(() => {
+          const collapsed = sidebar.classList.contains('sidebar-collapsed')
+            && sidebar.getBoundingClientRect().width <= 80
+            && parseFloat(getComputedStyle(main).marginLeft) <= 80
+            && getComputedStyle(sidebar.querySelector('.slogo > div')).display === 'none'
+            && sidebar.querySelector('.ni').title.length > 0
+            && localStorage.getItem('premier_admin_sidebar_collapsed') === 'true';
+          button.click();
+          setTimeout(() => done(
+            collapsed
+            && !sidebar.classList.contains('sidebar-collapsed')
+            && sidebar.getBoundingClientRect().width >= 230
+            && localStorage.getItem('premier_admin_sidebar_collapsed') === 'false'
+          ), 250);
+        }, 250);
+      `
+    },
+    {
       name: 'admin-ad-actions-wide',
       page: '/admin/active-directory?authenticated-fixture=1',
       wait: 1900,

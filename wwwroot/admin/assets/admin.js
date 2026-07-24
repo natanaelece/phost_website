@@ -1251,6 +1251,7 @@ function showApp(){
   setupAdminNavigation();
   loadCurrentView();
   setupMaintenanceControls();
+  setupAdminSidebarCollapse();
   resumeMaintenanceState();
 }
 function setupAdminMobileNavigation(){
@@ -1263,6 +1264,41 @@ function setupAdminMobileNavigation(){
   const close=()=>{document.getElementById('sidebar')?.classList.remove('mobile-open');backdrop.classList.remove('active');button.setAttribute('aria-expanded','false');};
   button.addEventListener('click',()=>{const sidebar=document.getElementById('sidebar');const open=!sidebar.classList.contains('mobile-open');sidebar.classList.toggle('mobile-open',open);backdrop.classList.toggle('active',open);button.setAttribute('aria-expanded',String(open));});
   backdrop.addEventListener('click',close);document.querySelectorAll('.ni').forEach(link=>link.addEventListener('click',close));
+}
+
+const ADMIN_SIDEBAR_COLLAPSED_KEY='premier_admin_sidebar_collapsed';
+function setupAdminSidebarCollapse(){
+  const sidebar=document.getElementById('sidebar');
+  const logo=sidebar?.querySelector('.slogo');
+  if(!sidebar||!logo)return;
+  let button=sidebar.querySelector('.sidebar-collapse-toggle');
+  if(!button){
+    button=document.createElement('button');
+    button.type='button';
+    button.className='sidebar-collapse-toggle';
+    button.setAttribute('aria-controls','sidebar');
+    logo.appendChild(button);
+  }
+  sidebar.querySelectorAll('.ni').forEach(link=>{
+    if(!link.title)link.title=link.textContent.trim();
+  });
+  const apply=collapsed=>{
+    sidebar.classList.toggle('sidebar-collapsed',collapsed);
+    button.textContent=collapsed?'›':'‹';
+    button.setAttribute('aria-expanded',String(!collapsed));
+    button.setAttribute('aria-label',collapsed?'Expandir menu lateral':'Minimizar menu lateral');
+  };
+  let collapsed=false;
+  try{collapsed=localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_KEY)==='true';}catch{}
+  apply(collapsed);
+  if(button.dataset.wired==='true')return;
+  button.dataset.wired='true';
+  button.addEventListener('click',()=>{
+    const next=!sidebar.classList.contains('sidebar-collapsed');
+    apply(next);
+    try{localStorage.setItem(ADMIN_SIDEBAR_COLLAPSED_KEY,String(next));}catch{}
+    scheduleAdActionLayout();
+  });
 }
 
 const MAINTENANCE_JOB_KEY='premier_admin_maintenance_job';
