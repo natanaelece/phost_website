@@ -266,9 +266,10 @@
         }
     }
 
-    function restoreModalFocusFromBackdrop(event) {
+    function restoreModalFocusFromSurface(event) {
         const modal = document.getElementById('marketingConsentModal');
-        if (!modal || event.target !== modal) return;
+        if (!modal || !(event.target instanceof Element)) return;
+        if (event.target.closest('button, input, select, textarea, a[href], label')) return;
 
         event.preventDefault();
         const details = modal.querySelector('[data-cookie-details]');
@@ -330,7 +331,7 @@
         });
         const modal = document.getElementById('marketingConsentModal');
         modal?.addEventListener('keydown', trapModalKeyboard);
-        modal?.addEventListener('pointerdown', restoreModalFocusFromBackdrop);
+        modal?.addEventListener('pointerdown', restoreModalFocusFromSurface);
     }
 
     function bindWhatsAppContacts() {
