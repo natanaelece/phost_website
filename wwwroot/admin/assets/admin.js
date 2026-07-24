@@ -294,6 +294,11 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('m-order-period').value = 'semanal';
         document.getElementById('m-order-days').value = _pricingRules.weeklyDays;
         document.getElementById('m-order-days-group').classList.add('hidden');
+        document.getElementById('m-order-custom-dates').classList.add('hidden');
+        const customStart=new Date(),customEnd=new Date();
+        customEnd.setDate(customEnd.getDate()+_pricingRules.weeklyDays);
+        document.getElementById('m-order-start-date').value=formatDateInputValue(customStart);
+        document.getElementById('m-order-end-date').value=formatDateInputValue(customEnd);
         document.getElementById('m-order-pcs').value = _pricingRules.minComputers;
         document.getElementById('m-order-slots').value = _pricingRules.minSlots;
         document.getElementById('m-order-price').value = Number(_pricingRules.minimumPrices.semanal).toFixed(2);
@@ -314,13 +319,39 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         await loadPricingRules();
         const period=document.getElementById('m-order-period').value,days=document.getElementById('m-order-days'),pcs=document.getElementById('m-order-pcs');
         document.getElementById('m-order-days-group').classList.toggle('hidden',period!=='diaria');
+        document.getElementById('m-order-custom-dates').classList.toggle('hidden',period!=='personalizado');
         if(period==='semanal')days.value=_pricingRules.weeklyDays;
         else if(period==='mensal')days.value=_pricingRules.monthlyDays;
-        else{days.value=_pricingRules.minDailyDays;if(parseInt(pcs.value)<_pricingRules.minDailyComputers)pcs.value=_pricingRules.minDailyComputers;}
+        else if(period==='diaria'){days.value=_pricingRules.minDailyDays;if(parseInt(pcs.value)<_pricingRules.minDailyComputers)pcs.value=_pricingRules.minDailyComputers;}
+        else{
+            syncManualOrderCustomDays();
+            document.getElementById('m-order-price').value='';
+            return;
+        }
         updateManualOrderSuggestedPrice();
     }
 
+    function formatDateInputValue(date){
+        const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+        return local.toISOString().slice(0,10);
+    }
+
+    function syncManualOrderCustomDays(){
+        const startValue=document.getElementById('m-order-start-date').value;
+        const endValue=document.getElementById('m-order-end-date').value;
+        if(!startValue||!endValue)return 0;
+        const start=new Date(`${startValue}T00:00:00`);
+        const end=new Date(`${endValue}T00:00:00`);
+        const days=Math.round((end-start)/86400000);
+        document.getElementById('m-order-days').value=days>0?days:'';
+        return days;
+    }
+
     async function updateManualOrderSuggestedPrice(){
+        if(document.getElementById('m-order-period').value==='personalizado'){
+            syncManualOrderCustomDays();
+            return;
+        }
         const requestId=++_manualPriceRequest;
         const payload={period:document.getElementById('m-order-period').value,days:parseInt(document.getElementById('m-order-days').value),computers:parseInt(document.getElementById('m-order-pcs').value),slots:parseInt(document.getElementById('m-order-slots').value)};
         const response=await fetch('/api/checkout/pricing-quote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -336,13 +367,20 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const wydServerName=document.getElementById('m-order-server').value.trim();
         if(anyDeskId.length<6||anyDeskId.length>15)return showAdminMessage('error','Informe um ID do AnyDesk válido, com 6 a 15 números.');
         if(!wydServerName)return showAdminMessage('error','Informe o servidor WYD.');
+        const period=document.getElementById('m-order-period').value;
+        const customStartDate=document.getElementById('m-order-start-date').value;
+        const customEndDate=document.getElementById('m-order-end-date').value;
+        const customDays=period==='personalizado'?syncManualOrderCustomDays():0;
+        if(period==='personalizado'&&customDays<1)return showAdminMessage('error','Informe uma data final posterior à data inicial.');
 
         const req = {
             userId,
             anyDeskId,
             wydServerName,
-            period: document.getElementById('m-order-period').value,
+            period,
             days: parseInt(document.getElementById('m-order-days').value) || 7,
+            customStartDate: period==='personalizado'?customStartDate:null,
+            customEndDate: period==='personalizado'?customEndDate:null,
             computers: parseInt(document.getElementById('m-order-pcs').value) || 1,
             wydsPerComputer: parseInt(document.getElementById('m-order-slots').value) || 1,
             totalPrice: parseFloat(document.getElementById('m-order-price').value) || 0

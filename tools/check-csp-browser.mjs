@@ -452,6 +452,35 @@ try {
       `
     },
     {
+      name: 'admin-manual-order-custom-period',
+      page: '/admin/pedidos?authenticated-fixture=1',
+      wait: 1900,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        document.querySelector('[data-csp-click="h050"]').click();
+        setTimeout(() => {
+          const period = document.getElementById('m-order-period');
+          period.value = 'personalizado';
+          period.dispatchEvent(new Event('change', { bubbles: true }));
+          setTimeout(() => {
+            const dates = document.getElementById('m-order-custom-dates');
+            const start = document.getElementById('m-order-start-date');
+            const end = document.getElementById('m-order-end-date');
+            const days = document.getElementById('m-order-days');
+            start.value = '2026-07-24';
+            end.value = '2026-08-08';
+            end.dispatchEvent(new Event('change', { bubbles: true }));
+            setTimeout(() => done(
+              !dates.classList.contains('hidden')
+              && document.getElementById('m-order-days-group').classList.contains('hidden')
+              && days.value === '15'
+              && document.getElementById('m-order-price').value === ''
+            ), 50);
+          }, 50);
+        }, 100);
+      `
+    },
+    {
       name: 'admin-navigation-without-shell-reload',
       page: '/admin/testes-gratis?authenticated-fixture=1',
       wait: 1750,

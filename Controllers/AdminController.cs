@@ -1243,10 +1243,25 @@ namespace PremierAPI.Controllers
             using var db = new NpgsqlConnection(_connString);
 
             string period = (req.Period ?? "").Trim().ToLowerInvariant();
-            PricingQuote pricingQuote;
-            try { pricingQuote = PricingRules.Calculate(period, req.Computers, req.WydsPerComputer, req.Days); }
-            catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
-            int days = pricingQuote.Days;
+            int days;
+            if (period == "personalizado")
+            {
+                if (!req.CustomStartDate.HasValue || !req.CustomEndDate.HasValue || req.CustomEndDate <= req.CustomStartDate)
+                    return BadRequest(new { erro = "Informe uma data final posterior à data inicial." });
+                days = req.CustomEndDate.Value.DayNumber - req.CustomStartDate.Value.DayNumber;
+                if (days > 3650)
+                    return BadRequest(new { erro = "O período personalizado não pode ultrapassar 10 anos." });
+                if (req.Computers < PricingRules.MinComputers || req.Computers > PricingRules.MaxComputers ||
+                    req.WydsPerComputer < PricingRules.MinSlots || req.WydsPerComputer > PricingRules.MaxSlots)
+                    return BadRequest(new { erro = "Quantidade de computadores ou slots inválida." });
+            }
+            else
+            {
+                PricingQuote pricingQuote;
+                try { pricingQuote = PricingRules.Calculate(period, req.Computers, req.WydsPerComputer, req.Days); }
+                catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
+                days = pricingQuote.Days;
+            }
             string anydesk = Regex.Replace(req.AnyDeskId ?? "", @"\D", "");
             string server = (req.WydServerName ?? "").Trim();
             if (!Regex.IsMatch(anydesk, @"^\d{6,15}$")) return BadRequest(new { erro = "O ID do AnyDesk deve conter de 6 a 15 números." });
@@ -1826,6 +1841,8 @@ namespace PremierAPI.Controllers
         public Guid UserId { get; set; }
         public string Period { get; set; } = "";
         public int Days { get; set; }
+        public DateOnly? CustomStartDate { get; set; }
+        public DateOnly? CustomEndDate { get; set; }
         public int Computers { get; set; }
         public int WydsPerComputer { get; set; }
         public decimal TotalPrice { get; set; }
