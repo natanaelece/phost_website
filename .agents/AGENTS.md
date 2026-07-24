@@ -43,6 +43,14 @@ e iniciar em `Development`. Mudanças de aplicação exigem
 - Confirmação de e-mail admite no máximo dois lembretes automáticos em dias distintos (11:00 e 19:00); o admin pode reenviar à parte ou confirmar manualmente.
 - Reenvio manual no mesmo dia exige confirmação explícita do operador, com a guarda aplicada também no backend.
 - Confirmação pelo link ou pelo admin invalida o token, cancela lembretes e envia a mesma notificação de sucesso ao cliente.
+- Tokens brutos de sessão, confirmação e recuperação nunca ficam no banco:
+  use `SecurityTokenService` e SHA-256; consultas de `user_sessions` pertencem
+  exclusivamente a `ClientSessionService`. Sessões continuam múltiplas, com
+  sete dias, reset revoga todas e troca autenticada rotaciona a sessão atual.
+- Confirmação mantém hashes em `email_confirmation_tokens`, admite vários links
+  válidos e invalida todos ao confirmar um. Nunca mantenha transação, conexão ou
+  row lock PostgreSQL durante SMTP; claims curtos e recuperáveis coordenam
+  lembretes, e timeout não apaga um token potencialmente entregue.
 - A seleção manual de grupo para computador sem sugestão e todas as falhas LDAP recuperáveis usam ao menos `Warning`, acionando Telegram; falhas que impedem a ação usam `Error`. O admin possui uma tela de Logs em memória, sanitizada, para a execução atual.
 - Criar computador no AD cria somente o objeto; não ingressa a máquina no domínio.
 - A aba Computadores mostra e gerencia grupos diretos. Ao selecionar manualmente um grupo durante o vínculo de acesso, associe também o objeto do computador ao grupo para persistir a escolha.

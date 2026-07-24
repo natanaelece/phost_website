@@ -2,6 +2,7 @@ using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Npgsql;
+using PremierAPI.Services;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -24,10 +25,14 @@ namespace PremierAPI.Controllers
 
         private static readonly Regex PropertyKeyPattern = new("^[a-z][a-z0-9_]{0,39}$", RegexOptions.Compiled);
         private readonly string _connectionString;
+        private readonly ClientSessionService _clientSessions;
 
-        public AnalyticsController(IConfiguration configuration)
+        public AnalyticsController(
+            IConfiguration configuration,
+            ClientSessionService clientSessions)
         {
             _connectionString = configuration.GetConnectionString("DefaultConnection") ?? "";
+            _clientSessions = clientSessions;
         }
 
         [HttpPost("events")]
@@ -42,7 +47,7 @@ namespace PremierAPI.Controllers
             var safeProperties = SanitizeProperties(request.Properties);
 
             using var db = new NpgsqlConnection(_connectionString);
-            Guid? verifiedUserId = await GetVerifiedUserId(db, request.UserId);
+            Guid? verifiedUserId = await GetVerifiedUserId(request.UserId);
             string? referrerHost = NormalizeReferrerHost(request.Referrer);
 
             await db.ExecuteAsync(@"
@@ -63,21 +68,14 @@ namespace PremierAPI.Controllers
             return Accepted();
         }
 
-        private async Task<Guid?> GetVerifiedUserId(NpgsqlConnection db, Guid? requestedUserId)
+        private async Task<Guid?> GetVerifiedUserId(Guid? requestedUserId)
         {
             if (!requestedUserId.HasValue) return null;
             string? token = Request.Headers["X-Session-Token"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(token)) return null;
-
-            int valid = await db.QueryFirstOrDefaultAsync<int>(@"
-                SELECT 1
-                FROM user_sessions s
-                JOIN users u ON u.id = s.user_id
-                WHERE s.token = @Token AND s.user_id = @UserId
-                  AND s.expires_at > @Now AND u.is_active = true",
-                new { Token = token, UserId = requestedUserId.Value, Now = DateTime.UtcNow });
-
-            return valid == 1 ? requestedUserId : null;
+            return await _clientSessions.FindUserIdAsync(
+                token,
+                requestedUserId.Value,
+                HttpContext.RequestAborted);
         }
 
         private static Dictionary<string, object?> SanitizeProperties(Dictionary<string, JsonElement>? properties)

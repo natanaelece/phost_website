@@ -12,18 +12,23 @@ namespace PremierAPI.Services
 
         private readonly string _connectionString;
         private readonly ILogger<FreeTrialService> _logger;
+        private readonly ClientSessionService _clientSessions;
 
         public FreeTrialService(
             IConfiguration configuration,
-            ILogger<FreeTrialService> logger)
+            ILogger<FreeTrialService> logger,
+            ClientSessionService clientSessions)
         {
             _connectionString = configuration.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
+            _clientSessions = clientSessions;
         }
 
         public async Task<FreeTrialStatusDto?> GetMineAsync(string? sessionToken)
         {
             if (string.IsNullOrWhiteSpace(sessionToken)) return null;
+            Guid? userId = await _clientSessions.FindUserIdAsync(sessionToken);
+            if (!userId.HasValue) return null;
 
             await using var db = new NpgsqlConnection(_connectionString);
             var row = await db.QueryFirstOrDefaultAsync<FreeTrialUserRow>(@"
@@ -42,14 +47,11 @@ namespace PremierAPI.Services
                         WHERE o.user_id = u.id
                           AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
                     ) AS ""HasPaidOrder""
-                FROM user_sessions s
-                INNER JOIN users u ON u.id = s.user_id
+                FROM users u
                 LEFT JOIN free_trial_requests f ON f.user_id = u.id
-                WHERE s.token = @Token
-                  AND s.expires_at > @Now
-                  AND u.is_active = true
+                WHERE u.id = @UserId
                 LIMIT 1;",
-                new { Token = sessionToken, Now = DateTime.UtcNow });
+                new { UserId = userId.Value });
 
             return row == null ? null : ToStatus(row);
         }
@@ -64,6 +66,18 @@ namespace PremierAPI.Services
             await db.OpenAsync();
             await using var transaction = await db.BeginTransactionAsync();
 
+            Guid? authenticatedUserId = await _clientSessions.FindUserIdAsync(
+                db,
+                transaction,
+                sessionToken,
+                expectedUserId: null,
+                lockUser: true);
+            if (!authenticatedUserId.HasValue)
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+
             var identity = await db.QueryFirstOrDefaultAsync<FreeTrialIdentityRow>(@"
                 SELECT
                     u.id AS ""UserId"",
@@ -72,14 +86,9 @@ namespace PremierAPI.Services
                         WHERE o.user_id = u.id
                           AND (o.status = 'pago' OR COALESCE(o.canceled_was_paid, false) = true)
                     ) AS ""HasPaidOrder""
-                FROM user_sessions s
-                INNER JOIN users u ON u.id = s.user_id
-                WHERE s.token = @Token
-                  AND s.expires_at > @Now
-                  AND u.is_active = true
-                LIMIT 1
-                FOR UPDATE OF u;",
-                new { Token = sessionToken, Now = DateTime.UtcNow }, transaction);
+                FROM users u
+                WHERE u.id = @UserId;",
+                new { UserId = authenticatedUserId.Value }, transaction);
 
             if (identity == null)
             {

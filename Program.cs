@@ -56,6 +56,21 @@ if (args.Contains("--validate-admin-security", StringComparer.Ordinal))
     return;
 }
 
+if (args.Contains("--validate-client-auth-storage", StringComparer.Ordinal))
+{
+    ClientAuthStorageStatus status =
+        DatabaseInitializer.GetClientAuthStorageStatus(builder.Configuration);
+    Console.WriteLine($"CLIENT_AUTH_SESSIONS_WITHOUT_HASH={status.SessionsWithoutHash}");
+    Console.WriteLine($"CLIENT_AUTH_LEGACY_TOKENS_NOT_NULL={status.LegacyTokensNotNull}");
+    Console.WriteLine($"CLIENT_AUTH_INVALID_HASHES={status.InvalidHashes}");
+    bool valid = status.SessionsWithoutHash == 0 &&
+        status.LegacyTokensNotNull == 0 &&
+        status.InvalidHashes == 0;
+    Console.WriteLine($"CLIENT_AUTH_STORAGE_VALIDATION={(valid ? "PASS" : "FAIL")}");
+    Environment.ExitCode = valid ? 0 : 1;
+    return;
+}
+
 var knownProxyAddress = IPAddress.Parse(builder.Configuration["ReverseProxy:KnownProxy"]!);
 
 // SEGURANÇA: Limita tamanho máximo do body (protege RAM do T8 Pro)
@@ -79,6 +94,10 @@ builder.Services.AddSingleton<IMetaEventStore, PostgresMetaEventStore>();
 builder.Services.AddSingleton<MetaConversionsService>();
 builder.Services.AddSingleton<MetaAttributionService>();
 builder.Services.AddSingleton<MetaBusinessEventService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<SecurityTokenService>();
+builder.Services.AddSingleton<ClientSessionService>();
+builder.Services.AddSingleton<EmailConfirmationTokenService>();
 builder.Services.AddHsts(options =>
 {
     options.MaxAge = TimeSpan.FromDays(180);
@@ -92,7 +111,7 @@ DataProtectionConfiguration.AddPremierDataProtection(
 builder.Services.AddSingleton<PremierAPI.Services.ActiveDirectoryService>();
 builder.Services.AddSingleton<PremierAPI.Services.WhatsAppTemplateService>();
 builder.Services.AddScoped<PremierAPI.Services.FreeTrialService>();
-builder.Services.AddSingleton<PremierAPI.Services.EmailConfirmationService>();
+builder.Services.AddSingleton<PremierAPI.Services.IEmailConfirmationSender, PremierAPI.Services.EmailConfirmationService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdCredentialEmailService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdminNotificationEmailService>();
 builder.Services.AddSingleton<PremierAPI.Services.AdPasswordProtectionService>();

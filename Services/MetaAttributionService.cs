@@ -24,15 +24,18 @@ public sealed class MetaAttributionService
     private readonly string _connectionString;
     private readonly MetaConversionsOptions _options;
     private readonly ILogger<MetaAttributionService> _logger;
+    private readonly ClientSessionService _clientSessions;
 
     public MetaAttributionService(
         IConfiguration configuration,
         MetaConversionsOptions options,
-        ILogger<MetaAttributionService> logger)
+        ILogger<MetaAttributionService> logger,
+        ClientSessionService clientSessions)
     {
         _connectionString = configuration.GetConnectionString("DefaultConnection") ?? "";
         _options = options;
         _logger = logger;
+        _clientSessions = clientSessions;
     }
 
     public string ConsentVersion => _options.ConsentVersion;
@@ -48,16 +51,9 @@ public sealed class MetaAttributionService
         await using var db = new NpgsqlConnection(_connectionString);
         if (!string.IsNullOrWhiteSpace(capture.SessionToken))
         {
-            verifiedUserId = await db.QueryFirstOrDefaultAsync<Guid?>(new CommandDefinition(@"
-                SELECT s.user_id
-                FROM user_sessions s
-                JOIN users u ON u.id = s.user_id
-                WHERE s.token = @Token
-                  AND s.expires_at > @Now
-                  AND u.is_active = true
-                LIMIT 1;",
-                new { Token = capture.SessionToken, Now = DateTime.UtcNow },
-                cancellationToken: cancellationToken));
+            verifiedUserId = await _clientSessions.FindUserIdAsync(
+                capture.SessionToken,
+                cancellationToken: cancellationToken);
         }
 
         await db.ExecuteAsync(new CommandDefinition(@"

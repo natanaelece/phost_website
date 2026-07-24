@@ -205,8 +205,19 @@ Ao cancelar, `orders.canceled_was_paid` registra se o pedido estava efetivamente
 
 ## 🔐 Segurança
 
-- As rotas da pasta `wwwroot/` servem HTML de maneira estática. As requisições à API de clientes são feitas em tempo real e protegidas via JWT Header `Authorization: Bearer <token>`.
+- As rotas da pasta `wwwroot/` servem HTML de maneira estática. O contrato
+  temporário da sessão do cliente mantém o token bruto em `localStorage` e o
+  envia pelo header `X-Session-Token`; o banco armazena somente o SHA-256 em
+  `user_sessions.token_hash`. Sessões continuam múltiplas e válidas por sete
+  dias. A migração futura para cookie `HttpOnly` está fora do escopo atual.
 - Hashes de senha utilizando Bcrypt (via `BCrypt.Net-Next`).
+- Tokens de sessão, confirmação de e-mail e recuperação usam no mínimo 32 bytes
+  de `RandomNumberGenerator`, Base64 URL-safe sem padding e SHA-256
+  determinístico no banco. Tokens brutos existem somente no navegador ou no
+  link enviado por e-mail e nunca entram em logs.
+- Redefinir a senha por link revoga todas as sessões. A troca autenticada revoga
+  as demais sessões, rotaciona a sessão atual na mesma transação e devolve o
+  novo token ao painel sem desconectar esse dispositivo.
 - **Segurança administrativa atual:** `AdminToken` é somente o primeiro fator. Depois do Turnstile, o backend exige TOTP RFC 6238 compatível com aplicativos Authenticator e emite uma sessão aleatória de oito horas em cookie `HttpOnly`, `Secure` e `SameSite=Strict`, com CSRF nas mutações.
 - A sessão administrativa fica somente em memória, é revogada no logout e termina em qualquer reinicialização do serviço; a chave permanente nunca é devolvida pela API nem fica em `localStorage`.
 - O segredo TOTP e os hashes dos dez códigos de recuperação de uso único ficam protegidos pelo ASP.NET Data Protection em `/var/lib/premierapi/admin-totp.protected`, com diretório `0700` e arquivo `0600`. O arquivo deve acompanhar o key ring e o certificado nos backups.
@@ -226,7 +237,7 @@ O fluxo de teste grátis usa `free_trial_requests` como registro único por usu�
 
 A tabela `user_activity_events` mantém a trilha first-party de `cadastro`, `login` e `logout` explícito, vinculada ao usuário e removida em cascata quando o cadastro é excluído. Ao criar a tabela, o inicializador gera um evento histórico de cadastro para cada usuário existente, usando `users.created_at` e os metadados técnicos já conhecidos; logins e logouts anteriores não são inventados. Cada novo evento pode guardar IP, User-Agent, idioma, país aproximado e origem, mas nunca token ou senha. Em **Admin > Logs**, o checkbox **Usuários** troca o buffer de diagnóstico da execução atual por essa trilha persistente e permite busca por nome, e-mail, WhatsApp, IP ou navegador. Fechamento de aba e expiração silenciosa não são tratados como logout, pois o navegador não oferece confirmação confiável desses eventos.
 
-Se o e-mail continuar sem confirmação, o `EmailConfirmationReminderWorker` envia no máximo dois lembretes adicionais, sempre em dias diferentes do cadastro: o primeiro às 11:00 do dia seguinte e o segundo às 19:00 do outro dia, no fuso `America/Sao_Paulo`. Falhas SMTP são registradas e tentadas novamente sem consumir uma das duas entregas. Em **Admin > Usuários**, o operador pode reenviar manualmente sem consumir essa cota ou marcar o checkbox para confirmar o endereço manualmente. Quando já houve envio na data atual, o backend devolve a data e a interface exige confirmação explícita antes de permitir outro reenvio. A confirmação pelo link e a confirmação manual invalidam o token, cancelam lembretes pendentes e enviam ao cliente a mesma notificação de conta confirmada; na operação manual, falha do SMTP desfaz a confirmação para permitir nova tentativa coerente.
+Se o e-mail continuar sem confirmação, o `EmailConfirmationReminderWorker` envia no máximo dois lembretes adicionais, sempre em dias diferentes do cadastro: o primeiro às 11:00 do dia seguinte e o segundo às 19:00 do outro dia, no fuso `America/Sao_Paulo`. Cada lembrete gera um token novo cujo hash é confirmado em `email_confirmation_tokens` antes do SMTP; links anteriores continuam válidos. O envio ocorre sem transação ou row lock PostgreSQL aberto. Sucesso marca `sent_at` e consome a cota em uma transação curta; falha ou timeout mantém o novo link potencialmente entregue válido, registra somente uma categoria sanitizada e agenda nova tentativa sem consumir a cota. Um claim de dez minutos impede envios concorrentes e é recuperável após crash sem armazenar token bruto. Em **Admin > Usuários**, o operador pode reenviar manualmente sem consumir essa cota ou marcar o checkbox para confirmar o endereço manualmente. Quando já houve envio na data atual, o backend devolve a data e a interface exige confirmação explícita antes de permitir outro reenvio. Confirmar qualquer link ou confirmar manualmente invalida todos os tokens do usuário, cancela lembretes pendentes e mantém uma única emissão de `CompleteRegistration`.
 
 O endereço configurado em `AdminEmail` também recebe notificações administrativas por e-mail quando um usuário conclui o cadastro público, gera um novo pedido, tem o pagamento confirmado pela primeira vez ou cancela um pedido pelo painel. As mensagens usam os dados já persistidos do usuário e do pedido, nunca incluem senha, token de sessão ou conteúdo do Pix, e uma falha SMTP é registrada sem desfazer a operação comercial concluída.
 
