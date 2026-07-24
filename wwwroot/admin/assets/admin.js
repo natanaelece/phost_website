@@ -163,6 +163,7 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         document.getElementById('m-ad-edit-title').textContent = 'Editar: ' + username;
         document.getElementById('m-ad-edit-username').value = username;
         document.getElementById('m-ad-edit-fullname').value = 'Carregando...';
+        document.getElementById('m-ad-edit-email-label').textContent = 'E-mail';
         document.getElementById('m-ad-edit-email').value = '';
         document.getElementById('m-ad-edit-whatsapp').value = '';
         document.getElementById('m-ad-edit-password').value = '';
@@ -173,6 +174,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
         const u = await apiFetch('/api/admin/ad/users/' + encodeURIComponent(username));
         if (u) {
             document.getElementById('m-ad-edit-fullname').value = u.fullName || '';
+            document.getElementById('m-ad-edit-email-label').textContent = u.emailFromLocalFallback
+                ? 'E-mail (será atualizado)'
+                : 'E-mail';
             document.getElementById('m-ad-edit-email').value = u.email || '';
             document.getElementById('m-ad-edit-whatsapp').value = u.telephoneNumber || '';
             document.getElementById('m-ad-edit-active').checked = u.isActive;

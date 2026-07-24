@@ -21,6 +21,7 @@ namespace PremierAPI.Services
         public bool AllowAllComputers { get; set; } // true quando userWorkstations está vazio no AD (sem restrição)
         public long? UserAccountControl { get; set; }
         public string Email { get; set; } = "";
+        public bool EmailFromLocalFallback { get; set; }
         public string TelephoneNumber { get; set; } = "";
         public bool PasswordNeverExpires => UserAccountControl.HasValue && (UserAccountControl.Value & 65536) != 0;
     }
