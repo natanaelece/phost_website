@@ -100,6 +100,30 @@ const server = http.createServer(async (request, response) => {
       }, 1500);
       return;
     }
+    if (requestPath === '/api/admin/ad/status') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end('{"online":true}');
+      return;
+    }
+    if (requestPath === '/api/admin/ad/users') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify([{
+        username: 'fixture.user',
+        fullName: 'Fixture User',
+        isActive: true,
+        expiresAt: null,
+        groups: [],
+        computers: ['SRV01'],
+        ouPath: 'USUARIOS',
+        allowAllComputers: false
+      }]));
+      return;
+    }
+    if (requestPath === '/api/admin/ad/computers' || requestPath === '/api/admin/ad/groups') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end('[]');
+      return;
+    }
     const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '');
     let filePath = path.resolve(webRoot, relativePath);
     if (filePath !== webRoot && !filePath.startsWith(`${webRoot}${path.sep}`)) {
@@ -351,6 +375,32 @@ try {
           && resources.some(url => url.includes('/admin/assets/vendor/chart.umd.min.js'))
           && resources.some(url => url.includes('/admin/assets/fonts/inter-latin-wght-normal.woff2'))
           && !resources.some(url => url.includes('cdn.jsdelivr.net') || url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com'));
+      `
+    },
+    {
+      name: 'admin-ad-responsive-actions',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      asyncScript: `
+        const done = arguments[arguments.length - 1];
+        const card = document.getElementById('ad-users-tbl');
+        const inline = card.querySelector('.ad-actions-inline');
+        const more = card.querySelector('.ad-actions-more');
+        card.style.width = '2000px';
+        window.dispatchEvent(new Event('resize'));
+        setTimeout(() => {
+          const widePassed = getComputedStyle(inline).display !== 'none'
+            && getComputedStyle(more).display === 'none';
+          card.style.width = '620px';
+          window.dispatchEvent(new Event('resize'));
+          setTimeout(() => {
+            const narrowPassed = getComputedStyle(inline).display === 'none'
+              && getComputedStyle(more).display !== 'none';
+            card.style.width = '';
+            window.dispatchEvent(new Event('resize'));
+            done(widePassed && narrowPassed);
+          }, 100);
+        }, 100);
       `
     },
     {
