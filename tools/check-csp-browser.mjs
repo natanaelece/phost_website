@@ -244,6 +244,9 @@ try {
         const cardWidth = card.getBoundingClientRect().width;
         const buttons = [...modal.querySelectorAll('[data-cookie-summary] button')].map(button => button.textContent.trim());
         const acceptFocused = document.activeElement === modal.querySelector('[data-cookie-accept]');
+        modal.querySelector('[data-cookie-accept]').blur();
+        modal.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        const backdropRestoresAcceptFocus = document.activeElement === modal.querySelector('[data-cookie-accept]');
         modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         modal.querySelector('[data-cookie-customize]').click();
         const control = modal.querySelector('[data-cookie-meta-control]');
@@ -258,6 +261,7 @@ try {
           && Number(style.zIndex) >= 1000
           && cardWidth >= 460 && cardWidth <= 620
           && acceptFocused
+          && backdropRestoresAcceptFocus
           && buttons.join('|') === 'Aceitar todos os cookies|Recusar cookies opcionais|Personalizar'
           && defaultOn
           && selectionPreserved

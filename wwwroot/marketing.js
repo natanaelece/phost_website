@@ -266,6 +266,18 @@
         }
     }
 
+    function restoreModalFocusFromBackdrop(event) {
+        const modal = document.getElementById('marketingConsentModal');
+        if (!modal || event.target !== modal) return;
+
+        event.preventDefault();
+        const details = modal.querySelector('[data-cookie-details]');
+        if (details && !details.classList.contains('hidden'))
+            modal.querySelector('[data-cookie-meta-control]')?.focus();
+        else
+            modal.querySelector('[data-cookie-accept]')?.focus();
+    }
+
     function refreshConsentUi() {
         const choice = readCookie(CONSENT_COOKIE);
         const validVersion = readCookie(VERSION_COOKIE) === configuration.consentVersion;
@@ -316,7 +328,9 @@
         document.querySelectorAll('[data-manage-cookies]').forEach(function (button) {
             button.addEventListener('click', function () { openConsentModal(true, true); });
         });
-        document.getElementById('marketingConsentModal')?.addEventListener('keydown', trapModalKeyboard);
+        const modal = document.getElementById('marketingConsentModal');
+        modal?.addEventListener('keydown', trapModalKeyboard);
+        modal?.addEventListener('pointerdown', restoreModalFocusFromBackdrop);
     }
 
     function bindWhatsAppContacts() {
