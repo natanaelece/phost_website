@@ -36,6 +36,7 @@ namespace PremierAPI.Controllers
         private readonly AdminSessionService _adminSessions;
         private readonly AdminTotpService _adminTotp;
         private readonly MetaBusinessEventService _metaBusinessEvents;
+        private readonly AsaasApiClient _asaas;
 
         public AdminController(
             IConfiguration config,
@@ -49,7 +50,8 @@ namespace PremierAPI.Controllers
             AdminMaintenanceService maintenance,
             AdminSessionService adminSessions,
             AdminTotpService adminTotp,
-            MetaBusinessEventService metaBusinessEvents)
+            MetaBusinessEventService metaBusinessEvents,
+            AsaasApiClient asaas)
         {
             _config = config;
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
@@ -65,6 +67,7 @@ namespace PremierAPI.Controllers
             _adminSessions = adminSessions;
             _adminTotp = adminTotp;
             _metaBusinessEvents = metaBusinessEvents;
+            _asaas = asaas;
         }
 
         private async Task<bool> ValidarTurnstile(string? captchaToken)
@@ -1191,29 +1194,33 @@ namespace PremierAPI.Controllers
             {
                 try
                 {
-                    bool useSandbox = _config.GetValue<bool>("Asaas:UseSandbox");
-                    string baseUrl = useSandbox ? _config["Asaas:SandBoxBaseUrl"]! : _config["Asaas:BaseUrl"]!;
-                    string apiKey = useSandbox ? (_config["Asaas:SandBoxApiKey"] ?? "") : (_config["Asaas:ApiKey"] ?? "");
-
-                    var handler = new System.Net.Http.HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                    using var http = new System.Net.Http.HttpClient(handler);
-                    http.DefaultRequestHeaders.Add("access_token", apiKey);
-                    http.DefaultRequestHeaders.Add("User-Agent", "Premierhost-BFF/1.0");
-
-                    string cancelUrl = !string.IsNullOrWhiteSpace(qrCodeId)
-                        ? $"{baseUrl}/pix/qrCodes/static/{qrCodeId}"
-                        : $"{baseUrl}/payments/{paymentId}";
-                    var response = await http.DeleteAsync(cancelUrl);
-                    if (!response.IsSuccessStatusCode)
+                    AsaasApiOperationResult cancelResult =
+                        !string.IsNullOrWhiteSpace(qrCodeId)
+                            ? await _asaas.CancelStaticPixQrCodeAsync(
+                                qrCodeId,
+                                acceptNotFound: false,
+                                cancellationToken: HttpContext.RequestAborted)
+                            : await _asaas.CancelPaymentAsync(
+                                paymentId!,
+                                acceptNotFound: false,
+                                cancellationToken: HttpContext.RequestAborted);
+                    if (!cancelResult.IsSuccess)
                     {
-                        var body = await response.Content.ReadAsStringAsync();
-                        return BadRequest(new { erro = $"Nao foi possivel cancelar a cobranca pendente na Asaas antes de marcar como pago manualmente: {body}" });
+                        return BadRequest(new
+                        {
+                            erro = "Nao foi possivel cancelar a cobranca pendente na Asaas antes de marcar como pago manualmente."
+                        });
                     }
                     asaasCanceled = true;
                 }
                 catch (Exception ex)
                 {
-                    return BadRequest(new { erro = $"Erro ao cancelar cobranca pendente na Asaas: {ex.Message}" });
+                    _logger.LogError(
+                        AsaasErrorSanitizer.SafeException(ex),
+                        "[ASAAS ADMIN] Falha ao cancelar cobrança pendente antes da baixa manual. Payment {PaymentReference}; QR {QrCodeReference}.",
+                        AsaasErrorSanitizer.SafeIdentifier(paymentId),
+                        AsaasErrorSanitizer.SafeIdentifier(qrCodeId));
+                    return BadRequest(new { erro = "Erro ao cancelar cobranca pendente na Asaas." });
                 }
             }
 
@@ -1306,7 +1313,7 @@ namespace PremierAPI.Controllers
         }
 
         [HttpDelete("orders/{id}/cancel")]
-        public async Task<IActionResult> CancelOrder(Guid id, [FromQuery] bool refund, [FromServices] IConfiguration config)
+        public async Task<IActionResult> CancelOrder(Guid id, [FromQuery] bool refund)
         {
             if (!await ValidateAdmin()) return Unauthorized(new { erro = "Acesso negado." });
             using var db = new NpgsqlConnection(_connString);
@@ -1332,37 +1339,33 @@ namespace PremierAPI.Controllers
                 {
                     try 
                     {
-                        bool useSandbox = config.GetValue<bool>("Asaas:UseSandbox");
-                        string baseUrl = useSandbox ? config["Asaas:SandBoxBaseUrl"]! : config["Asaas:BaseUrl"]!;
-                        string apiKey = useSandbox ? (config["Asaas:SandBoxApiKey"] ?? "") : (config["Asaas:ApiKey"] ?? "");
-
-                        // Configura bypass de SSL se necessario para testes locais
-                        var handler = new System.Net.Http.HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-                        using var http = new System.Net.Http.HttpClient(handler);
-                        http.DefaultRequestHeaders.Add("access_token", apiKey);
-                        http.DefaultRequestHeaders.Add("User-Agent", "Premierhost-BFF/1.0");
-
                         if (status == "pago")
                         {
                             if (string.IsNullOrWhiteSpace(paymentId))
                                 return BadRequest(new { erro = "O identificador da cobrança paga ainda não foi conciliado pelo webhook do Asaas." });
 
-                            var response = await http.PostAsync($"{baseUrl}/payments/{paymentId}/refund", null);
-                            var responseBody = await response.Content.ReadAsStringAsync();
-                            
-                            if (!response.IsSuccessStatusCode)
+                            AsaasApiOperationResult refundResult =
+                                await _asaas.RefundPaymentAsync(
+                                    paymentId,
+                                    cancellationToken: HttpContext.RequestAborted);
+                            if (!refundResult.IsSuccess)
                             {
-                                string maskedKey = !string.IsNullOrEmpty(apiKey) && apiKey.Length > 10 ? apiKey.Substring(0, 10) + "..." : "VAZIA";
-                                return BadRequest(new { erro = $"Asaas Erro: {responseBody} | URL: {baseUrl} | Key: {maskedKey}" });
+                                return BadRequest(new { erro = "Falha ao solicitar o reembolso na Asaas." });
                             }
                         }
                         else
                         {
-                            string cancelUrl = !string.IsNullOrWhiteSpace(qrCodeId)
-                                ? $"{baseUrl}/pix/qrCodes/static/{qrCodeId}"
-                                : $"{baseUrl}/payments/{paymentId}";
-                            var response = await http.DeleteAsync(cancelUrl);
-                            if (!response.IsSuccessStatusCode)
+                            AsaasApiOperationResult cancelResult =
+                                !string.IsNullOrWhiteSpace(qrCodeId)
+                                    ? await _asaas.CancelStaticPixQrCodeAsync(
+                                        qrCodeId,
+                                        acceptNotFound: false,
+                                        cancellationToken: HttpContext.RequestAborted)
+                                    : await _asaas.CancelPaymentAsync(
+                                        paymentId!,
+                                        acceptNotFound: false,
+                                        cancellationToken: HttpContext.RequestAborted);
+                            if (!cancelResult.IsSuccess)
                             {
                                 return BadRequest(new { erro = "Falha ao cancelar cobranca na Asaas." });
                             }
@@ -1370,7 +1373,12 @@ namespace PremierAPI.Controllers
                     }
                     catch (Exception ex)
                     {
-                        return BadRequest(new { erro = $"Erro na integracao Asaas: {ex.Message}" });
+                        _logger.LogError(
+                            AsaasErrorSanitizer.SafeException(ex),
+                            "[ASAAS ADMIN] Falha ao cancelar ou reembolsar pedido. Payment {PaymentReference}; QR {QrCodeReference}.",
+                            AsaasErrorSanitizer.SafeIdentifier(paymentId),
+                            AsaasErrorSanitizer.SafeIdentifier(qrCodeId));
+                        return BadRequest(new { erro = "Erro na integracao Asaas." });
                     }
                 }
             }

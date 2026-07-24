@@ -66,6 +66,7 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+builder.Services.AddAsaasHttpClients(builder.Configuration);
 builder.Services.AddHttpClient("MetaConversions", client =>
 {
     // O timeout efetivo e aplicado por evento para permitir cancelamento ligado

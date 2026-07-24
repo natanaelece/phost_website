@@ -65,8 +65,8 @@ public static class StartupConfigurationValidator
         ValidatePositiveInteger(configuration, "Smtp:Port", invalid);
         ValidateBoolean(configuration, "Asaas:UseSandbox", invalid);
         ValidateBoolean(configuration, "Evolution:DryRun", invalid);
-        ValidateAbsoluteUri(configuration, "Asaas:BaseUrl", invalid);
-        ValidateAbsoluteUri(configuration, "Asaas:SandBoxBaseUrl", invalid);
+        ValidateHttpsUri(configuration, "Asaas:BaseUrl", invalid);
+        ValidateHttpsUri(configuration, "Asaas:SandBoxBaseUrl", invalid);
         ValidateAbsoluteUri(configuration, "Evolution:BaseUrl", invalid);
         ValidateAbsoluteUri(configuration, "PremierConfig:BaseUrlFront", invalid);
         ValidateIpAddress(configuration, "ReverseProxy:KnownProxy", invalid);
@@ -116,6 +116,18 @@ public static class StartupConfigurationValidator
     {
         if (!Uri.TryCreate(configuration[key], UriKind.Absolute, out Uri? uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            invalid.Add(key);
+        }
+    }
+
+    private static void ValidateHttpsUri(
+        IConfiguration configuration,
+        string key,
+        ISet<string> invalid)
+    {
+        if (!Uri.TryCreate(configuration[key], UriKind.Absolute, out Uri? uri) ||
+            uri.Scheme != Uri.UriSchemeHttps)
         {
             invalid.Add(key);
         }

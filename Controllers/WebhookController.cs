@@ -9,9 +9,6 @@ using System.Net.Http;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using System; // Necessário para capturar a Exception
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
 using MailKit.Net.Smtp;
 using MimeKit;
 using PremierAPI.Services;
@@ -35,6 +32,7 @@ namespace PremierAPI.Controllers
         private readonly AdAccountProvisioningService _adProvisioning;
         private readonly AdminNotificationEmailService _adminNotifications;
         private readonly MetaBusinessEventService _metaBusinessEvents;
+        private readonly AsaasApiClient _asaas;
 
         // Variáveis para os tokens de segurança da Asaas
         private readonly string _apiToken;
@@ -46,13 +44,15 @@ namespace PremierAPI.Controllers
             WhatsAppTemplateService whatsAppTemplates,
             AdAccountProvisioningService adProvisioning,
             AdminNotificationEmailService adminNotifications,
-            MetaBusinessEventService metaBusinessEvents)
+            MetaBusinessEventService metaBusinessEvents,
+            AsaasApiClient asaas)
         {
             _config = config;
             _whatsAppTemplates = whatsAppTemplates;
             _adProvisioning = adProvisioning;
             _adminNotifications = adminNotifications;
             _metaBusinessEvents = metaBusinessEvents;
+            _asaas = asaas;
             _connectionString = config.GetConnectionString("DefaultConnection") ?? "";
             _logger = logger;
             _dryRun = config.GetValue<bool>("Evolution:DryRun");
@@ -96,7 +96,10 @@ namespace PremierAPI.Controllers
                 string envName = isSandbox ? "SANDBOX" : "PRODUÇÃO";
                 string eventType = payload.GetProperty("event").GetString() ?? "";
 
-                _logger.LogInformation($"[WEBHOOK RECEBIDO - {envName}] Evento: {eventType}");
+                _logger.LogInformation(
+                    "[WEBHOOK RECEBIDO - {Environment}] Evento: {EventType}",
+                    envName,
+                    eventType);
 
                 if (eventType == "PAYMENT_RECEIVED" || eventType == "PAYMENT_CONFIRMED")
                 {
@@ -143,7 +146,8 @@ namespace PremierAPI.Controllers
                         // Compatibilidade com cobranças dinâmicas geradas antes da migração.
                         if (!description.StartsWith("Licença", StringComparison.OrdinalIgnoreCase))
                         {
-                            _logger.LogInformation($"[WEBHOOK] Ignorado: pagamento sem QR vinculado e descrição desconhecida ({description})");
+                            _logger.LogInformation(
+                                "[WEBHOOK] Ignorado: pagamento sem QR vinculado e descrição não reconhecida.");
                             return Ok(new { success = true, ignored = true });
                         }
 
@@ -172,8 +176,9 @@ namespace PremierAPI.Controllers
                     if (orderData == null)
                     {
                         _logger.LogInformation(
-                            "[WEBHOOK] Pagamento ignorado por não possuir pedido vinculado. Payment: {PaymentId} | QR: {QrCodeId}",
-                            paymentId, pixQrCodeId);
+                            "[WEBHOOK] Pagamento ignorado por não possuir pedido vinculado. Payment {PaymentReference}; QR {QrCodeReference}.",
+                            AsaasErrorSanitizer.SafeIdentifier(paymentId),
+                            AsaasErrorSanitizer.SafeIdentifier(pixQrCodeId));
                         return Ok(new { success = true, ignored = true });
                     }
 
@@ -183,13 +188,14 @@ namespace PremierAPI.Controllers
                     string customerIdToSync = orderData.asaas_customer_id as string ?? asaasCustomerId;
                     if (!string.IsNullOrWhiteSpace(customerIdToSync))
                     {
-                        await SyncAsaasCustomerAndDisableNotificationsAsync(
+                        await _asaas.SyncCustomerAndDisableNotificationsAsync(
                             customerIdToSync,
                             (Guid)orderData.user_id,
                             (string)orderData.name,
                             (string)orderData.email,
                             orderData.whatsapp as string ?? "",
-                            isSandbox);
+                            isSandbox,
+                            HttpContext.RequestAborted);
                     }
 
                     await _adProvisioning.TryProvisionOrderAsync((Guid)orderData.order_id, HttpContext.RequestAborted);
@@ -205,8 +211,8 @@ namespace PremierAPI.Controllers
                     if (updatedRows == 0)
                     {
                         _logger.LogInformation(
-                            "[WEBHOOK] Pagamento já processado; cadastro e notificações foram reconciliados novamente. Payment: {PaymentId}",
-                            paymentId);
+                            "[WEBHOOK] Pagamento já processado; cadastro e notificações foram reconciliados novamente. Payment {PaymentReference}.",
+                            AsaasErrorSanitizer.SafeIdentifier(paymentId));
                         return Ok(new { success = true, ignored = true });
                     }
 
@@ -272,108 +278,6 @@ namespace PremierAPI.Controllers
                 // Loga o erro real no console/journalctl antes de retornar o BadRequest
                 _logger.LogError(ex, "[WEBHOOK ASAAS ERRO] Falha ao processar o webhook.");
                 return BadRequest(); 
-            }
-        }
-
-        private async Task SyncAsaasCustomerAndDisableNotificationsAsync(
-            string customerId,
-            Guid userId,
-            string name,
-            string email,
-            string whatsapp,
-            bool isSandbox)
-        {
-            try
-            {
-                string baseUrl = isSandbox ? _config["Asaas:SandBoxBaseUrl"]! : _config["Asaas:BaseUrl"]!;
-                string apiKey = isSandbox
-                    ? (_config["Asaas:SandBoxApiKey"] ?? "")
-                    : (_config["Asaas:ApiKey"] ?? "");
-
-                var handler = new HttpClientHandler
-                {
-                    ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-                };
-                using var http = new HttpClient(handler);
-                http.DefaultRequestHeaders.Add("access_token", apiKey);
-                http.DefaultRequestHeaders.Add("User-Agent", "Premierhost-BFF/1.0");
-
-                string cleanPhone = Regex.Replace(whatsapp ?? "", @"[^\d]", "");
-                var customerUpdate = new
-                {
-                    name,
-                    email,
-                    mobilePhone = cleanPhone,
-                    externalReference = userId.ToString(),
-                    groupName = "PremierHost",
-                    notificationDisabled = true
-                };
-                var customerContent = new StringContent(
-                    JsonSerializer.Serialize(customerUpdate), Encoding.UTF8, "application/json");
-                var customerResponse = await http.PutAsync($"{baseUrl}/customers/{customerId}", customerContent);
-                if (!customerResponse.IsSuccessStatusCode)
-                {
-                    string body = await customerResponse.Content.ReadAsStringAsync();
-                    _logger.LogError(
-                        "[ASAAS CUSTOMER SYNC] Falha ao atualizar cliente {CustomerId}. Status: {Status} | Body: {Body}",
-                        customerId, customerResponse.StatusCode, body);
-                }
-
-                var notificationsResponse = await http.GetAsync($"{baseUrl}/customers/{customerId}/notifications");
-                if (!notificationsResponse.IsSuccessStatusCode)
-                {
-                    string body = await notificationsResponse.Content.ReadAsStringAsync();
-                    _logger.LogError(
-                        "[ASAAS NOTIFICATIONS] Falha ao listar notificações de {CustomerId}. Status: {Status} | Body: {Body}",
-                        customerId, notificationsResponse.StatusCode, body);
-                    return;
-                }
-
-                string notificationsJson = await notificationsResponse.Content.ReadAsStringAsync();
-                using var notificationsDoc = JsonDocument.Parse(notificationsJson);
-                var notificationUpdates = notificationsDoc.RootElement.GetProperty("data")
-                    .EnumerateArray()
-                    .Where(item => item.TryGetProperty("id", out _))
-                    .Select(item => new Dictionary<string, object>
-                    {
-                        ["id"] = item.GetProperty("id").GetString() ?? "",
-                        ["enabled"] = false,
-                        ["emailEnabledForProvider"] = false,
-                        ["smsEnabledForProvider"] = false,
-                        ["emailEnabledForCustomer"] = false,
-                        ["smsEnabledForCustomer"] = false,
-                        ["phoneCallEnabledForCustomer"] = false,
-                        ["whatsappEnabledForCustomer"] = false
-                    })
-                    .Where(item => !string.IsNullOrWhiteSpace((string)item["id"]))
-                    .ToList();
-
-                if (notificationUpdates.Count == 0)
-                {
-                    _logger.LogWarning("[ASAAS NOTIFICATIONS] Nenhuma notificação encontrada para {CustomerId}.", customerId);
-                    return;
-                }
-
-                var batchPayload = new { customer = customerId, notifications = notificationUpdates };
-                var batchContent = new StringContent(
-                    JsonSerializer.Serialize(batchPayload), Encoding.UTF8, "application/json");
-                var batchResponse = await http.PutAsync($"{baseUrl}/notifications/batch", batchContent);
-                if (!batchResponse.IsSuccessStatusCode)
-                {
-                    string body = await batchResponse.Content.ReadAsStringAsync();
-                    _logger.LogError(
-                        "[ASAAS NOTIFICATIONS] Falha ao desativar notificações de {CustomerId}. Status: {Status} | Body: {Body}",
-                        customerId, batchResponse.StatusCode, body);
-                    return;
-                }
-
-                _logger.LogInformation(
-                    "[ASAAS CUSTOMER SYNC] Cliente {CustomerId} atualizado, incluído no grupo PremierHost e com {Count} notificações desativadas.",
-                    customerId, notificationUpdates.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[ASAAS CUSTOMER SYNC] Erro ao sincronizar {CustomerId} e desativar notificações.", customerId);
             }
         }
 
