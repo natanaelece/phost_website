@@ -119,7 +119,15 @@ const server = http.createServer(async (request, response) => {
       }]));
       return;
     }
-    if (requestPath === '/api/admin/ad/computers' || requestPath === '/api/admin/ad/groups') {
+    if (requestPath === '/api/admin/ad/computers') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify([
+        { name: 'SRV02', description: 'Alpha', operatingSystem: 'Windows', isActive: true, groups: [] },
+        { name: 'SRV01', description: 'Zulu', operatingSystem: 'Windows', isActive: true, groups: [] }
+      ]));
+      return;
+    }
+    if (requestPath === '/api/admin/ad/groups') {
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       response.end('[]');
       return;
@@ -378,29 +386,43 @@ try {
       `
     },
     {
-      name: 'admin-ad-responsive-actions',
+      name: 'admin-ad-actions-wide',
       page: '/admin/active-directory?authenticated-fixture=1',
       wait: 1900,
-      asyncScript: `
-        const done = arguments[arguments.length - 1];
+      windowSize: { width: 2400, height: 900 },
+      script: `
         const card = document.getElementById('ad-users-tbl');
         const inline = card.querySelector('.ad-actions-inline');
         const more = card.querySelector('.ad-actions-more');
-        card.style.width = '2000px';
-        window.dispatchEvent(new Event('resize'));
-        setTimeout(() => {
-          const widePassed = getComputedStyle(inline).display !== 'none'
-            && getComputedStyle(more).display === 'none';
-          card.style.width = '620px';
-          window.dispatchEvent(new Event('resize'));
-          setTimeout(() => {
-            const narrowPassed = getComputedStyle(inline).display === 'none'
-              && getComputedStyle(more).display !== 'none';
-            card.style.width = '';
-            window.dispatchEvent(new Event('resize'));
-            done(widePassed && narrowPassed);
-          }, 100);
-        }, 100);
+        return getComputedStyle(inline).display !== 'none'
+          && getComputedStyle(more).display === 'none';
+      `
+    },
+    {
+      name: 'admin-ad-actions-narrow',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      windowSize: { width: 900, height: 900 },
+      script: `
+        const card = document.getElementById('ad-users-tbl');
+        const inline = card.querySelector('.ad-actions-inline');
+        const more = card.querySelector('.ad-actions-more');
+        return getComputedStyle(inline).display === 'none'
+          && getComputedStyle(more).display !== 'none';
+      `
+    },
+    {
+      name: 'admin-ad-selected-computers-first',
+      page: '/admin/active-directory?authenticated-fixture=1',
+      wait: 1900,
+      script: `
+        document.querySelector('[data-admin-click="open-ad-access"]').click();
+        const computers = [...document.querySelectorAll('.ad-comp-cb')];
+        return computers.length === 2
+          && computers[0].value === 'SRV01'
+          && computers[0].checked
+          && computers[1].value === 'SRV02'
+          && !computers[1].checked;
       `
     },
     {
@@ -465,6 +487,12 @@ try {
   ];
 
   for (const interaction of interactions) {
+    if (interaction.windowSize) {
+      await webdriver(`/session/${sessionId}/window/rect`, {
+        method: 'POST',
+        body: interaction.windowSize
+      });
+    }
     await webdriver(`/session/${sessionId}/url`, {
       method: 'POST',
       body: { url: `http://${host}:${port}${interaction.page}` }
@@ -476,6 +504,12 @@ try {
     });
     if (!passed) interactionFailures += 1;
     console.log(`${passed ? 'PASS' : 'FAIL'}\tinteraction\t${interaction.name}`);
+    if (interaction.windowSize) {
+      await webdriver(`/session/${sessionId}/window/rect`, {
+        method: 'POST',
+        body: { width: 1280, height: 900 }
+      });
+    }
   }
 } finally {
   if (sessionId) {

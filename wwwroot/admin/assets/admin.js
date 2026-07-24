@@ -883,6 +883,9 @@ let _allLocalUsers = []; // Para edi&ccedil;&atilde;o
                     || normalizeComputerName(c.operatingSystem).includes(q);
             })
             .sort((a,b) => {
+                const aSelected = _adSelectedComputers.has(normalizeComputerName(a.name));
+                const bSelected = _adSelectedComputers.has(normalizeComputerName(b.name));
+                if(aSelected !== bSelected) return aSelected ? -1 : 1;
                 const factor = _adAccessSortDirection === 'asc' ? 1 : -1;
                 const av = _adAccessSortField === 'status'
                     ? (a.isActive !== false ? 'Ativo' : 'Inativo')
