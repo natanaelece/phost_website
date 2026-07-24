@@ -1,12 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using System.Net.Http;
-using System.Text.Json;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Dapper;
 using System;
@@ -21,11 +17,8 @@ namespace PremierAPI.Controllers
     [EnableRateLimiting("AuthLimiter")]
     public class CheckoutController : ControllerBase
     {
-        private readonly HttpClient _httpClient;
+        private readonly AsaasApiClient _asaas;
         private readonly ILogger<CheckoutController> _logger;
-        private readonly string _asaasApiKey;
-		private readonly string _asaasSandBoxApiKey;
-        private readonly string _asaasBaseUrl;
         private readonly bool _debugLogs;
         private readonly string _connString;
         private readonly AdminNotificationEmailService _adminNotifications;
@@ -48,35 +41,16 @@ namespace PremierAPI.Controllers
         public CheckoutController(
             ILogger<CheckoutController> logger,
             IConfiguration config,
+            AsaasApiClient asaas,
             AdminNotificationEmailService adminNotifications,
             MetaBusinessEventService metaBusinessEvents)
         {
             _logger = logger;
+            _asaas = asaas;
             _adminNotifications = adminNotifications;
             _metaBusinessEvents = metaBusinessEvents;
-            _asaasApiKey = config["Asaas:ApiKey"] ?? ""; 
-			_asaasSandBoxApiKey = config["Asaas:SandBoxApiKey"] ?? ""; 
             _debugLogs = config.GetValue<bool>("PremierConfig:EnableDebugLogs");
             _connString = config.GetConnectionString("DefaultConnection") ?? "";
-            
-            // FLAG GLOBAL: Asaas Sandbox vs Produção
-            bool useSandbox = config.GetValue<bool>("Asaas:UseSandbox");
-            _asaasBaseUrl = useSandbox ? config["Asaas:SandBoxBaseUrl"]! : config["Asaas:BaseUrl"]!;
-            
-            _httpClient = new HttpClient();
-			
-			string chaveAtiva = useSandbox ? _asaasSandBoxApiKey : _asaasApiKey;
-			if (_debugLogs)
-			{
-				_logger.LogInformation($"[ASAAS INIT] Ambiente: {(useSandbox ? "SANDBOX" : "PRODUÇÃO")} | URL: {_asaasBaseUrl}");
-			}
-	
-            _connString = config.GetConnectionString("DefaultConnection") ?? "";
-            
-            var handler = new HttpClientHandler { ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true };
-            _httpClient = new HttpClient(handler);
-            _httpClient.DefaultRequestHeaders.Add("access_token", chaveAtiva);
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Premierhost-BFF/1.0");
         }
 
         private async Task<bool> ValidateSession(NpgsqlConnection db, Guid userId)
@@ -138,7 +112,7 @@ namespace PremierAPI.Controllers
         [HttpPost("gerarpix")]
         public async Task<IActionResult> GerarPix([FromBody] PedidoRequest pedido)
         {
-            if (_debugLogs) _logger.LogInformation($"[CHECKOUT] Iniciado - AnyDesk: {pedido.AnydeskId}");
+            if (_debugLogs) _logger.LogInformation("[CHECKOUT] Geração de Pix iniciada.");
 
             using var db = new NpgsqlConnection(_connString);
             await db.OpenAsync();
@@ -240,7 +214,7 @@ namespace PremierAPI.Controllers
             if (pendingOrderId.HasValue)
                 return Conflict(new { erro = "Você já possui um pedido pendente. Pague ou cancele esse pedido antes de gerar outro PIX." });
 
-            string pixAddressKey = await GetActivePixAddressKeyAsync();
+            string pixAddressKey = await GetActivePixAddressKeyAsync(HttpContext.RequestAborted);
             if (string.IsNullOrWhiteSpace(pixAddressKey))
                 return BadRequest(new { erro = "Nenhuma chave Pix ativa foi encontrada na conta Asaas." });
 
@@ -251,41 +225,27 @@ namespace PremierAPI.Controllers
                 transaction);
             const int pixExpirationSeconds = 900;
             DateTime pixExpiresAt = DateTime.Now.AddSeconds(pixExpirationSeconds);
-            var asaasPayload = new
+            var asaasPayload = new AsaasStaticPixRequest(
+                pixAddressKey,
+                $"Licença ({pedido.Periodo}) - AnyDesk: {pedido.AnydeskId}",
+                pedido.Total,
+                "ALL",
+                pixExpirationSeconds,
+                false,
+                orderId.ToString());
+            AsaasApiOperationResult<AsaasStaticPixQrCode> createResult =
+                await _asaas.CreateStaticPixQrCodeAsync(
+                    asaasPayload,
+                    cancellationToken: HttpContext.RequestAborted);
+            if (!createResult.IsSuccess || createResult.Value == null)
             {
-                addressKey = pixAddressKey,
-                description = $"Licença ({pedido.Periodo}) - AnyDesk: {pedido.AnydeskId}",
-                value = pedido.Total,
-                format = "ALL",
-                expirationSeconds = pixExpirationSeconds,
-                allowsMultiplePayments = false,
-                externalReference = orderId.ToString()
-            };
-
-            var content = new StringContent(JsonSerializer.Serialize(asaasPayload), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync($"{_asaasBaseUrl}/pix/qrCodes/static", content);
-            var responseString = await response.Content.ReadAsStringAsync();
-            
-            if (_debugLogs) _logger.LogInformation("[ASAAS PIX QR] Status: {Status}", response.StatusCode);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("[ASAAS PIX QR] Falha ao gerar QR Code. Status: {Status} | Body: {Body}", response.StatusCode, responseString);
+                if (createResult.IsInvalidResponse)
+                    return BadRequest(new { erro = "O gateway retornou um QR Code incompleto." });
                 return BadRequest(new { erro = "O Asaas não conseguiu gerar o QR Code Pix. Verifique se a chave Pix da conta está ativa." });
             }
-
-            using var doc = JsonDocument.Parse(responseString);
-            string qrCodeId = doc.RootElement.GetProperty("id").GetString() ?? "";
-            string encodedImage = doc.RootElement.GetProperty("encodedImage").GetString() ?? "";
-            string pixPayload = doc.RootElement.GetProperty("payload").GetString() ?? "";
-
-            if (string.IsNullOrWhiteSpace(qrCodeId) || string.IsNullOrWhiteSpace(encodedImage) || string.IsNullOrWhiteSpace(pixPayload))
-            {
-                _logger.LogError("[ASAAS PIX QR] Resposta incompleta ao gerar QR Code.");
-                if (!string.IsNullOrWhiteSpace(qrCodeId))
-                    await _httpClient.DeleteAsync($"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}");
-                return BadRequest(new { erro = "O gateway retornou um QR Code incompleto." });
-            }
+            string qrCodeId = createResult.Value.Id;
+            string encodedImage = createResult.Value.EncodedImage;
+            string pixPayload = createResult.Value.Payload;
 
             try
             {
@@ -336,7 +296,10 @@ namespace PremierAPI.Controllers
             }
             catch
             {
-                await _httpClient.DeleteAsync($"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}");
+                _ = await _asaas.CancelStaticPixQrCodeAsync(
+                    qrCodeId,
+                    acceptNotFound: true,
+                    cancellationToken: CancellationToken.None);
                 throw;
             }
 
@@ -421,39 +384,32 @@ namespace PremierAPI.Controllers
             }
             if (total <= 0) return BadRequest(new { erro = "O valor do pedido precisa ser corrigido pelo suporte." });
 
-            string pixAddressKey = await GetActivePixAddressKeyAsync();
+            string pixAddressKey = await GetActivePixAddressKeyAsync(HttpContext.RequestAborted);
             if (string.IsNullOrWhiteSpace(pixAddressKey)) return BadRequest(new { erro = "Nenhuma chave Pix ativa foi encontrada na conta Asaas." });
 
             const int pixExpirationSeconds = 900;
             DateTime pixExpiresAt = DateTime.Now.AddSeconds(pixExpirationSeconds);
-            var asaasPayload = new
+            var asaasPayload = new AsaasStaticPixRequest(
+                pixAddressKey,
+                $"Licença ({period}) - AnyDesk: {anydesk}",
+                total,
+                "ALL",
+                pixExpirationSeconds,
+                false,
+                orderId.ToString());
+            AsaasApiOperationResult<AsaasStaticPixQrCode> createResult =
+                await _asaas.CreateStaticPixQrCodeAsync(
+                    asaasPayload,
+                    cancellationToken: HttpContext.RequestAborted);
+            if (!createResult.IsSuccess || createResult.Value == null)
             {
-                addressKey = pixAddressKey,
-                description = $"Licença ({period}) - AnyDesk: {anydesk}",
-                value = total,
-                format = "ALL",
-                expirationSeconds = pixExpirationSeconds,
-                allowsMultiplePayments = false,
-                externalReference = orderId.ToString()
-            };
-            var content = new StringContent(JsonSerializer.Serialize(asaasPayload), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync($"{_asaasBaseUrl}/pix/qrCodes/static", content);
-            string responseString = await response.Content.ReadAsStringAsync();
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("[ASAAS PIX MANUAL] Falha ao gerar QR Code. Status: {Status} | Body: {Body}", response.StatusCode, responseString);
+                if (createResult.IsInvalidResponse)
+                    return BadRequest(new { erro = "O gateway retornou um QR Code incompleto." });
                 return BadRequest(new { erro = "O Asaas não conseguiu gerar o QR Code Pix agora." });
             }
-
-            using var doc = JsonDocument.Parse(responseString);
-            string qrCodeId = doc.RootElement.GetProperty("id").GetString() ?? "";
-            string encodedImage = doc.RootElement.GetProperty("encodedImage").GetString() ?? "";
-            string pixPayload = doc.RootElement.GetProperty("payload").GetString() ?? "";
-            if (string.IsNullOrWhiteSpace(qrCodeId) || string.IsNullOrWhiteSpace(encodedImage) || string.IsNullOrWhiteSpace(pixPayload))
-            {
-                if (!string.IsNullOrWhiteSpace(qrCodeId)) await _httpClient.DeleteAsync($"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}");
-                return BadRequest(new { erro = "O gateway retornou um QR Code incompleto." });
-            }
+            string qrCodeId = createResult.Value.Id;
+            string encodedImage = createResult.Value.EncodedImage;
+            string pixPayload = createResult.Value.Payload;
 
             Guid? metaAttributionId = await CreateMetaAttributionSnapshotAsync(
                 db,
@@ -475,7 +431,10 @@ namespace PremierAPI.Controllers
                 });
             if (updated != 1)
             {
-                await _httpClient.DeleteAsync($"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}");
+                _ = await _asaas.CancelStaticPixQrCodeAsync(
+                    qrCodeId,
+                    acceptNotFound: true,
+                    cancellationToken: CancellationToken.None);
                 return Conflict(new { erro = "O estado deste pedido mudou. Atualize a página." });
             }
 
@@ -587,10 +546,20 @@ namespace PremierAPI.Controllers
             if (expiresAt <= DateTime.Now)
             {
                 string expiredId = staticQrCodeId ?? (string)pendingOrder.asaas_payment_id;
-                string deleteUrl = staticQrCodeId != null
-                    ? $"{_asaasBaseUrl}/pix/qrCodes/static/{staticQrCodeId}"
-                    : $"{_asaasBaseUrl}/payments/{expiredId}";
-                await _httpClient.DeleteAsync(deleteUrl);
+                if (staticQrCodeId != null)
+                {
+                    _ = await _asaas.CancelStaticPixQrCodeAsync(
+                        staticQrCodeId,
+                        acceptNotFound: true,
+                        cancellationToken: HttpContext.RequestAborted);
+                }
+                else
+                {
+                    _ = await _asaas.CancelPaymentAsync(
+                        expiredId,
+                        acceptNotFound: true,
+                        cancellationToken: HttpContext.RequestAborted);
+                }
                 if (createdManually)
                 {
                     await db.ExecuteAsync(
@@ -619,17 +588,17 @@ namespace PremierAPI.Controllers
             if (staticQrCodeId == null)
             {
                 string legacyPaymentId = (string)pendingOrder.asaas_payment_id;
-                var qrCodeResponse = await _httpClient.GetAsync($"{_asaasBaseUrl}/payments/{legacyPaymentId}/pixQrCode");
-                if (!qrCodeResponse.IsSuccessStatusCode) return NotFound();
-
-                string qrCodeString = await qrCodeResponse.Content.ReadAsStringAsync();
-                using var qrDoc = JsonDocument.Parse(qrCodeString);
+                AsaasApiOperationResult<AsaasPixQrCode> qrCodeResult =
+                    await _asaas.GetPaymentPixQrCodeAsync(
+                        legacyPaymentId,
+                        cancellationToken: HttpContext.RequestAborted);
+                if (!qrCodeResult.IsSuccess || qrCodeResult.Value == null) return NotFound();
                 return Ok(new
                 {
                     paymentId = legacyPaymentId,
                     total = pendingOrder.total_price,
-                    encodedImage = qrDoc.RootElement.GetProperty("encodedImage").GetString(),
-                    payload = qrDoc.RootElement.GetProperty("payload").GetString(),
+                    encodedImage = qrCodeResult.Value.EncodedImage,
+                    payload = qrCodeResult.Value.Payload,
                     expiresAt,
                     expiresInSeconds = Math.Max(0, (int)(expiresAt - DateTime.Now).TotalSeconds)
                 });
@@ -672,11 +641,16 @@ namespace PremierAPI.Controllers
             DateTime orderExpiresAt = order.pix_expires_at as DateTime?
                 ?? ((DateTime)order.created_at).AddMinutes(15);
             bool expired = orderExpiresAt <= DateTime.Now;
-            string deleteUrl = !string.IsNullOrWhiteSpace(qrCodeId)
-                ? $"{_asaasBaseUrl}/pix/qrCodes/static/{qrCodeId}"
-                : $"{_asaasBaseUrl}/payments/{paymentId}";
-            var deleteResponse = await _httpClient.DeleteAsync(deleteUrl);
-            if (!deleteResponse.IsSuccessStatusCode && deleteResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
+            AsaasApiOperationResult deleteResult = !string.IsNullOrWhiteSpace(qrCodeId)
+                ? await _asaas.CancelStaticPixQrCodeAsync(
+                    qrCodeId,
+                    acceptNotFound: true,
+                    cancellationToken: HttpContext.RequestAborted)
+                : await _asaas.CancelPaymentAsync(
+                    paymentId,
+                    acceptNotFound: true,
+                    cancellationToken: HttpContext.RequestAborted);
+            if (!deleteResult.IsSuccess)
                 return BadRequest(new { erro = "Não foi possível cancelar o Pix no Asaas." });
 
             int updated = await db.ExecuteAsync(
@@ -693,25 +667,13 @@ namespace PremierAPI.Controllers
             return Ok(new { success = true });
         }
 
-        private async Task<string> GetActivePixAddressKeyAsync()
+        private async Task<string> GetActivePixAddressKeyAsync(
+            CancellationToken cancellationToken)
         {
-            var response = await _httpClient.GetAsync($"{_asaasBaseUrl}/pix/addressKeys?status=ACTIVE&limit=100");
-            if (!response.IsSuccessStatusCode)
-            {
-                string responseBody = await response.Content.ReadAsStringAsync();
-                _logger.LogError("[ASAAS PIX KEY] Falha ao listar chaves ativas. Status: {Status} | Body: {Body}", response.StatusCode, responseBody);
-                return string.Empty;
-            }
-
-            string responseString = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(responseString);
-            foreach (var addressKey in doc.RootElement.GetProperty("data").EnumerateArray())
-            {
-                if (addressKey.TryGetProperty("key", out var keyElement))
-                    return keyElement.GetString() ?? string.Empty;
-            }
-
-            return string.Empty;
+            AsaasApiOperationResult<string> result =
+                await _asaas.GetActivePixAddressKeyAsync(
+                    cancellationToken: cancellationToken);
+            return result.IsSuccess ? result.Value ?? string.Empty : string.Empty;
         }
 
         private async Task<Guid?> CreateMetaAttributionSnapshotAsync(
